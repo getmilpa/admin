@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/getmilpa/admin/compare/v0.2.0...v0.2.1) (2026-07-29)
+
+
+### Bug Fixes
+
+* state without a menu is still inspectable ([de871b7](https://github.com/getmilpa/admin/commit/de871b729d69b5cf9dcda8d961420941bf2be47e))
+
 ## [0.2.0](https://github.com/getmilpa/admin/compare/v0.1.0...v0.2.0) (2026-07-29)
 
 
