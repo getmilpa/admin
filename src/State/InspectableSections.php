@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin\State;
 
 use Milpa\Admin\Section\AdminSectionDiscovery;
+use Milpa\Admin\Section\AdminSectionDiscoveryException;
 
 /**
  * Las secciones del Milpa Admin que exponen estado inspectable, en orden y con
@@ -53,9 +54,20 @@ final class InspectableSections
 
         $titles = [];
         $hrefs = [];
-        foreach ((new AdminSectionDiscovery($this->plugins))->sections() as $section) {
-            $titles[$section->id] = $section->title;
-            $hrefs[$section->id] = $section->href;
+        // El menú es una preocupación WEB, y la inspectabilidad no. Un host que expone estado sin
+        // publicar páginas —el shell de un runtime en la terminal, por ejemplo— no tiene `href` que
+        // declarar, y exigírselo lo obligaría a inventar rutas que no existen.
+        //
+        // El fallback de abajo ya contemplaba ese caso desde el primer día, pero nunca se alcanzaba:
+        // el descubrimiento del menú lanzaba antes. El comentario decía que estaba soportado y el
+        // código decía que no; ganaba el código.
+        try {
+            foreach ((new AdminSectionDiscovery($this->plugins))->sections() as $section) {
+                $titles[$section->id] = $section->title;
+                $hrefs[$section->id] = $section->href;
+            }
+        } catch (AdminSectionDiscoveryException) {
+            // Sin menú se sigue: lo que decide qué es inspectable es el estado, no la navegación.
         }
 
         $sections = [];
