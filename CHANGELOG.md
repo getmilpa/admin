@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/getmilpa/admin/compare/v0.1.0...v0.2.0) (2026-07-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* hosts using the Settings section must register a `Milpa\Admin\Contracts\StorageRootSource` in the container (or export `MILPA_ADMIN_SETTINGS_PATH`). Reading or writing settings without either now throws instead of resolving to a path the package invented.
+
+### Features
+
+* the host says where settings live, the package stops guessing ([9efa710](https://github.com/getmilpa/admin/commit/9efa7107191a43511c404f0b80631467eecccd3a))
+
 ## 0.1.0 (2026-07-28)
 
 
