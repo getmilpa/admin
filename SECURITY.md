@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Milpa Plugin is pre-1.0. Only the latest `0.x` release line receives security fixes.
+Milpa Admin is pre-1.0. Only the latest `0.x` release line receives security fixes.
 
 ## Reporting a Vulnerability
 
