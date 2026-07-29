@@ -19,6 +19,7 @@ use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Plugin\PluginBase;
 use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Admin\Contracts\StorageRootSource;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
@@ -140,9 +141,19 @@ class AdminPlugin extends PluginBase implements PluginInterface, AdminSectionPro
         return $states;
     }
 
-    /** Nada que arrancar: este plugin aporta secciones y rutas, no corre nada. */
+    /**
+     * Lo único que arranca: atar la raíz de almacenamiento que el host haya registrado.
+     *
+     * Si no registró ninguna, no se ata nada y {@see SettingsStore::path()} lanza cuando alguien
+     * intente leer o escribir settings — con el nombre del puerto que falta. Callar aquí y adivinar
+     * allá es cómo el panel terminó escribiendo dentro de `vendor/`.
+     */
     public function boot(): void
     {
+        $storage = $this->tryGetService(StorageRootSource::class);
+        if ($storage instanceof StorageRootSource) {
+            SettingsStore::bindStorageRoot($storage);
+        }
     }
 
     /** Nada que instalar: el panel no tiene datos propios. */

@@ -71,6 +71,31 @@ there are no dead controls (that is a rule, not a habit: see ADR-0005, *surface 
 | `PluginRegistryInterface` | The **Plugins** section: list, enable, disable. |
 | `PluginInstallerInterface` | Install, update and remove on top of it. Without it those three operations do not exist, so no surface renders a button that fails when pressed. |
 | `RouteTableSource` | The **Sistema** section. Every host builds its route table differently; this port is how yours gets in. |
+| `StorageRootSource` | Where the panel keeps its settings. **Required** if you use the Settings section — see below. |
+
+### Where settings are stored
+
+The panel writes one file, `<your storage root>/milpa-admin/settings.json`, and it will not guess
+where that root is:
+
+```php
+final class MyStorageRoot implements Milpa\Admin\Contracts\StorageRootSource
+{
+    public function storageRoot(): string
+    {
+        return __DIR__ . '/../storage';   // wherever YOUR app keeps mutable state
+    }
+}
+```
+
+Register it in the container before the panel boots, and `AdminPlugin::boot()` picks it up. If
+nothing is registered, reading or writing settings throws with the name of the port it needs —
+`MILPA_ADMIN_SETTINGS_PATH` also overrides the whole path if you want to point at one exact file.
+
+Until `0.2.0` the path was computed by counting directories up from the package's own source file.
+That worked while the code lived inside a host and broke the moment it did not: installed through
+Composer it resolved to somewhere **inside `vendor/`**, a directory the next `composer install` can
+delete. A package cannot know the root of whoever installs it — so now it asks.
 
 ## No JavaScript required
 
