@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/getmilpa/admin/compare/v0.3.0...v0.3.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* require milpa/console ^0.2 so this package installs beside the family ([5811430](https://github.com/getmilpa/admin/commit/5811430ee630f7002be2e200c1c68a720aa8435f))
+
 ## [0.3.0](https://github.com/getmilpa/admin/compare/v0.2.2...v0.3.0) (2026-07-30)
 
 
