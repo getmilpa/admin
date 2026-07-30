@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/getmilpa/admin/compare/v0.2.1...v0.2.2) (2026-07-30)
+
+
+### Bug Fixes
+
+* catch up with the family's published versions ([d32fd96](https://github.com/getmilpa/admin/commit/d32fd96a08acf402559ebbbb85b4bf50991b675d))
+
 ## [0.2.1](https://github.com/getmilpa/admin/compare/v0.2.0...v0.2.1) (2026-07-29)
 
 
