@@ -24,7 +24,7 @@ use Milpa\Live\Rendering\XhtmlComponentCompiler;
 use Milpa\Live\Runtime\InMemoryComponentRegistry;
 use Milpa\Live\Transport\XhtmlStateTransferCodec;
 use Milpa\Live\ValueObjects\ComponentContext;
-use Milpa\Admin\Section\AdminSection;
+use Milpa\Console\Section\Section;
 
 /**
  * El chrome reusable del Milpa Admin (P5.7, extraído de {@see \Milpa\Admin\Http\ShellRenderHandler}):
@@ -38,11 +38,11 @@ final class AdminShellRenderer
     /**
      * El chrome del admin —navegación descubierta y topbar— alrededor del cuerpo de una sección.
      *
-     * @param string             $childrenHtml    el body pre-renderizado (opaco) de la sección
-     * @param list<AdminSection> $sections        las secciones descubiertas, YA ordenadas
-     * @param string             $activeSectionId el id de la sección dueña de esta página
-     * @param string             $brand           el nombre a pintar en el chrome (topbar + sidebar)
-     * @param string             $actorId         el principal autenticado, para el ComponentContext
+     * @param string        $childrenHtml    el body pre-renderizado (opaco) de la sección
+     * @param list<Section> $sections        las secciones descubiertas, YA ordenadas
+     * @param string        $activeSectionId el id de la sección dueña de esta página
+     * @param string        $brand           el nombre a pintar en el chrome (topbar + sidebar)
+     * @param string        $actorId         el principal autenticado, para el ComponentContext
      */
     public function render(string $childrenHtml, array $sections, string $activeSectionId, string $brand, string $actorId): string
     {
@@ -65,7 +65,7 @@ final class AdminShellRenderer
 
         $items = $sections === []
             ? [['key' => 'settings', 'label' => 'Settings', 'href' => '/milpa/admin/settings']]
-            : array_map(static fn (AdminSection $s): array => ['key' => $s->id, 'label' => $s->title, 'href' => $s->href], $sections);
+            : array_map(static fn (Section $s): array => ['key' => $s->id, 'label' => $s->title, 'href' => $s->href], $sections);
 
         $defaults = [
             'dashboard-topbar' => [
@@ -100,7 +100,7 @@ final class AdminShellRenderer
      * El `route:` del ComponentContext — el href de la sección ACTIVA si está en `$sections`, o el Hub
      * como fallback.
      *
-     * @param list<AdminSection> $sections
+     * @param list<Section> $sections
      */
     private function activeRoute(array $sections, string $activeSectionId): string
     {

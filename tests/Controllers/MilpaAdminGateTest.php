@@ -29,8 +29,8 @@ use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
 use Milpa\Admin\Controllers\MilpaAdminController;
 use Milpa\Admin\Controllers\SettingsController;
-use Milpa\Admin\Section\AdminSection;
-use Milpa\Admin\Section\AdminSectionProvider;
+use Milpa\Console\Section\Section;
+use Milpa\Console\Section\SectionProvider;
 use Milpa\Runtime\Http\MiddlewarePipeline;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
@@ -43,15 +43,15 @@ use Symfony\Component\HttpFoundation\Request;
 /**
  * Fake provider for the controller-level fixtures below: the Hub
  * ({@see MilpaAdminController::index()}) resolves {@see PluginsManagerInterface} from the
- * container and builds its own {@see \Milpa\Admin\Section\AdminSectionDiscovery}
+ * container and builds its own {@see \Milpa\Console\Section\SectionDiscovery}
  * BEFORE the auth gate even runs, so every controller-level test in this file — including the
  * anonymous/403 ones — needs this registered, not just the ones that reach the redirect.
  */
-final class GateTestFakeAdminSectionProvider implements AdminSectionProvider
+final class GateTestFakeSectionProvider implements SectionProvider
 {
-    public function adminSections(): array
+    public function sections(): array
     {
-        return [new AdminSection('settings', 'Settings', '/milpa/admin/settings', 10)];
+        return [new Section('settings', 'Settings', '/milpa/admin/settings', 10)];
     }
 }
 
@@ -72,7 +72,7 @@ final class GateTestFakePluginsManager implements PluginsManagerInterface
 
     public function getPlugins(): array
     {
-        return ['fake' => new GateTestFakeAdminSectionProvider()];
+        return ['fake' => new GateTestFakeSectionProvider()];
     }
 
     public function getPlugin(string $name): ?PluginInterface
@@ -281,7 +281,7 @@ final class MilpaAdminGateTest extends TestCase
 
     /**
      * Task 4 — the Hub never renders: with scope, it discovers the sections, picks the default
-     * (the first by order — {@see \Milpa\Admin\Section\AdminSectionDiscovery::defaultSection()})
+     * (the first by order — {@see \Milpa\Console\Section\SectionDiscovery::defaultSection()})
      * and 302s there. The "with-scope reaches the surface" invariant this test used to prove (a real
      * 200 + shell markup) now lives on the section route itself — see
      * {@see \Tests\Integration\Plugins\MilpaAdminPlugin\MilpaAdminSettingsGetTest} for that fuller

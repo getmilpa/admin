@@ -17,15 +17,15 @@ namespace Milpa\Admin\Tests\State;
 use Milpa\Admin\Settings\RepositorySettingsStateProvider;
 use Milpa\Admin\Settings\SettingsEntity;
 use Milpa\Admin\Settings\SettingsRepository;
-use Milpa\Admin\State\AdminSectionStateProvider;
+use Milpa\Console\State\SectionStateProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * El fold de P5.7: `SettingsStateProvider` se generaliza al contrato `AdminSectionStateProvider` (`state():
- * array`). Un provider de settings ES un `AdminSectionStateProvider`, y `state()` devuelve la config persistida
+ * El fold de P5.7: `SettingsStateProvider` se generaliza al contrato `SectionStateProvider` (`state():
+ * array`). Un provider de settings ES un `SectionStateProvider`, y `state()` devuelve la config persistida
  * sin el id — prueba la generalización con el primer consumidor real.
  */
-final class AdminSectionStateProviderContractTest extends TestCase
+final class SectionStateProviderContractTest extends TestCase
 {
     private string $file;
 
@@ -47,7 +47,7 @@ final class AdminSectionStateProviderContractTest extends TestCase
         $repository->save(new SettingsEntity('Acme', true, 'dark'));
         $provider = new RepositorySettingsStateProvider($repository);
 
-        self::assertInstanceOf(AdminSectionStateProvider::class, $provider);
+        self::assertInstanceOf(SectionStateProvider::class, $provider);
 
         $state = $provider->state();
         self::assertArrayNotHasKey('id', $state);

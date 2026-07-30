@@ -14,8 +14,8 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Tests\Fixtures;
 
-use Milpa\Admin\Section\AdminSection;
-use Milpa\Admin\Section\AdminSectionProvider;
+use Milpa\Console\Section\Section;
+use Milpa\Console\Section\SectionProvider;
 use Milpa\Attributes\PluginMetadata;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
@@ -37,7 +37,7 @@ use Milpa\Interfaces\Plugin\PluginInterface;
     name: 'Neighbour',
     type: 'Web',
 )]
-final class NeighbourPlugin implements PluginInterface, AdminSectionProvider
+final class NeighbourPlugin implements PluginInterface, SectionProvider
 {
     public function __construct(private readonly DIContainerInterface $container)
     {
@@ -46,11 +46,11 @@ final class NeighbourPlugin implements PluginInterface, AdminSectionProvider
     /**
      * La sección que este vecino aporta.
      *
-     * @return list<AdminSection>
+     * @return list<Section>
      */
-    public function adminSections(): array
+    public function sections(): array
     {
-        return [new AdminSection('architecture', 'Arquitectura', '/vecino/arquitectura', 20)];
+        return [new Section('architecture', 'Arquitectura', '/vecino/arquitectura', 20)];
     }
 
     /** Nada que arrancar: sólo aporta una sección. */

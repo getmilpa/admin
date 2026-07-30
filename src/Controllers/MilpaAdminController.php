@@ -18,7 +18,7 @@ use GuzzleHttp\Psr7\Response;
 use Milpa\Http\Symfony\HttpResponse;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
-use Milpa\Admin\Section\AdminSectionDiscovery;
+use Milpa\Console\Section\SectionDiscovery;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\Route;
 use Psr\Http\Message\ResponseInterface;
@@ -29,7 +29,7 @@ use Symfony\Component\HttpFoundation\Request;
 /**
  * El Admin Hub (ADR#12): descubre, ordena y redirige. No renderiza, no conoce ninguna sección por
  * nombre, cero ifs por sección. La política de a-dónde ir vive en
- * {@see AdminSectionDiscovery::defaultSection()} — hoy la primera por orden; cambiarla jamás toca
+ * {@see SectionDiscovery::defaultSection()} — hoy la primera por orden; cambiarla jamás toca
  * este controller.
  */
 final class MilpaAdminController extends GatedAdminController
@@ -48,7 +48,7 @@ final class MilpaAdminController extends GatedAdminController
     {
         /** @var PluginsManagerInterface $plugins */
         $plugins = $this->container->get(PluginsManagerInterface::class);
-        $discovery = new AdminSectionDiscovery($plugins->getPlugins());
+        $discovery = new SectionDiscovery($plugins->getPlugins());
 
         $href = $discovery->defaultSection()->href;
 

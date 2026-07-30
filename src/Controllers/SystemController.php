@@ -15,13 +15,13 @@ declare(strict_types=1);
 namespace Milpa\Admin\Controllers;
 
 use GuzzleHttp\Psr7\Response;
-use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Console\Contracts\RouteTableSource;
 use Milpa\Http\Symfony\HttpResponse;
 use Milpa\Auth\AuthContext;
 use Milpa\Auth\Http\AuthenticateMiddleware;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Admin\Settings\SettingsStore;
-use Milpa\Admin\State\RoutesStateProvider;
+use Milpa\Console\State\RoutesStateProvider;
 use Milpa\Admin\View\AdminShellRenderer;
 use Milpa\Admin\View\RoutesTableView;
 use Milpa\Http\HttpMethod;
@@ -55,7 +55,7 @@ final class SystemController extends GatedAdminController
     public function show(Request $request, array $params = []): HttpResponse
     {
         $handler = new class ($this->container, $this->discoveredSections()) implements RequestHandlerInterface {
-            /** @param list<\Milpa\Admin\Section\AdminSection> $sections */
+            /** @param list<\Milpa\Console\Section\Section> $sections */
             public function __construct(
                 private readonly DIContainerInterface $container,
                 private readonly array $sections,

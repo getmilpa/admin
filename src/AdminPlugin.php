@@ -18,30 +18,30 @@ use Milpa\Attributes\PluginMetadata;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Plugin\PluginBase;
-use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Console\Contracts\RouteTableSource;
 use Milpa\Admin\Contracts\StorageRootSource;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
 use Milpa\Runtime\Http\RouteProviderInterface;
-use Milpa\Admin\Section\{AdminSection, AdminSectionProvider};
+use Milpa\Console\Section\{Section, SectionProvider};
 use Milpa\Admin\Settings\SettingsStore;
-use Milpa\Admin\State\AdminSectionStateProvider;
-use Milpa\Admin\State\AdminSectionStateSource;
-use Milpa\Admin\State\PluginsStateProvider;
-use Milpa\Admin\State\RoutesStateProvider;
+use Milpa\Console\State\SectionStateProvider;
+use Milpa\Console\State\SectionStateSource;
+use Milpa\Console\State\PluginsStateProvider;
+use Milpa\Console\State\RoutesStateProvider;
 
 /**
  * El panel de administración de Milpa: la superficie `/milpa/admin`.
  *
  * {@see Controllers\MilpaAdminController} es el Hub (ADR#12): descubre las secciones registradas
- * vía {@see AdminSectionProvider} y redirige a la default, sin renderizar nada él mismo. Cada
+ * vía {@see SectionProvider} y redirige a la default, sin renderizar nada él mismo. Cada
  * sección es dueña de su ruta, su gate y su render; el panel no conoce ninguna por nombre.
  *
  * Este plugin aporta tres: **Settings** (la configuración del sitio, con form y CSRF), **Plugins**
  * (qué plugins tiene el host y cuáles arrancan, sobre las operaciones de `milpa/plugin`) y
  * **Sistema** (la tabla de rutas, read-only). Cualquier otro plugin puede aportar las suyas
- * implementando {@see AdminSectionProvider} — el panel las descubre y las pinta en la navegación
+ * implementando {@see SectionProvider} — el panel las descubre y las pinta en la navegación
  * sin cambiar una línea de aquí.
  *
  * **Lo que un host tiene que darle:** un `SessionStore` y el middleware de scopes de `milpa/auth`
@@ -58,7 +58,7 @@ use Milpa\Admin\State\RoutesStateProvider;
     provides: [],
     requires: []
 )]
-class AdminPlugin extends PluginBase implements PluginInterface, AdminSectionProvider, AdminSectionStateSource, RouteProviderInterface
+class AdminPlugin extends PluginBase implements PluginInterface, SectionProvider, SectionStateSource, RouteProviderInterface
 {
     public function __construct(DIContainerInterface $container)
     {
@@ -104,14 +104,14 @@ class AdminPlugin extends PluginBase implements PluginInterface, AdminSectionPro
      * (order 30, P5.7) — la tabla read-only de rutas registradas que sirve
      * {@see Controllers\SystemController}.
      *
-     * @return list<AdminSection>
+     * @return list<Section>
      */
-    public function adminSections(): array
+    public function sections(): array
     {
         return [
-            new AdminSection('settings', 'Settings', '/milpa/admin/settings', 10),
-            new AdminSection('plugins', 'Plugins', '/milpa/admin/plugins', 15),
-            new AdminSection('system', 'Sistema', '/milpa/admin/system', 30),
+            new Section('settings', 'Settings', '/milpa/admin/settings', 10),
+            new Section('plugins', 'Plugins', '/milpa/admin/plugins', 15),
+            new Section('system', 'Sistema', '/milpa/admin/system', 30),
         ];
     }
 
@@ -122,9 +122,9 @@ class AdminPlugin extends PluginBase implements PluginInterface, AdminSectionPro
      * la fuente de verdad ({@see RouteTableAssembler}, la autoridad única registrada como instancia en
      * el container tras `loadPlugins()` — Ola 4d.3a).
      *
-     * @return array<string, AdminSectionStateProvider>
+     * @return array<string, SectionStateProvider>
      */
-    public function adminSectionStates(): array
+    public function sectionStates(): array
     {
         $states = [
             'settings' => SettingsStore::provider(),

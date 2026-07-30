@@ -17,14 +17,14 @@ namespace Milpa\Admin\Tests;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
-use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Console\Contracts\RouteTableSource;
 use Milpa\Admin\Tests\Fixtures\FixedRouteTable;
 use Milpa\Admin\Commands\TuiCommand;
 use Milpa\Admin\AdminPlugin;
 use Milpa\Admin\Settings\SettingsEntity;
 use Milpa\Admin\Settings\SettingsRepository;
-use Milpa\Admin\State\InspectableSections;
-use Milpa\Admin\Tui\AdminTuiScreen;
+use Milpa\Console\State\InspectableSections;
+use Milpa\Console\Tui\ConsoleScreen;
 use Milpa\Admin\Tests\Fixtures\NeighbourPlugin;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -41,7 +41,7 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
  *
  * Las dos mitades del *done when* de P6 se prueban acá sin una terminal, que es
  * lo que las hace probables: la navegación entre secciones vive en
- * {@see AdminTuiScreen}, que no toca `stty` ni `stream_isatty`, y el JSON
+ * {@see ConsoleScreen}, que no toca `stty` ni `stream_isatty`, y el JSON
  * headless es justamente el modo que existe para cuando no hay TTY.
  *
  * Aislado en su proceso por el constant global `rootPath`.
@@ -212,14 +212,14 @@ final class TuiCommandTest extends TestCase
 
     public function test_the_dashboard_starts_on_the_first_section_when_none_is_named(): void
     {
-        $screen = new AdminTuiScreen($this->sections());
+        $screen = new ConsoleScreen($this->sections());
 
         self::assertSame($this->sections()->ids()[0], $screen->currentSectionId());
     }
 
     public function test_the_dashboard_starts_on_the_section_it_was_asked_for(): void
     {
-        $screen = new AdminTuiScreen($this->sections(), initialSection: 'system');
+        $screen = new ConsoleScreen($this->sections(), initialSection: 'system');
 
         self::assertSame('system', $screen->currentSectionId());
     }
@@ -228,7 +228,7 @@ final class TuiCommandTest extends TestCase
     {
         // La navegación es lo que separa un dashboard de una captura de
         // pantalla: si la pantalla no cambia con el foco, no navegó nada.
-        $screen = new AdminTuiScreen($this->sections(), ansi: false);
+        $screen = new ConsoleScreen($this->sections(), ansi: false);
         $primera = $screen->currentSectionId();
         $antes = $screen->render();
 
@@ -240,7 +240,7 @@ final class TuiCommandTest extends TestCase
 
     public function test_shift_tab_comes_back(): void
     {
-        $screen = new AdminTuiScreen($this->sections(), ansi: false);
+        $screen = new ConsoleScreen($this->sections(), ansi: false);
         $primera = $screen->currentSectionId();
 
         $screen->press('tab');
@@ -253,8 +253,8 @@ final class TuiCommandTest extends TestCase
     {
         // Una lista horizontal de secciones se navega con flechas antes que con
         // Tab; que hagan cosas distintas sería el peor resultado.
-        $conTab = new AdminTuiScreen($this->sections(), ansi: false);
-        $conFlecha = new AdminTuiScreen($this->sections(), ansi: false);
+        $conTab = new ConsoleScreen($this->sections(), ansi: false);
+        $conFlecha = new ConsoleScreen($this->sections(), ansi: false);
 
         $conTab->press('tab');
         $conFlecha->press('right');
@@ -270,7 +270,7 @@ final class TuiCommandTest extends TestCase
     public function test_a_digit_jumps_straight_to_its_section(): void
     {
         // Llegar a la cuarta sección tabulando cuatro veces no es navegar.
-        $screen = new AdminTuiScreen($this->sections(), ansi: false);
+        $screen = new ConsoleScreen($this->sections(), ansi: false);
         $ids = $this->sections()->ids();
 
         $screen->press('2');
@@ -286,7 +286,7 @@ final class TuiCommandTest extends TestCase
     {
         // Y no cae al "tecla no reconocida" del tier: lo que no existe es esa
         // sección, no la tecla.
-        $screen = new AdminTuiScreen($this->sections(), ansi: false);
+        $screen = new ConsoleScreen($this->sections(), ansi: false);
         $antes = $screen->currentSectionId();
 
         $screen->press('9');
@@ -297,7 +297,7 @@ final class TuiCommandTest extends TestCase
     public function test_the_status_bar_names_every_section_and_marks_the_current_one(): void
     {
         // Un dashboard que no dice qué más hay no se navega: se adivina.
-        $screen = new AdminTuiScreen($this->sections(), width: 160, ansi: false);
+        $screen = new ConsoleScreen($this->sections(), width: 160, ansi: false);
         $render = $screen->render();
 
         foreach ($this->sections()->ids() as $id) {
@@ -309,7 +309,7 @@ final class TuiCommandTest extends TestCase
 
     public function test_q_stops_the_loop(): void
     {
-        $screen = new AdminTuiScreen($this->sections(), ansi: false);
+        $screen = new ConsoleScreen($this->sections(), ansi: false);
 
         self::assertFalse($screen->press('q'));
     }
@@ -320,7 +320,7 @@ final class TuiCommandTest extends TestCase
         // pantalla con marco.
         (new SettingsRepository($this->settingsFile))->save(new SettingsEntity('Antes', false, 'dark'));
 
-        $screen = new AdminTuiScreen($this->sections(), width: 160, ansi: false, initialSection: 'settings');
+        $screen = new ConsoleScreen($this->sections(), width: 160, ansi: false, initialSection: 'settings');
         $antes = $screen->render();
 
         (new SettingsRepository($this->settingsFile))->save(new SettingsEntity('Después', false, 'dark'));

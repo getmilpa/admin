@@ -21,7 +21,7 @@ use Milpa\Auth\SessionRecord;
 use Milpa\Container\DIContainer;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
-use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Console\Contracts\RouteTableSource;
 use Milpa\Admin\Tests\Fixtures\FixedRouteTable;
 use Milpa\Admin\Controllers\SystemController;
 use Milpa\Admin\AdminPlugin;
@@ -38,7 +38,7 @@ use Symfony\Component\HttpFoundation\Request;
 /**
  * La sección "Sistema" (P5.7): un GET read-only, gateado por `milpa.admin`, que pinta las rutas
  * registradas en una tabla server-rendered dentro del chrome del admin. Sin sesión → 302 login.
- * Corre contra una tabla de rutas fija que entra por {@see \Milpa\Admin\Contracts\RouteTableSource}:
+ * Corre contra una tabla de rutas fija que entra por {@see \Milpa\Console\Contracts\RouteTableSource}:
  * el panel no sabe cómo su host arma las rutas, y probarlo contra el ensamblador de una app
  * concreta ataba este test a que esa app siguiera teniendo los controllers de siempre.
  *

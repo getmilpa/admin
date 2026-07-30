@@ -17,8 +17,8 @@ namespace Milpa\Admin\Commands;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
 use Milpa\Live\Tui\StreamTerminal;
-use Milpa\Admin\State\InspectableSections;
-use Milpa\Admin\Tui\AdminTuiScreen;
+use Milpa\Console\State\InspectableSections;
+use Milpa\Console\Tui\ConsoleScreen;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -141,7 +141,7 @@ final class TuiCommand extends Command
         }
 
         $terminal = new StreamTerminal('milpa · admin');
-        $screen = new AdminTuiScreen(
+        $screen = new ConsoleScreen(
             $sections,
             $terminal->columns(),
             $terminal->rows(),

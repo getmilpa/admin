@@ -23,7 +23,7 @@ use Milpa\Live\Schema\FormView;
 use Milpa\Live\Schema\ValidationResult;
 use Milpa\Admin\Projection\BannerTone;
 use Milpa\Admin\Projection\FormBanner;
-use Milpa\Admin\Section\AdminSection;
+use Milpa\Console\Section\Section;
 use Milpa\Admin\View\AdminShellRenderer;
 use Milpa\Admin\View\SpanishFieldErrorMessages;
 use Psr\Http\Message\ResponseInterface;
@@ -85,8 +85,8 @@ final class ShellRenderHandler implements RequestHandlerInterface
      *                                              resultado de redisplay cuando una acción de tool falla
      *                                              (Tarea 6) — server-rendered (ADR#8), sin depender de JS
      *                                              para mostrarse
-     * @param list<AdminSection>   $sections        las secciones descubiertas (ADR#12), YA ordenadas
-     *                                              por {@see \Milpa\Admin\Section\AdminSectionDiscovery::sections()}
+     * @param list<Section>        $sections        las secciones descubiertas (ADR#12), YA ordenadas
+     *                                              por {@see \Milpa\Console\Section\SectionDiscovery::sections()}
      *                                              — este handler NUNCA re-ordena. `[]` (default) cae
      *                                              al único item hardcoded pre-Tarea-5 (BC de
      *                                              construcción para cualquier caller que aún no las

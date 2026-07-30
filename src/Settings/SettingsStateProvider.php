@@ -14,14 +14,14 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Settings;
 
-use Milpa\Admin\State\AdminSectionStateProvider;
+use Milpa\Console\State\SectionStateProvider;
 
 /**
  * El seam de lectura que consume el GET de configuración — nunca el store directamente, para que la
  * fuente de los valores actuales quede desacoplada de cómo se persisten. Generalizado a
- * {@see AdminSectionStateProvider} en P5.7/P5.6: la config actual ES el `state()` de la sección Settings.
+ * {@see SectionStateProvider} en P5.7/P5.6: la config actual ES el `state()` de la sección Settings.
  */
-interface SettingsStateProvider extends AdminSectionStateProvider
+interface SettingsStateProvider extends SectionStateProvider
 {
     /**
      * Los valores de configuración actuales, sin el id interno.

@@ -24,7 +24,7 @@ use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Http\Symfony\HttpResponse;
 use Milpa\Admin\Http\ShellRenderHandler;
 use Milpa\Admin\Settings\SettingsStore;
-use Milpa\Admin\State\PluginsStateProvider;
+use Milpa\Console\State\PluginsStateProvider;
 use Milpa\Admin\View\AdminShellRenderer;
 use Milpa\Admin\View\PluginsTableView;
 use Psr\Http\Message\ResponseInterface;
@@ -123,7 +123,7 @@ final class PluginsController extends GatedAdminController
     private function page(bool $secure, string $csrf, ?string $notice): RequestHandlerInterface
     {
         return new class ($this->container, $this->discoveredSections(), $csrf, $secure, $notice) implements RequestHandlerInterface {
-            /** @param list<\Milpa\Admin\Section\AdminSection> $sections */
+            /** @param list<\Milpa\Console\Section\Section> $sections */
             public function __construct(
                 private readonly DIContainerInterface $container,
                 private readonly array $sections,

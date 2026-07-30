@@ -23,7 +23,7 @@ use Milpa\Interfaces\Plugin\PluginsManagerInterface;
 use Milpa\Plugin\Contracts\PluginRecord;
 use Milpa\Plugin\Contracts\PluginRegistryInterface;
 use Milpa\Plugin\Registry\InMemoryPluginRegistry;
-use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Console\Contracts\RouteTableSource;
 use Milpa\Admin\Tests\Fixtures\FixedRouteTable;
 use Milpa\Admin\Controllers\PluginsController;
 use Milpa\Admin\Http\ShellRenderHandler;

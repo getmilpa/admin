@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Tests\Fixtures;
 
-use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Console\Contracts\RouteTableSource;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;

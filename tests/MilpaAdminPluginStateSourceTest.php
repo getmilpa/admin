@@ -15,13 +15,13 @@ declare(strict_types=1);
 namespace Milpa\Admin\Tests;
 
 use Milpa\Interfaces\Di\DIContainerInterface;
-use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Console\Contracts\RouteTableSource;
 use Milpa\Admin\Tests\Fixtures\FixedRouteTable;
 use Milpa\Admin\AdminPlugin;
 use Milpa\Admin\Settings\SettingsEntity;
 use Milpa\Admin\Settings\SettingsRepository;
-use Milpa\Admin\State\AdminSectionStateProvider;
-use Milpa\Admin\State\AdminSectionStateSource;
+use Milpa\Console\State\SectionStateProvider;
+use Milpa\Console\State\SectionStateSource;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use PHPUnit\Framework\TestCase;
@@ -31,8 +31,8 @@ use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
- * `MilpaAdminPlugin` es un `AdminSectionStateSource`: declara el estado de SUS secciones (settings +
- * plugins + system), cada uno un `AdminSectionStateProvider` real — el mismo estado que el shell web consume,
+ * `MilpaAdminPlugin` es un `SectionStateSource`: declara el estado de SUS secciones (settings +
+ * plugins + system), cada uno un `SectionStateProvider` real — el mismo estado que el shell web consume,
  * ahora disponible para el shell CLI. Aislado en su proceso por el constant global `rootPath` (el load
  * de rutas de `system` lo usa).
  */
@@ -97,13 +97,13 @@ final class MilpaAdminPluginStateSourceTest extends TestCase
         (new SettingsRepository($this->settingsFile))->save(new SettingsEntity('Acme', false, 'light'));
 
         $plugin = new AdminPlugin($this->container());
-        self::assertInstanceOf(AdminSectionStateSource::class, $plugin);
+        self::assertInstanceOf(SectionStateSource::class, $plugin);
 
-        $states = $plugin->adminSectionStates();
+        $states = $plugin->sectionStates();
 
         self::assertSame(['settings', 'plugins', 'system'], array_keys($states));
-        self::assertInstanceOf(AdminSectionStateProvider::class, $states['settings']);
-        self::assertInstanceOf(AdminSectionStateProvider::class, $states['system']);
+        self::assertInstanceOf(SectionStateProvider::class, $states['settings']);
+        self::assertInstanceOf(SectionStateProvider::class, $states['system']);
         // settings → la config persistida; system → la tabla de rutas (con la `/` de HomeController).
         self::assertSame('Acme', $states['settings']->state()['siteName']);
         $routes = $states['system']->state()['routes'];

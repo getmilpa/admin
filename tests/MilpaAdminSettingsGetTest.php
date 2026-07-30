@@ -35,7 +35,7 @@ use Symfony\Component\HttpFoundation\Request;
  * Fake `PluginsManagerInterface` mínimo para este archivo: la Tarea 5 hace que
  * {@see SettingsController::show()} resuelva el discovery (ADR#12, mismo idioma que el Hub) —
  * envuelve los dos providers REALES (mismo par que
- * {@see \Tests\Unit\Plugins\MilpaAdminPlugin\Section\AdminSectionProvidersTest}) para que el
+ * {@see \Tests\Unit\Plugins\MilpaAdminPlugin\Section\SectionProvidersTest}) para que el
  * sidebar renderizado traiga las DOS secciones reales, no un fixture inventado.
  */
 final class SettingsGetFakePluginsManager implements PluginsManagerInterface
@@ -87,7 +87,7 @@ final class SettingsGetFakePluginsManager implements PluginsManagerInterface
  * producción del checkout.
  *
  * Tarea 5 (P5.5) — el sidebar YA NO es el único item hardcoded: se descubre (ADR#12) vía
- * {@see \Milpa\Admin\Section\AdminSectionDiscovery} sobre los plugins booteados,
+ * {@see \Milpa\Console\Section\SectionDiscovery} sobre los plugins booteados,
  * así que el shell renderizado trae las DOS secciones reales — Settings (order 10) y Arquitectura
  * (order 20) — en ese orden, con `aria-current="page"` en la sección activa.
  */
@@ -271,8 +271,8 @@ final class MilpaAdminSettingsGetTest extends TestCase
     /**
      * Tarea 5 (P5.5) — el sidebar se DESCUBRE (ADR#12): ya no es el único item hardcoded de la
      * Tarea 4, sino las DOS secciones reales que aportan
-     * {@see \Milpa\Admin\MilpaAdminPlugin::adminSections()} (`settings`, order 10)
-     * y {@see \Milpa\Plugins\NeighbourPlugin\NeighbourPlugin::adminSections()} (`architecture`, order 20),
+     * {@see \Milpa\Admin\MilpaAdminPlugin::sections()} (`settings`, order 10)
+     * y {@see \Milpa\Plugins\NeighbourPlugin\NeighbourPlugin::sections()} (`architecture`, order 20),
      * en ESE orden — el discovery ordena, este handler nunca re-ordena. `aria-current="page"` marca
      * la sección activa por `key` estricto (el componente lo emite, no este test lo inventa).
      */

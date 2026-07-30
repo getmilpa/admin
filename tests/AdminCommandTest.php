@@ -17,7 +17,7 @@ namespace Milpa\Admin\Tests;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
-use Milpa\Admin\Contracts\RouteTableSource;
+use Milpa\Console\Contracts\RouteTableSource;
 use Milpa\Admin\Tests\Fixtures\FixedRouteTable;
 use Milpa\Admin\Commands\AdminCommand;
 use Milpa\Admin\AdminPlugin;
@@ -150,7 +150,7 @@ final class AdminCommandTest extends TestCase
     public function test_valid_section_without_state_reports_no_inspectable_state(): void
     {
         // 'architecture' (aportada por NeighbourPlugin) es una sección VÁLIDA pero sin
-        // AdminSectionStateProvider — web-only. El comando lo informa suave, no como sección desconocida.
+        // SectionStateProvider — web-only. El comando lo informa suave, no como sección desconocida.
         $tester = $this->tester();
         $exit = $tester->execute(['section' => 'architecture']);
         $display = $tester->getDisplay();

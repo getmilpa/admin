@@ -38,7 +38,7 @@ use Symfony\Component\HttpFoundation\Request;
  * de que `runGated()` corra el pipeline, así que TODOS los tests de este archivo — incluidos los
  * anónimos/403/CSRF que nunca llegan al `$tip` — necesitan `PluginsManagerInterface` registrado, no
  * solo los que llegan al redisplay. Envuelve los dos providers REALES (mismo par que
- * {@see \Tests\Unit\Plugins\MilpaAdminPlugin\Section\AdminSectionProvidersTest}) para que el
+ * {@see \Tests\Unit\Plugins\MilpaAdminPlugin\Section\SectionProvidersTest}) para que el
  * redisplay pinte el sidebar completo, no un fixture inventado.
  */
 final class SettingsPostFakePluginsManager implements PluginsManagerInterface

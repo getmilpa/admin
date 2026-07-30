@@ -16,9 +16,9 @@ namespace Milpa\Admin\Tests\Section;
 
 use Milpa\Container\DIContainer;
 use Milpa\Admin\AdminPlugin;
-use Milpa\Admin\Section\AdminSection;
-use Milpa\Admin\Section\AdminSectionDiscovery;
-use Milpa\Admin\Section\AdminSectionProvider;
+use Milpa\Console\Section\Section;
+use Milpa\Console\Section\SectionDiscovery;
+use Milpa\Console\Section\SectionProvider;
 use Milpa\Admin\Tests\Fixtures\NeighbourPlugin;
 use PHPUnit\Framework\TestCase;
 
@@ -31,11 +31,11 @@ use PHPUnit\Framework\TestCase;
  *
  * Harness: ambos constructores (`MilpaAdminPlugin::__construct`, `NeighbourPlugin::__construct`) solo
  * llaman a `parent::__construct($container)` — PluginBase se limita a guardar la referencia, sin
- * tocar el container. `adminSections()` tampoco toca el container. Por eso un {@see DIContainer}
+ * tocar el container. `sections()` tampoco toca el container. Por eso un {@see DIContainer}
  * real y vacío (cero servicios registrados) alcanza para instanciar ambos plugins de verdad, sin
  * necesitar `newInstanceWithoutConstructor()` ni boot() completo.
  */
-final class AdminSectionProvidersTest extends TestCase
+final class SectionProvidersTest extends TestCase
 {
     private function container(): DIContainer
     {
@@ -46,8 +46,8 @@ final class AdminSectionProvidersTest extends TestCase
     {
         $plugin = new AdminPlugin($this->container());
 
-        self::assertInstanceOf(AdminSectionProvider::class, $plugin);
-        $sections = $plugin->adminSections();
+        self::assertInstanceOf(SectionProvider::class, $plugin);
+        $sections = $plugin->sections();
         self::assertCount(3, $sections);
 
         self::assertSame('settings', $sections[0]->id);
@@ -71,8 +71,8 @@ final class AdminSectionProvidersTest extends TestCase
     {
         $plugin = new NeighbourPlugin($this->container());
 
-        self::assertInstanceOf(AdminSectionProvider::class, $plugin);
-        $sections = $plugin->adminSections();
+        self::assertInstanceOf(SectionProvider::class, $plugin);
+        $sections = $plugin->sections();
         self::assertCount(1, $sections);
         self::assertSame('architecture', $sections[0]->id);
         self::assertSame('/vecino/arquitectura', $sections[0]->href);
@@ -81,12 +81,12 @@ final class AdminSectionProvidersTest extends TestCase
 
     public function test_both_providers_survive_the_real_discovery(): void
     {
-        $discovery = new AdminSectionDiscovery([
+        $discovery = new SectionDiscovery([
             new AdminPlugin($this->container()),
             new NeighbourPlugin($this->container()),
         ]);
 
-        $ids = array_map(static fn (AdminSection $s): string => $s->id, $discovery->sections());
+        $ids = array_map(static fn (Section $s): string => $s->id, $discovery->sections());
         self::assertSame(['settings', 'plugins', 'architecture', 'system'], $ids); // orden 10, 15, 20, 30
 
         self::assertSame('settings', $discovery->defaultSection()->id);

@@ -16,8 +16,8 @@ namespace Milpa\Admin\Commands;
 
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
-use Milpa\Admin\Section\AdminSectionDiscovery;
-use Milpa\Admin\State\AdminSectionStateDiscovery;
+use Milpa\Console\Section\SectionDiscovery;
+use Milpa\Console\State\SectionStateDiscovery;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Helper\Table;
@@ -27,8 +27,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * `coa:admin` — el SEGUNDO shell del Milpa Admin: renderiza en la terminal las mismas secciones
- * descubiertas ({@see AdminSectionDiscovery}) y el mismo estado por-sección
- * ({@see \Milpa\Admin\State\AdminSectionStateProvider}) que el shell web. Read-only,
+ * descubiertas ({@see SectionDiscovery}) y el mismo estado por-sección
+ * ({@see \Milpa\Console\State\SectionStateProvider}) que el shell web. Read-only,
  * confianza de proceso (sin gate `milpa.admin` ni CSRF — la seguridad web no existe en el loop CLI).
  * No construye un TUI interactivo (eso es P6): un solo shot y sale.
  */
@@ -63,8 +63,8 @@ final class AdminCommand extends Command
     /** @param iterable<object> $booted */
     private function listSections(iterable $booted, OutputInterface $output): int
     {
-        $sections = (new AdminSectionDiscovery($booted))->sections();
-        $withState = (new AdminSectionStateDiscovery($booted))->all();
+        $sections = (new SectionDiscovery($booted))->sections();
+        $withState = (new SectionStateDiscovery($booted))->all();
 
         $table = new Table($output);
         $table->setHeaders(['Sección', 'id', 'Ruta', 'Estado inspectable']);
@@ -84,11 +84,11 @@ final class AdminCommand extends Command
     /** @param iterable<object> $booted */
     private function showSection(iterable $booted, string $sectionId, OutputInterface $output): int
     {
-        $stateDiscovery = new AdminSectionStateDiscovery($booted);
+        $stateDiscovery = new SectionStateDiscovery($booted);
         $provider = $stateDiscovery->providerFor($sectionId);
 
         if ($provider === null) {
-            $ids = array_map(static fn ($s): string => $s->id, (new AdminSectionDiscovery($booted))->sections());
+            $ids = array_map(static fn ($s): string => $s->id, (new SectionDiscovery($booted))->sections());
             if (in_array($sectionId, $ids, true)) {
                 $output->writeln("<comment>La sección '{$sectionId}' no expone estado inspectable.</comment>");
             } else {

@@ -140,7 +140,7 @@ final class SettingsController extends GatedAdminController
         $sections = $this->discoveredSections();
 
         return new class ($secure, $projector, $definition, $sections) implements RequestHandlerInterface {
-            /** @param list<\Milpa\Admin\Section\AdminSection> $sections */
+            /** @param list<\Milpa\Console\Section\Section> $sections */
             public function __construct(
                 private readonly bool $secure,
                 private readonly ToolProjector $projector,

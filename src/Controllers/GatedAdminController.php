@@ -22,8 +22,8 @@ use Milpa\Auth\Exceptions\AuthException;
 use Milpa\Auth\Http\RequireScopeMiddleware;
 use Milpa\Auth\Http\StartSession;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
-use Milpa\Admin\Section\AdminSection;
-use Milpa\Admin\Section\AdminSectionDiscovery;
+use Milpa\Console\Section\Section;
+use Milpa\Console\Section\SectionDiscovery;
 use Milpa\Admin\Support\LocalRedirectTarget;
 use Milpa\Runtime\Http\MiddlewarePipeline;
 use Psr\Http\Server\MiddlewareInterface;
@@ -129,18 +129,18 @@ abstract class GatedAdminController extends BaseController
     /**
      * El discovery de secciones (ADR#12) — mismo idioma que
      * {@see \Milpa\Admin\Controllers\MilpaAdminController::index()}: resuelve
-     * `PluginsManagerInterface` del container y arma un `AdminSectionDiscovery` fresco sobre los
+     * `PluginsManagerInterface` del container y arma un `SectionDiscovery` fresco sobre los
      * plugins booteados. Compartido por cualquier controller de esta área que necesite pintar el
      * sidebar completo (el shell GET de settings, el redisplay del POST) — sin cachear entre
      * requests, un discovery por invocación.
      *
-     * @return list<AdminSection>
+     * @return list<Section>
      */
     protected function discoveredSections(): array
     {
         /** @var PluginsManagerInterface $plugins */
         $plugins = $this->container->get(PluginsManagerInterface::class);
 
-        return (new AdminSectionDiscovery($plugins->getPlugins()))->sections();
+        return (new SectionDiscovery($plugins->getPlugins()))->sections();
     }
 }

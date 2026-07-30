@@ -15,7 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin\View;
 
 /**
- * Pinta las filas de rutas ({@see \Milpa\Admin\State\RoutesStateProvider}) como una
+ * Pinta las filas de rutas ({@see \Milpa\Console\State\RoutesStateProvider}) como una
  * tabla `mui-table` del design-system, server-rendered y read-only — cero JS, degrada perfecto sin él
  * (ADR#8). No es el `DataTableComponent` interactivo (selección/Alpine): esta sección solo muestra.
  */
