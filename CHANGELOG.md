@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/getmilpa/admin/compare/v0.2.2...v0.3.0) (2026-07-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* the section and state abstraction, and the TUI screen, moved to `milpa/console`. `Milpa\Admin\Section\AdminSection` is now `Milpa\Console\Section\Section`, `AdminSectionProvider` is `SectionProvider`, `AdminTuiScreen` is `ConsoleScreen`, and the contract methods `adminSections()` / `adminSectionStates()` are `sections()` / `sectionStates()`. A plugin contributing admin sections must update its imports and those two method names.
+
+### Features
+
+* the shell moves to milpa/console; admin keeps the web panel ([2c80681](https://github.com/getmilpa/admin/commit/2c80681dc32547dcac18a8a7ddbdfc4228458ef7))
+
 ## [0.2.2](https://github.com/getmilpa/admin/compare/v0.2.1...v0.2.2) (2026-07-30)
 
 
