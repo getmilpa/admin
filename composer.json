@@ -1,6 +1,15 @@
 {
   "name": "milpa/admin",
   "description": "The administration panel of the Milpa PHP framework: a discoverable section shell over the plugin, settings and routing surfaces a host exposes \u2014 server-rendered, no JavaScript required.",
+  "keywords": [
+    "php",
+    "milpa",
+    "framework",
+    "admin-panel",
+    "server-rendered",
+    "plugins",
+    "no-javascript"
+  ],
   "type": "library",
   "license": "Apache-2.0",
   "authors": [
@@ -11,18 +20,18 @@
   ],
   "require": {
     "guzzlehttp/psr7": "^2.6",
-    "milpa/auth": "^0.2",
+    "milpa/auth": "^0.3",
     "milpa/command": "^0.2",
     "milpa/core": "^0.6",
     "milpa/data": "^0.2",
     "milpa/http": "^0.1.5",
     "milpa/http-symfony": "^0.1",
-    "milpa/live": "^0.2",
+    "milpa/live": "^0.4",
     "milpa/live-tui": "^0.3",
     "milpa/live-web": "^0.2",
     "milpa/plugin": "^0.3",
     "milpa/runtime": "^0.5",
-    "milpa/tool-runtime": "^0.6",
+    "milpa/tool-runtime": "^0.8",
     "php": ">=8.3",
     "psr/log": "^3",
     "symfony/http-foundation": "^7.4",
