@@ -23,7 +23,7 @@
     "guzzlehttp/psr7": "^2.6",
     "milpa/auth": "^0.3",
     "milpa/command": "^0.3",
-    "milpa/console": "^0.2",
+    "milpa/console": "^0.3",
     "milpa/core": "^0.6",
     "milpa/data": "^0.2",
     "milpa/http": "^0.1.5",
