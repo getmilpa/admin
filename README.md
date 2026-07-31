@@ -109,6 +109,24 @@ Two more decisions worth knowing:
 - **A plugin declared in your code cannot be removed from the panel** — it would delete files your
   own source still names. The panel says so, and offers to disable it instead.
 
+## The HTTP policy for operations
+
+`milpa/console` can expose any declared operation over HTTP, but it deliberately knows nothing about
+who is calling: identity sits behind its `OperationHttpPolicy` interface. This package publishes the
+implementation that uses `milpa/auth`, because it already requires it.
+
+```php
+use Milpa\Admin\Http\AuthOperationHttpPolicy;
+use Milpa\Console\Http\HttpProjector;
+
+new HttpProjector($operations, $container, $psr17, $psr17, policy: new AuthOperationHttpPolicy($container));
+```
+
+An operation typed by `scopes` goes through `RequireScopeMiddleware` and then the same `PolicyGate`
+that guards MCP; one typed by `permission` goes through `RequirePermissionMiddleware`. Denied is a
+401 or a 403 with the code that names it. A protected operation on a host that wired **no** auth
+chain is a 500, never a 4xx — the caller did nothing wrong.
+
 ## Requirements
 
 - PHP **≥ 8.3**
