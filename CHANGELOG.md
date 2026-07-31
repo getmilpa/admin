@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/getmilpa/admin/compare/v0.3.3...v0.4.0) (2026-07-31)
+
+
+### Features
+
+* publish the auth-backed HTTP policy for operations ([350fb31](https://github.com/getmilpa/admin/commit/350fb3150ba2a3e99cbe32249bc03c6a0555b140))
+
 ## [0.3.3](https://github.com/getmilpa/admin/compare/v0.3.2...v0.3.3) (2026-07-31)
 
 
