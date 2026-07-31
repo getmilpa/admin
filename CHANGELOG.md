@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/getmilpa/admin/compare/v0.4.1...v0.4.2) (2026-07-31)
+
+
+### Bug Fixes
+
+* the auth-backed HTTP policy now lives in milpa/auth ([f45234e](https://github.com/getmilpa/admin/commit/f45234ea8933a211be79fcd4f56212d5ef962cf4))
+
 ## [0.4.1](https://github.com/getmilpa/admin/compare/v0.4.0...v0.4.1) (2026-07-31)
 
 
