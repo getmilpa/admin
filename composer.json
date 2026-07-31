@@ -21,7 +21,7 @@
   "require": {
     "php": ">=8.3",
     "guzzlehttp/psr7": "^2.6",
-    "milpa/auth": "^0.3",
+    "milpa/auth": "^0.3.1",
     "milpa/command": "^0.3",
     "milpa/console": "^0.4.1",
     "milpa/core": "^0.6",
