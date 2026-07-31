@@ -112,10 +112,10 @@ Two more decisions worth knowing:
 ## Requirements
 
 - PHP **≥ 8.3**
-- [`milpa/core`](https://packagist.org/packages/milpa/core) **^0.6** · [`milpa/auth`](https://packagist.org/packages/milpa/auth) **^0.2** · [`milpa/command`](https://packagist.org/packages/milpa/command) **^0.2** · [`milpa/data`](https://packagist.org/packages/milpa/data) **^0.2**
-- [`milpa/http`](https://packagist.org/packages/milpa/http) **^0.1.5** · [`milpa/http-symfony`](https://packagist.org/packages/milpa/http-symfony) **^0.1** · [`milpa/runtime`](https://packagist.org/packages/milpa/runtime) **^0.5**
-- [`milpa/plugin`](https://packagist.org/packages/milpa/plugin) **^0.3** — the operations the Plugins section drives
-- [`milpa/live-web`](https://packagist.org/packages/milpa/live-web) **^0.1** · [`milpa/live-tui`](https://packagist.org/packages/milpa/live-tui) **^0.2** · [`milpa/tool-runtime`](https://packagist.org/packages/milpa/tool-runtime) **^0.6**
+- [`milpa/core`](https://packagist.org/packages/milpa/core) **^0.6** · [`milpa/auth`](https://packagist.org/packages/milpa/auth) **^0.3** · [`milpa/command`](https://packagist.org/packages/milpa/command) **^0.3** · [`milpa/data`](https://packagist.org/packages/milpa/data) **^0.2**
+- [`milpa/http`](https://packagist.org/packages/milpa/http) **^0.1.5** · [`milpa/http-symfony`](https://packagist.org/packages/milpa/http-symfony) **^0.1** · [`milpa/runtime`](https://packagist.org/packages/milpa/runtime) **^0.7**
+- [`milpa/plugin`](https://packagist.org/packages/milpa/plugin) **^0.5** — the operations the Plugins section drives
+- [`milpa/live-web`](https://packagist.org/packages/milpa/live-web) **^0.2** · [`milpa/live-tui`](https://packagist.org/packages/milpa/live-tui) **^0.3** · [`milpa/tool-runtime`](https://packagist.org/packages/milpa/tool-runtime) **^0.9**
 
 ## Contributing
 
