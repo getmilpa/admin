@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/getmilpa/admin/compare/v0.4.2...v0.4.3) (2026-07-31)
+
+
+### Bug Fixes
+
+* require milpa/console ^0.6 and milpa/live-tui ^0.4 ([638403a](https://github.com/getmilpa/admin/commit/638403ab2167c22df11c51dea0178e70aa218973))
+
 ## [0.4.2](https://github.com/getmilpa/admin/compare/v0.4.1...v0.4.2) (2026-07-31)
 
 
