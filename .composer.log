@@ -11,9 +11,9 @@ Lock file operations: 92 installs, 0 updates, 0 removals
   - Locking fidry/cpu-core-counter (1.3.0)
   - Locking friendsofphp/php-cs-fixer (v3.95.18)
   - Locking guzzlehttp/psr7 (2.13.0)
-  - Locking milpa/auth (v0.3.1)
-  - Locking milpa/command (v0.3.1)
-  - Locking milpa/console (v0.6.1)
+  - Locking milpa/auth (v0.3.2)
+  - Locking milpa/command (v0.4.0)
+  - Locking milpa/console (v0.7.0)
   - Locking milpa/container (v0.1.5)
   - Locking milpa/core (v0.7.0)
   - Locking milpa/data (v0.2.0)
@@ -23,9 +23,9 @@ Lock file operations: 92 installs, 0 updates, 0 removals
   - Locking milpa/live (v0.4.1)
   - Locking milpa/live-tui (v0.4.1)
   - Locking milpa/live-web (v0.2.2)
-  - Locking milpa/plugin (v0.7.1)
+  - Locking milpa/plugin (v0.7.2)
   - Locking milpa/resolver (v0.5.3)
-  - Locking milpa/runtime (v0.7.2)
+  - Locking milpa/runtime (v0.7.3)
   - Locking milpa/tool-runtime (v0.9.1)
   - Locking myclabs/deep-copy (1.13.4)
   - Locking nikic/php-parser (v5.8.0)
@@ -97,7 +97,12 @@ Lock file operations: 92 installs, 0 updates, 0 removals
 Writing lock file
 Installing dependencies from lock file (including require-dev)
 Package operations: 92 installs, 0 updates, 0 removals
-    0 [>---------------------------]    0 [->--------------------------]
+  - Downloading milpa/auth (v0.3.2)
+  - Downloading milpa/console (v0.7.0)
+  - Downloading milpa/runtime (v0.7.3)
+ 0/3 [>---------------------------]   0%
+ 1/3 [=========>------------------]  33%
+ 3/3 [============================] 100%
   - Installing composer/pcre (3.4.0): Extracting archive
   - Installing symfony/deprecation-contracts (v3.7.1): Extracting archive
   - Installing psr/container (2.0.2): Extracting archive
@@ -141,18 +146,18 @@ Package operations: 92 installs, 0 updates, 0 removals
   - Installing guzzlehttp/psr7 (2.13.0): Extracting archive
   - Installing psr/http-server-handler (1.0.2): Extracting archive
   - Installing psr/http-server-middleware (1.0.2): Extracting archive
-  - Installing milpa/command (v0.3.1): Extracting archive
-  - Installing milpa/auth (v0.3.1): Extracting archive
+  - Installing milpa/command (v0.4.0): Extracting archive
+  - Installing milpa/auth (v0.3.2): Extracting archive
   - Installing milpa/core (v0.7.0): Extracting archive
   - Installing milpa/tool-runtime (v0.9.1): Extracting archive
   - Installing psr/http-client (1.0.3): Extracting archive
   - Installing milpa/resolver (v0.5.3): Extracting archive
   - Installing milpa/events (v0.2.2): Extracting archive
-  - Installing milpa/plugin (v0.7.1): Extracting archive
+  - Installing milpa/plugin (v0.7.2): Extracting archive
   - Installing milpa/live (v0.4.1): Extracting archive
   - Installing milpa/live-tui (v0.4.1): Extracting archive
   - Installing milpa/http (v0.1.6): Extracting archive
-  - Installing milpa/console (v0.6.1): Extracting archive
+  - Installing milpa/console (v0.7.0): Extracting archive
   - Installing milpa/data (v0.2.0): Extracting archive
   - Installing symfony/http-foundation (v7.4.15): Extracting archive
   - Installing milpa/http-symfony (v0.1.1): Extracting archive
@@ -160,7 +165,7 @@ Package operations: 92 installs, 0 updates, 0 removals
   - Installing symfony/var-exporter (v7.4.14): Extracting archive
   - Installing symfony/dependency-injection (v7.4.15): Extracting archive
   - Installing milpa/container (v0.1.5): Extracting archive
-  - Installing milpa/runtime (v0.7.2): Extracting archive
+  - Installing milpa/runtime (v0.7.3): Extracting archive
   - Installing phpstan/phpdoc-parser (2.3.3): Extracting archive
   - Installing phpstan/phpstan (2.2.7): Extracting archive
   - Installing staabm/side-effects-detector (1.0.5): Extracting archive
@@ -191,7 +196,7 @@ Package operations: 92 installs, 0 updates, 0 removals
   - Installing phpunit/phpunit (11.5.56): Extracting archive
   - Installing symfony/psr-http-message-bridge (v7.4.8): Extracting archive
   0/92 [>---------------------------]   0%
- 79/92 [========================>---]  85%
+ 81/92 [========================>---]  88%
  91/92 [===========================>]  98%
  92/92 [============================] 100%
 4 package suggestions were added by new dependencies, use `composer suggest` to see details.
