@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6](https://github.com/getmilpa/admin/compare/v0.4.5...v0.4.6) (2026-08-01)
+
+
+### Bug Fixes
+
+* **deps:** el pin de milpa/console deja de ser una jaula de un minor ([21b9a04](https://github.com/getmilpa/admin/commit/21b9a04cef4002e5b7fbb11adf731174f1c38ffc))
+
 ## [0.4.5](https://github.com/getmilpa/admin/compare/v0.4.4...v0.4.5) (2026-08-01)
 
 
