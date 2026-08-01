@@ -21,6 +21,8 @@ use Milpa\Auth\SessionRecord;
 use Milpa\Container\DIContainer;
 use Milpa\Interfaces\Plugin\PluginsManagerInterface;
 use Milpa\Plugin\Contracts\PluginRecord;
+use Milpa\Attributes\PluginMetadata;
+use Milpa\Plugin\Activation\DeclaredPlugins;
 use Milpa\Plugin\Contracts\PluginRegistryInterface;
 use Milpa\Plugin\Registry\InMemoryPluginRegistry;
 use Milpa\Console\Contracts\RouteTableSource;
@@ -107,6 +109,10 @@ final class MilpaAdminPluginsSectionTest extends TestCase
         $container->registerService(EventDispatcherInterface::class, new EventDispatcher());
         $container->registerService(SessionStore::class, $store);
         $container->registerService(PluginRegistryInterface::class, $this->registry);
+        // Los plugins que este host declara. Importa desde que apagar exige un evaluador de seguridad:
+        // sin lista declarada nadie puede comprobar si el grafo seguiría cerrando, y la operación se
+        // niega — que es la política, no un accidente del fixture.
+        $container->registerService(DeclaredPlugins::class, new DeclaredPlugins([AdminPluginFixture::class]));
 
         $plugins = new PluginsSectionFakePluginsManager([
             'milpa-admin' => new AdminPlugin($container),
@@ -340,4 +346,9 @@ final class PluginsSectionFakePluginsManager implements PluginsManagerInterface
     {
         return isset($this->plugins[$name]);
     }
+}
+
+#[PluginMetadata(version: '1.0.0', author: 'a', site: 'https://e.com', name: 'OAuthPlugin', type: 'Service')]
+final class AdminPluginFixture
+{
 }
