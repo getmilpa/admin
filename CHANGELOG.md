@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.10](https://github.com/getmilpa/admin/compare/v0.4.9...v0.4.10) (2026-08-04)
+
+
+### Bug Fixes
+
+* **deps:** admite milpa/live-tui ^0.6 ([cecdfda](https://github.com/getmilpa/admin/commit/cecdfdae1c55ca985ba9af278f82d604141fc847))
+
 ## [0.4.9](https://github.com/getmilpa/admin/compare/v0.4.8...v0.4.9) (2026-08-04)
 
 
