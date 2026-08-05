@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.11](https://github.com/getmilpa/admin/compare/v0.4.10...v0.4.11) (2026-08-05)
+
+
+### Bug Fixes
+
+* **deps:** el rango de milpa/plugin admite 0.10 ([31f8016](https://github.com/getmilpa/admin/commit/31f801605a8d062961b073bc38d039a26909a50f))
+* **deps:** también se ensancharon milpa/command a ^0.6 y milpa/live-tui a ^0.7 ([7a09143](https://github.com/getmilpa/admin/commit/7a09143d2da3cda07f6b4d7c49eed5ca8c3314be))
+
 ## [0.4.10](https://github.com/getmilpa/admin/compare/v0.4.9...v0.4.10) (2026-08-04)
 
 
