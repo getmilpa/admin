@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.12](https://github.com/getmilpa/admin/compare/v0.4.11...v0.4.12) (2026-08-11)
+
+
+### Bug Fixes
+
+* accept milpa/command ^0.7 so this package installs again ([#21](https://github.com/getmilpa/admin/issues/21)) ([5dc9c09](https://github.com/getmilpa/admin/commit/5dc9c09aeb503791eca745e019cc3937c22c06bb))
+
 ## [0.4.11](https://github.com/getmilpa/admin/compare/v0.4.10...v0.4.11) (2026-08-05)
 
 
