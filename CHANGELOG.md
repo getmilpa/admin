@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.13](https://github.com/getmilpa/admin/compare/v0.4.12...v0.4.13) (2026-08-12)
+
+
+### Bug Fixes
+
+* accept milpa/plugin ^0.11, closing the chain ([#23](https://github.com/getmilpa/admin/issues/23)) ([c41f96d](https://github.com/getmilpa/admin/commit/c41f96d1e4134858e6ffc942aa4180e19476a94b))
+
 ## [0.4.12](https://github.com/getmilpa/admin/compare/v0.4.11...v0.4.12) (2026-08-11)
 
 
