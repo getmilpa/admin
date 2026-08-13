@@ -1,5 +1,18 @@
 # Changelog
 
+
+## [0.4.15](https://github.com/getmilpa/admin/releases/tag/v0.4.15) (2026-08-12)
+
+Accepts `milpa/console ^0.9`, where consent is decided for the **invocation** rather than for the operation in the abstract — an operation may declare that a given argument brings its ceiling down, and `console v0.9.0` is where that declaration is finally read.
+
+This package declares no descent yet. Capping console at `^0.8` only kept it on the version where the field had no reader.
+
+## [0.4.14](https://github.com/getmilpa/admin/releases/tag/v0.4.14) (2026-08-12)
+
+Accepts `milpa/command ^0.8`, which ships the descent field — an argument that lowers an operation's ceiling, with its reason carried in the declaration.
+
+Widening only: no behaviour changes here. Capping the atom at `^0.7` is what stopped anything downstream from resolving a version that uses it; greenhouse `evidence/0151` measured eight packages holding that cap.
+
 ## [0.4.13](https://github.com/getmilpa/admin/compare/v0.4.12...v0.4.13) (2026-08-12)
 
 
