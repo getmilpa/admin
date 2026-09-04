@@ -66,7 +66,7 @@ use Milpa\Runtime\Http\RouteProviderInterface;
  * loopback-only, and the Settings section and the topbar chip say so (greenhouse decisions/0204).
  */
 #[PluginMetadata(
-    version: '0.8.0', // x-release-please-version
+    version: '0.9.0', // x-release-please-version
     author: 'Rodrigo Vicente - TeamX Agency',
     site: 'https://teamx.agency',
     name: 'Admin',

@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.9.0](https://github.com/getmilpa/admin/compare/v0.8.0...v0.9.0) (2026-09-04)
+
+
+### Features
+
+* the Dev tools section — the ledgers the house already writes, read; nothing runs ([#43](https://github.com/getmilpa/admin/issues/43)) ([819e6f0](https://github.com/getmilpa/admin/commit/819e6f0d403a804b7735934ec24cfd6bfab6e586))
+
 ## [0.8.0](https://github.com/getmilpa/admin/compare/v0.7.0...v0.8.0) (2026-09-04)
 
 
