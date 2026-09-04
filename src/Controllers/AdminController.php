@@ -36,7 +36,9 @@ use Psr\Http\Message\ServerRequestInterface;
  * `public/index.php` registers it) the panel still serves its own sections.
  *
  * The language is the app's (`admin.locale`) unless the request says `?lang=<locale>` with a locale the
- * {@see Catalog} carries — the browser-side override the Settings section offers. Anything else is ignored.
+ * {@see Catalog} carries — the browser-side override the Settings section offers. The rest of the query
+ * travels to the active section as `props['query']`, so a section can read its own (`?session=<id>` opens
+ * a timeline inside Dev tools); the shell never interprets it.
  */
 final class AdminController
 {
@@ -57,7 +59,7 @@ final class AdminController
     /** `GET {route}` — the first section in sidebar order. */
     public function index(ServerRequestInterface $request): ResponseInterface
     {
-        return $this->show(null, $this->catalogFor($request));
+        return $this->show(null, $this->catalogFor($request), self::queryParams($request));
     }
 
     /** `GET {route}/s/{id}` — one section, 404 when no plugin declared it. */
@@ -66,7 +68,7 @@ final class AdminController
         $result = $request->getAttribute(RouteResult::ATTRIBUTE);
         $id = $result instanceof RouteResult ? (string) ($result->parameters['id'] ?? '') : '';
 
-        return $this->show($id, $this->catalogFor($request));
+        return $this->show($id, $this->catalogFor($request), self::queryParams($request));
     }
 
     /**
@@ -83,7 +85,10 @@ final class AdminController
         return new Catalog($lang);
     }
 
-    private function show(?string $id, Catalog $catalog): ResponseInterface
+    /**
+     * @param array<string, mixed> $query the request's query params, handed to the active section
+     */
+    private function show(?string $id, Catalog $catalog, array $query): ResponseInterface
     {
         $shell = $this->shell->withCatalog($catalog);
         $page = $this->page->withCatalog($catalog);
@@ -109,7 +114,7 @@ final class AdminController
         }
 
         try {
-            $body = $shell->render($catalogue, $active);
+            $body = $shell->render($catalogue, $active, $query);
         } catch (UnknownComponentException $unknown) {
             return $this->html(500, $page->error(500, $catalog->tr('section.conflict', $unknown->getMessage())));
         }
@@ -143,13 +148,30 @@ final class AdminController
      */
     private static function query(ServerRequestInterface $request, string $name): ?string
     {
-        $params = $request->getQueryParams();
-        if (!isset($params[$name])) {
-            parse_str($request->getUri()->getQuery(), $params);
-        }
-        $value = $params[$name] ?? null;
+        $value = self::queryParams($request)[$name] ?? null;
 
         return \is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /**
+     * Every query parameter of the request — the parsed params when the host filled them, else the
+     * URI's own query string parsed here, so a section reads the same query however the request was built.
+     *
+     * @return array<string, mixed>
+     */
+    private static function queryParams(ServerRequestInterface $request): array
+    {
+        $params = $request->getQueryParams();
+        if ($params === []) {
+            parse_str($request->getUri()->getQuery(), $params);
+        }
+
+        $out = [];
+        foreach ($params as $name => $value) {
+            $out[(string) $name] = $value;
+        }
+
+        return $out;
     }
 
     private function html(int $status, string $body): ResponseInterface

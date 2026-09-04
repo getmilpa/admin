@@ -25,16 +25,24 @@ use Milpa\Live\Contracts\Rendering\ComponentRendererInterface;
  * its own: a `$definition` plus the `$renderer` that paints it, which the panel registers under
  * `$component` before composing. Either way the panel never learns the plugin's name — it learns the
  * section's, and that is enough to list it, route it and render it.
+ *
+ * One prop name is RESERVED: `query`. The shell hands every active section the request's query params
+ * under `props['query']` (greenhouse decisions/0205), so a section that declared its own `query` would
+ * see it silently replaced on every request — the constructor refuses it instead.
  */
 final readonly class AdminSection
 {
     public const ID_PATTERN = '/^[a-z][a-z0-9-]{0,40}$/';
 
+    /** The prop names the shell owns — a section may not declare them. */
+    public const RESERVED_PROPS = ['query'];
+
     /**
      * @param string                            $id         the section's identity and URL segment (`^[a-z][a-z0-9-]{0,40}$`)
      * @param string                            $title      a catalog key the panel knows, or the literal title
      * @param string                            $component  the Milpa component name that renders the section
-     * @param array<string, mixed>              $props      the props the component mounts with
+     * @param array<string, mixed>              $props      the props the component mounts with — never `query`, which is
+     *                                                      reserved: the shell fills it with the request's query params
      * @param int                               $order      sidebar position (lower first; ties break by id)
      * @param string                            $group      a nav group name — data for the sidebar, no semantics yet
      * @param ComponentDefinitionInterface|null $definition the component, when the section brings its own
@@ -57,6 +65,15 @@ final readonly class AdminSection
         }
         if (trim($component) === '') {
             throw new \InvalidArgumentException(\sprintf('Admin section «%s» names no component.', $id));
+        }
+        foreach (self::RESERVED_PROPS as $reserved) {
+            if (\array_key_exists($reserved, $props)) {
+                throw new \InvalidArgumentException(\sprintf(
+                    'Admin section «%s» declares the prop «%s», which is reserved: the shell fills it with the request\'s query params on every render.',
+                    $id,
+                    $reserved,
+                ));
+            }
         }
         if (($definition === null) !== ($renderer === null)) {
             throw new \InvalidArgumentException(\sprintf(

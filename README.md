@@ -31,11 +31,12 @@ return [
 ];
 ```
 
-The panel opens with four sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
+The panel opens with five sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
 **Routes** (every route the booted plugins declared, with handler and per-route middleware), **Settings** (what the
-app declared about the panel itself, key by key, with its source) and **Stack** (every backing service the booted
+app declared about the panel itself, key by key, with its source), **Stack** (every backing service the booted
 plugins declared they need — image, ports, environment with secrets masked, the declaring plugin — and whether its
-port answers on loopback) — and one more per plugin that declares one.
+port answers on loopback) and **Dev tools** (the ledgers the agent writes, read-only) — and one more per plugin
+that declares one.
 
 ## The one idea: a section is a component a plugin declares
 
@@ -61,7 +62,11 @@ final class InventoryPlugin implements PluginInterface, AdminSectionProvider
 
 The panel discovers implementers by `instanceof` over the booted plugins, **at request time** (boot order does not
 matter), lists each section in the sidebar in the declared order, routes it at `/milpa/admin/s/<id>`, and renders
-it inside the shell. A duplicate id is a loud 500 naming both plugins — never a silent "last one wins".
+it inside the shell. A duplicate id is a loud 500 naming both plugins — never a silent "last one wins". One prop name
+is **reserved**: `query` — the shell hands every active section the request's query params under `props['query']`,
+so a section can read its own (`?session=<id>`, a filter) without the shell interpreting it; an `AdminSection` that
+declares `props['query']` itself is refused at construction (`InvalidArgumentException`) rather than silently
+overwritten on every request.
 
 Two lifecycle pairs let another plugin extend a section or the shell without touching either:
 `admin.section.before_render` / `after_render` (props, then HTML — both mutable) and
@@ -133,6 +138,42 @@ route carry `[LoopbackOnlyMiddleware::class]`, the strict gate, never an open on
 the panel names what it received (a danger badge on the row, a notice in Settings, `gate: fallback` in the topbar).
 The topbar always shows the gate in effect (`loopback · custom · open · fallback`) and the locale. Any panel page
 accepts `?lang=en|es` to render in another catalog language for that request (greenhouse `decisions/0204`).
+
+## Dev tools: the ledgers the house already writes, read — nothing runs
+
+The **Dev tools** section reads what the agent already wrote and adds nothing of its own. The **agent ledger** is
+resolved the way the `agent` operation resolves it: an `EventStoreInterface` registered in the container first,
+then a registered `SessionStore`, then the file `var/agent-sessions.jsonl` under the app root — and the page says
+which one it is reading (the class name or the path) under the sessions table and in the not-available notice.
+The ledger is read **once** per page: `replayAll()` when a store gives it, the section's own tolerant line reader
+when it is the file — the same one-JSON-object-per-line format `FileEventStore` writes, except that a line that
+does not decode is counted («N line(s) could not be read») and skipped, never a failure that blanks every block.
+From that one pass: the **sessions** — every stream that opened with `session.started` (a stream without one is
+counted, not listed), reduced with `SessionReducer`, newest first, the table capped at the newest 50 with «N
+older not listed» — each with its state derived from the stream (`running · waiting · done`, and `interrupted`
+when the end fact says so or follows a closed answer window), its goal and mode, the provider's own token count
+in/out (a call counts only when its usage carries an integer `prompt_tokens` or `completion_tokens`; `not
+reported` when none did — absent is not zero) and what it waits on, the pending question inline; the **debt
+signals** (`session.debt_signaled`) grouped by their four real kinds, each glossed in one line and listed even at
+zero; the **evidence** (`session.evidence_recorded`); and a **log** — the file the app declares under
+`admin.log`, absolute or relative to the app root and **confined to it** (`..` and symlinks resolved; outside is
+a notice, not a read), tailed to its last 200 lines within its last 1 MiB. With no declaration the section says
+so and invents no path; without a kernel no root is known, so a relative path is never resolved against the
+working directory and nothing is read; a missing or unreadable file is a notice that names it, and never blanks
+the other blocks. A session's id opens its **timeline** inside the section (`{route}/s/devtools?session=<id>`):
+`SessionProjector` goes first and paints what it paints — turns, tool calls, todos, questions and answers, the goal
+changing, the end — and only what it maps to null AND is in the section's bounded audit list is painted locally:
+the opening, each debt signal with its context, the closure verdict, trial runs / promotions / discards, executed
+operations (operation · executed_by/authorized_by · arguments digest) and paused/resumed sequences. The signed
+state envelope of the section carries only `{view, session}`: the ledgers are a projection re-read on every
+mount, never signed and sent to the browser. Every link inside the section carries `?lang=` when the request
+overrode the locale.
+
+The coupling to `milpa/agent` is soft: without the package the section degrades to a notice naming it, and the
+log block still reads. There is no form, no button and no command box anywhere in it — every mutation of the
+house is a governed operation, and this section only reads (greenhouse `decisions/0205`). One rule it
+introduced for every section: the request's query params reach the active section as `props['query']`, which
+is why that prop name is reserved.
 
 ## Measured, not assumed
 
