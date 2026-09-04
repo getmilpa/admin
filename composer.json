@@ -27,7 +27,7 @@
     "milpa/live": ">=0.17 <1.0",
     "milpa/live-web": ">=0.13 <1.0",
     "milpa/plugin": ">=0.13 <1.0",
-    "milpa/runtime": ">=0.9.1 <1.0",
+    "milpa/runtime": ">=0.10 <1.0",
     "nyholm/psr7": "^1.8",
     "psr/http-message": "^1.1 || ^2.0",
     "psr/http-server-handler": "^1.0",
@@ -63,7 +63,7 @@
         "provides": [
           "admin-panel"
         ],
-        "briefing": "This app serves an administration panel at /milpa/admin (loopback-only until the app declares its own gate). Every plugin that implements Milpa\\Admin\\Section\\AdminSectionProvider gets a section in it; the panel lists the booted plugins and every route they declared."
+        "briefing": "This app serves an administration panel at /milpa/admin (loopback-only until the app declares its own gate). Every plugin that implements Milpa\\Admin\\Section\\AdminSectionProvider gets a section in it; the panel lists the booted plugins, every route they declared and every backing service they need (with a compose file at {route}/stack/compose.yml)."
       }
     }
   },

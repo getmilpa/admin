@@ -46,6 +46,7 @@ final class AdminSettingsTest extends TestCase
         self::assertSame('Casa', $settings->title);
         self::assertSame('/panel/s/plugins', $settings->sectionUrl('plugins'));
         self::assertSame('/panel/assets/tokens.css', $settings->assetUrl('tokens.css'));
+        self::assertSame('/panel/stack/compose.yml', $settings->composeUrl());
     }
 
     public function testFallsBackToTheLiveSecretAndToDefaultsOnBadTypes(): void

@@ -14,9 +14,13 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Rendering;
 
+use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
+use Milpa\Admin\Components\StackComponent;
+use Milpa\Admin\Data\StackSource;
 use Milpa\Admin\I18n\Catalog;
+use Milpa\Admin\Stack\ResolvedEnv;
 use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
 use Milpa\Live\Contracts\Rendering\ComponentRendererInterface;
 use Milpa\Live\Contracts\Transport\StateTransferCodecInterface;
@@ -27,16 +31,18 @@ use Milpa\Live\ValueObjects\RenderTarget;
 use Milpa\Live\ValueObjects\StateSnapshot;
 
 /**
- * Paints the panel's own components — `admin-plugins` and `admin-routes` — as HTML on the `mui-*` design
- * classes, and closes each with its signed state envelope like every Milpa component.
+ * Paints the panel's own components — `admin-plugins`, `admin-routes` and `admin-stack` — as HTML on the
+ * `mui-*` design classes, and closes each with its signed state envelope like every Milpa component.
  *
- * Every string a human reads comes from the {@see Catalog}; every value from the state is escaped.
+ * Every string a human reads comes from the {@see Catalog}; every value from the state is escaped; the
+ * one link it emits (the compose file) is built from the declared {@see AdminSettings}.
  */
 final class AdminHtmlRenderer implements ComponentRendererInterface
 {
     public function __construct(
         private readonly StateTransferCodecInterface $codec,
         private readonly Catalog $catalog,
+        private readonly AdminSettings $settings,
     ) {
     }
 
@@ -55,11 +61,13 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $body = match ($name) {
             PluginsComponent::NAME => $this->plugins($state),
             RoutesComponent::NAME => $this->routes($state),
+            StackComponent::NAME => $this->stack($state),
             default => throw new \InvalidArgumentException(\sprintf(
-                '%s renders %s and %s, not «%s».',
+                '%s renders %s, %s and %s, not «%s».',
                 self::class,
                 PluginsComponent::NAME,
                 RoutesComponent::NAME,
+                StackComponent::NAME,
                 $name,
             )),
         };
@@ -187,6 +195,134 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         return implode("\n", $out);
     }
 
+    private function stack(StateSnapshot $state): string
+    {
+        $data = $state->data;
+        $rows = \is_array($data['services'] ?? null) ? $data['services'] : [];
+        $out = ['<h2 class="mui-h2">' . Html::escape($this->catalog->tr('stack.heading')) . '</h2>'];
+        $out[] = '<p class="admin-stack__actions"><a class="mui-btn mui-btn--ghost" href="' . Html::escape($this->settings->composeUrl()) . '">'
+            . Html::escape($this->catalog->tr('stack.download')) . '</a></p>';
+
+        if (($data['kernel'] ?? false) !== true) {
+            $out[] = $this->notice($this->catalog->tr('stack.no_kernel'));
+        }
+
+        if ($rows === []) {
+            $out[] = $this->notice($this->catalog->tr('stack.empty'));
+
+            return implode("\n", $out);
+        }
+
+        foreach ($rows as $row) {
+            if (!\is_array($row)) {
+                continue;
+            }
+            $out[] = $this->service($row);
+        }
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * One service card: heading with the state badge, the declaration, the env table, the compose fragment
+     * — and, when another plugin declared the same name, a danger badge and a notice naming the others.
+     *
+     * @param array<mixed> $row
+     */
+    private function service(array $row): string
+    {
+        $state = (string) ($row['state'] ?? 'unknown');
+        $badge = match ($state) {
+            'up' => 'mui-badge mui-badge--success',
+            'down' => 'mui-badge mui-badge--warning',
+            StackSource::CONFLICT => 'mui-badge mui-badge--danger',
+            default => 'mui-badge',
+        };
+        $stateKey = \in_array($state, ['up', 'down', StackSource::CONFLICT], true) ? 'stack.state.' . $state : 'stack.state.unknown';
+        $probePort = $row['probePort'] ?? null;
+        $probe = \is_int($probePort)
+            ? $this->catalog->tr('stack.probe', (string) ($row['probeHost'] ?? ''), (string) $probePort)
+            : $this->catalog->tr('stack.no_probe');
+        $summary = (string) ($row['summary'] ?? '');
+        $name = (string) ($row['name'] ?? '');
+
+        $out = ['<article class="mui-card admin-stack__service">'];
+        $out[] = '<h3 class="mui-h3">' . Html::escape($name)
+            . ' <span class="' . $badge . '">' . Html::escape($this->catalog->tr($stateKey)) . '</span>'
+            . ' <small class="admin-stack__probe">' . Html::escape($probe) . '</small></h3>';
+        if ($state === StackSource::CONFLICT) {
+            $others = \is_array($row['conflictsWith'] ?? null) ? array_values(array_filter($row['conflictsWith'], 'is_string')) : [];
+            $out[] = $this->notice($this->catalog->tr('stack.conflict', $name, $this->join($others)), 'danger');
+        }
+        if ($summary !== '') {
+            $out[] = '<p class="admin-stack__summary">' . Html::escape($summary) . '</p>';
+        }
+        $out[] = '<dl class="admin-stack__facts">'
+            . '<dt>' . Html::escape($this->catalog->tr('col.image')) . '</dt><dd><code>' . Html::escape((string) ($row['image'] ?? '')) . '</code></dd>'
+            . '<dt>' . Html::escape($this->catalog->tr('col.ports')) . '</dt><dd>' . $this->codes($row['ports'] ?? null) . '</dd>'
+            . '<dt>' . Html::escape($this->catalog->tr('col.volumes')) . '</dt><dd>' . $this->codes($row['volumes'] ?? null) . '</dd>'
+            . '<dt>' . Html::escape($this->catalog->tr('col.command')) . '</dt><dd>' . $this->codes($row['command'] ?? null) . '</dd>'
+            . '</dl>';
+
+        $out[] = '<h4 class="mui-h4">' . Html::escape($this->catalog->tr('col.env')) . '</h4>';
+        $env = \is_array($row['env'] ?? null) ? $row['env'] : [];
+        if ($env === []) {
+            $out[] = $this->notice($this->catalog->tr('none'));
+        } else {
+            $cells = [];
+            foreach ($env as $var) {
+                if (!\is_array($var)) {
+                    continue;
+                }
+                $cells[] = $this->envRow($var);
+            }
+            $out[] = $this->table(['col.name', 'col.source', 'col.value'], $cells);
+        }
+
+        $out[] = '<p class="admin-stack__declared">' . Html::escape($this->catalog->tr('stack.declared_by', (string) ($row['plugin'] ?? ''))) . '</p>';
+        $out[] = '<h4 class="mui-h4">' . Html::escape($this->catalog->tr('stack.compose')) . '</h4>';
+        $out[] = '<pre class="admin-compose"><code>' . Html::escape((string) ($row['compose'] ?? '')) . '</code></pre>';
+        $out[] = '</article>';
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * @param array<mixed> $var
+     */
+    private function envRow(array $var): string
+    {
+        $source = (string) ($var['source'] ?? ResolvedEnv::UNSET);
+        $configKey = $var['configKey'] ?? null;
+        $sourceKey = \in_array($source, [ResolvedEnv::LITERAL, ResolvedEnv::CONFIG, ResolvedEnv::SECRET], true)
+            ? 'stack.source.' . $source
+            : 'stack.source.unset';
+        $sourceHtml = Html::escape($this->catalog->tr($sourceKey))
+            . (\is_string($configKey) && $configKey !== '' ? ' <code>' . Html::escape($configKey) . '</code>' : '');
+        $valueHtml = match ($source) {
+            ResolvedEnv::SECRET => '<span class="admin-stack__secret">' . Html::escape($this->catalog->tr('stack.secret')) . '</span>',
+            ResolvedEnv::UNSET => '<em>' . Html::escape($this->catalog->tr('stack.unset')) . '</em>',
+            default => '<code>' . Html::escape((string) ($var['display'] ?? '')) . '</code>',
+        };
+
+        return '<tr>'
+            . '<td><code>' . Html::escape((string) ($var['name'] ?? '')) . '</code></td>'
+            . '<td>' . $sourceHtml . '</td>'
+            . '<td>' . $valueHtml . '</td>'
+            . '</tr>';
+    }
+
+    /** A list of strings as `<code>` chips, or the none glyph. */
+    private function codes(mixed $items): string
+    {
+        $items = \is_array($items) ? array_values(array_filter($items, 'is_string')) : [];
+        if ($items === []) {
+            return Html::escape($this->catalog->tr('none'));
+        }
+
+        return implode(' ', array_map(static fn (string $item): string => '<code>' . Html::escape($item) . '</code>', $items));
+    }
+
     /**
      * @param list<string> $columnKeys
      * @param list<string> $rowsHtml
@@ -203,9 +339,24 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             . '</tbody></table></div>';
     }
 
-    private function notice(string $text): string
+    private function notice(string $text, string $tone = 'info'): string
     {
-        return '<p class="mui-alert mui-alert--info admin-notice">' . Html::escape($text) . '</p>';
+        return '<p class="mui-alert mui-alert--' . $tone . ' admin-notice">' . Html::escape($text) . '</p>';
+    }
+
+    /**
+     * «A, B and C» in the catalog's language.
+     *
+     * @param list<string> $items
+     */
+    private function join(array $items): string
+    {
+        if (\count($items) < 2) {
+            return implode('', $items);
+        }
+        $last = array_pop($items);
+
+        return implode(', ', $items) . ' ' . $this->catalog->tr('list.and') . ' ' . $last;
     }
 
     private function envelope(StateSnapshot $state): string

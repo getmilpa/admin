@@ -86,6 +86,12 @@ final readonly class AdminSettings
         return $this->route . '/assets/' . $file;
     }
 
+    /** The URL of the compose file the Stack section projects — every declared service, `text/yaml`. */
+    public function composeUrl(): string
+    {
+        return $this->route . '/stack/compose.yml';
+    }
+
     /** The signing secret, derived when the app declared none — stable per install, never empty. */
     public function signingSecret(): string
     {

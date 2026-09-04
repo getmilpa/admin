@@ -17,10 +17,13 @@ namespace Milpa\Admin\Tests;
 use Milpa\Admin\AdminPlugin;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
+use Milpa\Admin\Controllers\StackController;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 use Milpa\Admin\Tests\Fixtures\DuplicatePlugin;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
+use Milpa\Admin\Tests\Fixtures\HubPlugin;
+use Milpa\Admin\Tests\Fixtures\RivalHubPlugin;
 use Milpa\Container\DIContainer;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
@@ -41,15 +44,20 @@ final class AdminPluginTest extends TestCase
         $plugin->boot();
 
         $routes = $plugin->routes();
-        self::assertSame(['/milpa/admin', '/milpa/admin/s/{id}', '/milpa/admin/assets/{file}'], array_map(static fn (Route $r): string => $r->path, $routes));
+        self::assertSame(
+            ['/milpa/admin', '/milpa/admin/s/{id}', '/milpa/admin/assets/{file}', '/milpa/admin/stack/compose.yml'],
+            array_map(static fn (Route $r): string => $r->path, $routes),
+        );
         foreach ($routes as $route) {
             self::assertSame([LoopbackOnlyMiddleware::class], $route->middleware);
             self::assertTrue($route->isBound());
         }
+        self::assertSame('milpa_admin_stack_compose', $routes[3]->name);
         self::assertTrue($container->has(AdminController::class));
         self::assertTrue($container->has(AssetsController::class));
+        self::assertTrue($container->has(StackController::class));
         self::assertTrue($container->has(LoopbackOnlyMiddleware::class));
-        self::assertSame(['plugins', 'routes'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
+        self::assertSame(['plugins', 'routes', 'stack'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
         self::assertSame('/milpa/admin', $plugin->settings()->route);
 
         $plugin->install();
@@ -57,7 +65,67 @@ final class AdminPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
         self::assertSame('/milpa/admin', (new AdminPlugin(new DIContainer()))->settings()->route, 'defaults before boot');
-        self::assertCount(3, (new AdminPlugin(new DIContainer()))->routes(), 'routes exist before boot too');
+        self::assertCount(4, (new AdminPlugin(new DIContainer()))->routes(), 'routes exist before boot too');
+    }
+
+    public function testAPluginThatDeclaresAServiceShowsUpInTheStackSectionAndInTheComposeFile(): void
+    {
+        [$container] = self::boot([AdminPlugin::class, HubPlugin::class], ['hub' => ['public_url' => 'http://localhost:3000', 'key' => 'config-secret']]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
+        self::assertStringContainsString('href="/milpa/admin/s/stack"', $index, 'the Stack section is in the sidebar');
+
+        $stack = $controller->section(self::sectionRequest('stack'));
+        self::assertSame(200, $stack->getStatusCode());
+        $html = (string) $stack->getBody();
+        self::assertStringContainsString('<article class="mui-card admin-stack__service">', $html);
+        self::assertStringContainsString('<code>example/hub:1</code>', $html);
+        self::assertStringContainsString('<code>3000:80</code>', $html);
+        self::assertStringContainsString('Declared by HubPlugin', $html);
+        self::assertStringContainsString('<code>http://localhost:3000</code>', $html, 'the config value the plugin pointed at');
+        self::assertStringContainsString('●●●', $html, 'the secret is masked');
+        self::assertStringNotContainsString('config-secret', $html);
+        self::assertMatchesRegularExpression('~<span class="mui-badge[^"]*">(up|down)</span>~', $html, 'the real probe on 127.0.0.1:3000 said one or the other');
+        self::assertStringContainsString('probed on 127.0.0.1:3000', $html, 'the real probe reports the host it tried');
+        self::assertStringNotContainsString('kernel is not in the container', $html);
+
+        $compose = $container->get(StackController::class);
+        \assert($compose instanceof StackController);
+        $response = $compose->compose(new ServerRequest('GET', '/milpa/admin/stack/compose.yml'));
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame('text/yaml; charset=utf-8', $response->getHeaderLine('Content-Type'));
+        self::assertSame('attachment; filename="compose.yml"', $response->getHeaderLine('Content-Disposition'));
+        $yaml = (string) $response->getBody();
+        self::assertStringStartsWith("services:\n  hub:\n", $yaml);
+        self::assertStringContainsString("HUB_PUBLIC_URL: 'http://localhost:3000'", $yaml);
+        self::assertStringContainsString('HUB_JWT_KEY: ${HUB_JWT_KEY}', $yaml);
+        self::assertStringNotContainsString('config-secret', $yaml);
+    }
+
+    public function testTwoPluginsDeclaringTheSameServiceMakeTheComposeRouteA409AndTheSectionSaysWhy(): void
+    {
+        [$container] = self::boot([AdminPlugin::class, HubPlugin::class, RivalHubPlugin::class]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $html = (string) $controller->section(self::sectionRequest('stack'))->getBody();
+        self::assertSame(2, substr_count($html, '<span class="mui-badge mui-badge--danger">conflict</span>'), 'both rows are kept and both are the conflict');
+        self::assertStringContainsString('«hub» is also declared by RivalHubPlugin', $html);
+        self::assertStringContainsString('«hub» is also declared by HubPlugin', $html);
+        self::assertStringContainsString('<code>example/rival-hub:2</code>', $html, 'nothing was dropped');
+        self::assertStringNotContainsString('mui-badge--success', $html, 'a colliding service has no reachability state, only the conflict');
+
+        $compose = $container->get(StackController::class);
+        \assert($compose instanceof StackController);
+        $response = $compose->compose(new ServerRequest('GET', '/milpa/admin/stack/compose.yml'));
+        self::assertSame(409, $response->getStatusCode());
+        self::assertSame('text/plain; charset=utf-8', $response->getHeaderLine('Content-Type'));
+        self::assertFalse($response->hasHeader('Content-Disposition'));
+        $body = (string) $response->getBody();
+        self::assertStringContainsString('Service «hub» is declared by HubPlugin and RivalHubPlugin — rename one or disable a plugin; no compose.yml is served while ids collide.', $body);
+        self::assertStringNotContainsString('services:', $body);
     }
 
     public function testAForeignPluginGetsItsSectionsWithoutThePanelKnowingIt(): void
@@ -122,6 +190,9 @@ final class AdminPluginTest extends TestCase
         $html = (string) $response->getBody();
         self::assertStringContainsString('href="/milpa/admin/s/plugins"', $html);
         self::assertStringContainsString('kernel is not in the container', $controller->section(self::sectionRequest('routes'))->getBody()->__toString());
+        $stack = $controller->section(self::sectionRequest('stack'))->getBody()->__toString();
+        self::assertStringContainsString('kernel is not in the container', $stack);
+        self::assertStringContainsString('No plugin declared a service', $stack);
     }
 
     public function testDeclaredConfigMovesTheMountPointAndTheLanguage(): void

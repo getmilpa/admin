@@ -31,9 +31,10 @@ return [
 ];
 ```
 
-The panel opens with two sections of its own — **Plugins** (what the app boots, and the capabilities it can grow)
-and **Routes** (every route the booted plugins declared, with handler and per-route middleware) — and one more per
-plugin that declares one.
+The panel opens with three sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
+**Routes** (every route the booted plugins declared, with handler and per-route middleware) and **Stack** (every
+backing service the booted plugins declared they need — image, ports, environment with secrets masked, the
+declaring plugin — and whether its port answers on loopback) — and one more per plugin that declares one.
 
 ## The one idea: a section is a component a plugin declares
 
@@ -64,6 +65,38 @@ it inside the shell. A duplicate id is a loud 500 naming both plugins — never 
 Two lifecycle pairs let another plugin extend a section or the shell without touching either:
 `admin.section.before_render` / `after_render` (props, then HTML — both mutable) and
 `admin.shell.before_render` / `after_render` (the composition and sidebar items, then HTML).
+
+## Stack: a plugin declares the services it needs
+
+A plugin that needs a container — a message hub, a database, a cache — says so as data, through
+`Milpa\Runtime\Stack\StackProviderInterface` (`milpa/runtime`), instead of leaving it to a README:
+
+```php
+use Milpa\Runtime\Stack\{StackProviderInterface, ServiceDeclaration, PortMapping, EnvVar};
+
+final class HubPlugin implements PluginInterface, StackProviderInterface
+{
+    public function services(): array
+    {
+        return [new ServiceDeclaration(
+            name: 'mercure', image: 'dunglas/mercure',
+            ports: [new PortMapping(container: 80, host: 3000)],
+            env: [
+                new EnvVar('SERVER_NAME', value: ':80'),
+                new EnvVar('MERCURE_PUBLISHER_JWT_KEY', configKey: 'desktop.mercure.publisher_key', secret: true),
+            ],
+            summary: 'Pushes shell changes to the browser.',
+        )];
+    }
+}
+```
+
+The **Stack** section lists one card per declared service with its state — `up` when `127.0.0.1:<host port>`
+accepts a TCP connection, `down` when it refuses, `unknown` when no port is published — and
+`GET {route}/stack/compose.yml` serves a compose file of every declared service (`text/yaml`, also linked from the
+section). A secret is never shown and never inlined: the card masks it and the file projects `${NAME}` for the
+operator to supply; a `configKey` the app's config holds is inlined, one it lacks becomes `${NAME}` too. The panel
+starts nothing — declaring is the plugin's, running is the operator's (greenhouse `decisions/0201`).
 
 ## What the app declares
 

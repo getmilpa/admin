@@ -16,15 +16,20 @@ namespace Milpa\Admin;
 
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
+use Milpa\Admin\Components\StackComponent;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
+use Milpa\Admin\Controllers\StackController;
 use Milpa\Admin\Data\PluginsSource;
 use Milpa\Admin\Data\RoutesSource;
+use Milpa\Admin\Data\StackSource;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Rendering\AdminHtmlRenderer;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\AdminSectionProvider;
+use Milpa\Admin\Stack\ComposeProjection;
+use Milpa\Admin\Stack\TcpProbe;
 use Milpa\Admin\View\AdminPage;
 use Milpa\Admin\View\AdminShell;
 use Milpa\Attributes\PluginMetadata;
@@ -45,8 +50,8 @@ use Milpa\Runtime\Http\RouteProviderInterface;
  *
  * Add it to `config/plugins.php` and `/milpa/admin` exists: a shell of Milpa Components whose sidebar
  * lists every section the booted plugins declared through {@see AdminSectionProvider}. This plugin's own
- * sections — the plugins the app boots and the routes they declare — enter through that same contract,
- * so the panel has no privileged path and names no plugin.
+ * sections — the plugins the app boots, the routes they declare and the backing services they need —
+ * enter through that same contract, so the panel has no privileged path and names no plugin.
  *
  * What the app declares (`admin.*` in its config): `route` (default `/milpa/admin`), `locale` (`en`|`es`),
  * `middleware` (PSR-15 classes attached to every panel route; default {@see LoopbackOnlyMiddleware}),
@@ -86,7 +91,9 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
             new HmacStateSigner($settings->signingSecret()),
             null,
         );
-        $renderer = new AdminHtmlRenderer($codec, $catalog);
+        $renderer = new AdminHtmlRenderer($codec, $catalog, $settings);
+        $projection = new ComposeProjection();
+        $stack = new StackSource($this->container, new TcpProbe(), $projection, fallbackProvider: null);
 
         $this->sections = [
             new AdminSection(
@@ -107,6 +114,15 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 definition: new RoutesComponent(new RoutesSource($this->container, $this)),
                 renderer: $renderer,
             ),
+            new AdminSection(
+                id: 'stack',
+                title: 'nav.stack',
+                component: StackComponent::NAME,
+                order: 30,
+                group: 'admin',
+                definition: new StackComponent($stack),
+                renderer: $renderer,
+            ),
         ];
 
         $shell = new AdminShell($settings, $catalog, $codec, $events);
@@ -117,6 +133,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
             new AdminController($this->container, $this, $catalog, $shell, $page),
         );
         $this->container->registerService(AssetsController::class, new AssetsController());
+        $this->container->registerService(StackController::class, new StackController($stack, $projection, $catalog));
         if (!$this->container->has(LoopbackOnlyMiddleware::class)) {
             $this->container->registerService(LoopbackOnlyMiddleware::class, new LoopbackOnlyMiddleware($catalog));
         }
@@ -155,11 +172,18 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 middleware: $middleware,
                 handler: HandlerReference::method(AssetsController::class, 'serve'),
             ),
+            new Route(
+                path: $settings->composeUrl(),
+                methods: HttpMethod::GET,
+                name: 'milpa_admin_stack_compose',
+                middleware: $middleware,
+                handler: HandlerReference::method(StackController::class, 'compose'),
+            ),
         ];
     }
 
     /**
-     * The panel's own sections — Plugins and Routes — through the same contract every plugin uses.
+     * The panel's own sections — Plugins, Routes and Stack — through the same contract every plugin uses.
      *
      * @return list<AdminSection>
      */
