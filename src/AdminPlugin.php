@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin;
 
+use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
 use Milpa\Admin\Components\SettingsComponent;
@@ -21,6 +22,7 @@ use Milpa\Admin\Components\StackComponent;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
 use Milpa\Admin\Controllers\StackController;
+use Milpa\Admin\Data\DevToolsSource;
 use Milpa\Admin\Data\PluginsSource;
 use Milpa\Admin\Data\RoutesSource;
 use Milpa\Admin\Data\SettingsSource;
@@ -53,8 +55,8 @@ use Milpa\Runtime\Http\RouteProviderInterface;
  * Add it to `config/plugins.php` and `/milpa/admin` exists: a shell of Milpa Components whose sidebar
  * lists every section the booted plugins declared through {@see AdminSectionProvider}. This plugin's own
  * sections — the plugins the app boots, the routes they declare, what the app declared about the panel
- * itself, and the backing services the plugins need — enter through that same contract, so the panel
- * has no privileged path and names no plugin.
+ * itself, the backing services the plugins need, and the ledgers the agent writes (Dev tools, read-only)
+ * — enter through that same contract, so the panel has no privileged path and names no plugin.
  *
  * What the app declares (`admin.*` in its config): `route` (default `/milpa/admin`), `locale` (`en`|`es`),
  * `middleware` (PSR-15 classes attached to every panel route; default {@see LoopbackOnlyMiddleware}),
@@ -138,6 +140,15 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 definition: new StackComponent($stack),
                 renderer: $renderer,
             ),
+            new AdminSection(
+                id: DevToolsComponent::SECTION,
+                title: 'nav.devtools',
+                component: DevToolsComponent::NAME,
+                order: 40,
+                group: 'admin',
+                definition: new DevToolsComponent(new DevToolsSource($this->container)),
+                renderer: $renderer,
+            ),
         ];
 
         $shell = new AdminShell($settings, $catalog, $codec, $events);
@@ -200,7 +211,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
     }
 
     /**
-     * The panel's own sections — Plugins, Routes, Settings and Stack — through the same contract every plugin uses.
+     * The panel's own sections — Plugins, Routes, Settings, Stack and Dev tools — through the same contract every plugin uses.
      *
      * @return list<AdminSection>
      */

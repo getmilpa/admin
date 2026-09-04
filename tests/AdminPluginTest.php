@@ -25,6 +25,7 @@ use Milpa\Admin\Tests\Fixtures\EchoRenderer;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
 use Milpa\Admin\Tests\Fixtures\HubPlugin;
 use Milpa\Admin\Tests\Fixtures\RivalHubPlugin;
+use Milpa\Agent\SessionStore;
 use Milpa\Container\DIContainer;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
@@ -62,7 +63,10 @@ final class AdminPluginTest extends TestCase
         self::assertTrue($container->has(AssetsController::class));
         self::assertTrue($container->has(StackController::class));
         self::assertTrue($container->has(LoopbackOnlyMiddleware::class));
-        self::assertSame(['plugins', 'routes', 'settings', 'stack'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
+        self::assertSame(['plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
+        self::assertSame([10, 20, 25, 30, 40], array_map(static fn ($s): int => $s->order, $plugin->adminSections()));
+        self::assertSame('nav.devtools', $plugin->adminSections()[4]->title);
+        self::assertSame('admin', $plugin->adminSections()[4]->group);
         self::assertSame('/milpa/admin', $plugin->settings()->route);
 
         $plugin->install();
@@ -166,7 +170,7 @@ final class AdminPluginTest extends TestCase
         self::assertSame(404, $missing->getStatusCode());
         $body = (string) $missing->getBody();
         self::assertStringContainsString('No section is named «ghost». The sections present are: ', $body);
-        foreach (['hola', 'echo', 'plugins', 'routes', 'settings', 'stack'] as $present) {
+        foreach (['hola', 'echo', 'plugins', 'routes', 'settings', 'stack', 'devtools'] as $present) {
             self::assertMatchesRegularExpression('~The sections present are: [^.]*\b' . $present . '\b~', $body, 'the 404 lists ' . $present);
         }
         self::assertSame(404, $controller->section(new ServerRequest('GET', '/x'))->getStatusCode(), 'no route result → empty id → nothing is named that');
@@ -184,7 +188,7 @@ final class AdminPluginTest extends TestCase
             self::assertSame([LoopbackOnlyMiddleware::class], $route->middleware, $route->path . ' carries the strict gate, and only it');
         }
         self::assertSame('fallback', $admin->settings()->gateKind());
-        self::assertSame(['plugins', 'routes', 'settings', 'stack'], array_map(static fn ($s): string => $s->id, $admin->adminSections()));
+        self::assertSame(['plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $admin->adminSections()));
 
         $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
         self::assertStringContainsString('href="/milpa/admin/s/settings"', $index, 'the Settings section is in the sidebar');
@@ -372,6 +376,101 @@ final class AdminPluginTest extends TestCase
         $stack = $controller->section(self::sectionRequest('stack'))->getBody()->__toString();
         self::assertStringContainsString('kernel is not in the container', $stack);
         self::assertStringContainsString('No plugin declared a service', $stack);
+        $devtools = $controller->section(self::sectionRequest('devtools'))->getBody()->__toString();
+        self::assertStringContainsString('The kernel is not in the container: register it in public/index.php so the panel can find the app root the agent ledger lives under.', $devtools);
+        self::assertStringContainsString('No log file is declared.', $devtools, 'the log block still reads: nothing declared');
+        self::assertStringNotContainsString('Agent sessions', $devtools, 'no ledger to list');
+    }
+
+    public function testDevToolsReadsTheLedgerTheAgentWroteUnderTheAppRootAndOpensOneSessionFromTheQuery(): void
+    {
+        $root = sys_get_temp_dir() . '/milpa-admin-plugin-devtools-' . bin2hex(random_bytes(4));
+        mkdir($root . '/var', 0775, true);
+        $stream = SessionStore::PREFIX . 's-run';
+        $rows = [
+            ['stream_id' => $stream, 'type' => 'session.started', 'payload' => ['goal' => 'greet the house with a goal long enough to be cut short in the table of sessions', 'mode' => 'auto', 'parentId' => null], 'seq' => 1, 'recorded_at' => '2026-09-04T10:00:00.000000Z'],
+            ['stream_id' => $stream, 'type' => 'session.turn', 'payload' => ['role' => 'user', 'content' => 'hola'], 'seq' => 2, 'recorded_at' => '2026-09-04T10:00:01.000000Z'],
+            ['stream_id' => $stream, 'type' => 'session.model_returned', 'payload' => ['model' => 'qwen', 'usage' => ['prompt_tokens' => 18204, 'completion_tokens' => 3911, 'total_tokens' => 22115]], 'seq' => 3, 'recorded_at' => '2026-09-04T10:00:02.000000Z'],
+            ['stream_id' => $stream, 'type' => 'session.tool_called', 'payload' => ['tool' => 'hola:greet', 'arguments' => [], 'result' => 'Hola', 'ok' => true, 'mutating' => false], 'seq' => 4, 'recorded_at' => '2026-09-04T10:00:03.000000Z'],
+            ['stream_id' => $stream, 'type' => 'session.debt_signaled', 'payload' => ['signal' => 'admitted_intent_skip', 'context' => ['operation' => 'hola:greet']], 'seq' => 5, 'recorded_at' => '2026-09-04T10:00:04.000000Z'],
+            ['stream_id' => SessionStore::PREFIX . 's-wait', 'type' => 'session.started', 'payload' => ['goal' => 'second', 'mode' => 'ask', 'parentId' => null], 'seq' => 6, 'recorded_at' => '2026-09-04T10:01:00.000000Z'],
+            ['stream_id' => SessionStore::PREFIX . 's-wait', 'type' => 'session.question_asked', 'payload' => ['id' => 'q1', 'question' => 'Which target?', 'options' => [], 'why' => null, 'expiresAt' => null, 'reason' => 'target_not_named'], 'seq' => 7, 'recorded_at' => '2026-09-04T10:01:01.000000Z'],
+        ];
+        file_put_contents($root . '/var/agent-sessions.jsonl', implode("\n", array_map(static fn (array $row): string => json_encode($row, JSON_THROW_ON_ERROR), $rows)) . "\n");
+        file_put_contents($root . '/var/app.log', "10:00 info operation completed\n10:01 warn probe timeout\n");
+
+        try {
+            $container = new DIContainer();
+            $kernel = Kernel::boot(['root' => $root, 'plugins' => [AdminPlugin::class], 'config' => ['admin' => ['log' => 'var/app.log']], 'container' => $container]);
+            $container->registerService(Kernel::class, $kernel);
+            $controller = $container->get(AdminController::class);
+            \assert($controller instanceof AdminController);
+
+            $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
+            self::assertStringContainsString('href="/milpa/admin/s/devtools"', $index, 'the Dev tools section is in the sidebar');
+
+            $overview = $controller->section(self::sectionRequest('devtools'));
+            self::assertSame(200, $overview->getStatusCode());
+            $html = self::devtoolsSection((string) $overview->getBody());
+            self::assertStringContainsString('<title>Dev tools · Milpa Admin</title>', (string) $overview->getBody());
+            self::assertStringContainsString('<a href="/milpa/admin/s/devtools?session=s-run"><code>s-run</code></a>', $html, 'a row links into its timeline');
+            self::assertStringContainsString('<a href="/milpa/admin/s/devtools?session=s-wait"><code>s-wait</code></a>', $html);
+            self::assertStringContainsString('data-state="running">running</span>', $html);
+            self::assertStringContainsString('data-state="waiting">waiting</span>', $html);
+            self::assertStringContainsString('<code>18,204 / 3,911</code>', $html, 'the provider\'s own numbers');
+            self::assertStringContainsString('<code>not reported</code>', $html, 'a session whose calls never carried usage — absent, not zero');
+            self::assertStringContainsString('title="Which target?">target_not_named</span>', $html, 'what the waiting session waits on');
+            self::assertStringContainsString('<td>' . substr('greet the house with a goal long enough to be cut short in the table of sessions', 0, 71) . '…</td>', $html, 'the goal is cut short in the table');
+            self::assertStringContainsString('<td><code>admitted_intent_skip</code></td><td>1</td><td><a href="/milpa/admin/s/devtools?session=s-run"><code>s-run</code></a></td>', $html);
+            self::assertStringContainsString('<td><code>framework_gap</code></td><td>0</td><td>—</td>', $html, 'the four real kinds, even at zero');
+            self::assertStringContainsString('No evidence recorded yet', $html);
+            self::assertStringContainsString('last 2 lines of ' . $root . '/var/app.log', $html);
+            self::assertStringContainsString("<pre class=\"admin-log\"><code>10:00 info operation completed\n10:01 warn probe timeout</code></pre>", $html);
+            self::assertStringNotContainsString('<form', $html, 'nothing here acts');
+            self::assertStringNotContainsString('<button', $html);
+
+            $drill = $controller->section(self::sectionRequest('devtools', 'session=s-run'));
+            self::assertSame(200, $drill->getStatusCode());
+            $html = self::devtoolsSection((string) $drill->getBody());
+            self::assertStringContainsString('<h2 class="mui-h2">Session s-run <span class="mui-badge mui-badge--success" data-state="running">running</span></h2>', $html, 'the query opened the timeline inside the section');
+            self::assertStringContainsString('<a class="mui-btn mui-btn--ghost" href="/milpa/admin/s/devtools">Back to ledgers</a>', $html);
+            self::assertStringContainsString('<dt>Tokens in</dt><dd>18,204</dd><dt>Tokens out</dt><dd>3,911</dd><dt>Debt signals</dt><dd>1</dd><dt>Events</dt><dd>5</dd>', $html);
+            self::assertStringContainsString('<td><time datetime="2026-09-04T10:00:00Z">2026-09-04T10:00:00Z</time></td><td>session opened <span class="mui-badge">auto</span></td>', $html);
+            self::assertStringContainsString('<td>tool call</td><td>hola:greet</td>', $html);
+            self::assertStringContainsString('<td>debt signal</td><td>admitted_intent_skip — operation=hola:greet</td>', $html);
+            self::assertStringNotContainsString('<form', $html);
+            self::assertStringNotContainsString('<button', $html);
+
+            $parsed = $controller->section(self::sectionRequest('devtools')->withQueryParams(['session' => 's-wait']));
+            self::assertStringContainsString('Session s-wait <span class="mui-badge mui-badge--accent" data-state="waiting">waiting</span>', (string) $parsed->getBody(), 'the parsed params carry the query too');
+            self::assertStringContainsString('<td>decision pending</td><td>Which target?</td>', (string) $parsed->getBody());
+
+            $ghost = $controller->section(self::sectionRequest('devtools', 'session=ghost'));
+            self::assertSame(200, $ghost->getStatusCode(), 'an unknown session is a notice inside the section, not a 404 of the panel');
+            self::assertStringContainsString('No session is named «ghost».', (string) $ghost->getBody());
+
+            $spanish = (string) $controller->section(self::sectionRequest('devtools', 'lang=es&session=s-run'))->getBody();
+            self::assertStringContainsString('Sesión s-run', $spanish);
+            self::assertStringContainsString('Volver a los ledgers', $spanish);
+            self::assertStringContainsString('<td>sesión abierta <span class="mui-badge">auto</span></td>', $spanish);
+        } finally {
+            foreach (['/var/agent-sessions.jsonl', '/var/app.log'] as $file) {
+                @unlink($root . $file);
+            }
+            @rmdir($root . '/var');
+            @rmdir($root);
+        }
+    }
+
+    /** The Dev tools section's own HTML — what the doctrine control greps for `<form` and `<button`. */
+    private static function devtoolsSection(string $page): string
+    {
+        $start = strpos($page, '<section class="admin-section admin-section--admin-devtools"');
+        $end = strpos($page, '</section>', $start === false ? 0 : $start);
+        self::assertNotFalse($start, 'the section is on the page');
+        self::assertNotFalse($end);
+
+        return substr($page, $start, $end - $start);
     }
 
     public function testDeclaredConfigMovesTheMountPointAndTheLanguage(): void

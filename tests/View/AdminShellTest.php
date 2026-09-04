@@ -107,6 +107,28 @@ final class AdminShellTest extends TestCase
         );
     }
 
+    public function testTheRequestQueryReachesTheActiveSectionAsItsQueryProp(): void
+    {
+        $seen = [];
+        $events = new RecordingDispatcher();
+        $events->subscribe(AdminShell::SECTION_BEFORE_RENDER, static function (string $name, array $payload) use (&$seen): void {
+            $subject = $payload['section'];
+            \assert($subject instanceof SectionRender);
+            $seen[] = $subject->props;
+        });
+        $catalogue = SectionCatalogue::discover([new HolaPlugin(new DIContainer())]);
+        $active = $catalogue->find('hola');
+        self::assertNotNull($active);
+
+        self::shell($events)->render($catalogue, $active, ['session' => 's-1', 'lang' => 'es']);
+        self::shell($events)->render($catalogue, $active);
+
+        self::assertCount(2, $seen);
+        self::assertSame(['session' => 's-1', 'lang' => 'es'], $seen[0]['query'], 'the query travels whole: the section decides what it means');
+        self::assertSame('42', $seen[0]['value'] ?? null, 'the declared props are still there');
+        self::assertSame([], $seen[1]['query'], 'no query is an empty array, never a missing prop');
+    }
+
     public function testEmptyStateStillWearsTheShell(): void
     {
         $html = self::shell()->renderEmpty(SectionCatalogue::discover([]));

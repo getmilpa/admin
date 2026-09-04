@@ -15,10 +15,12 @@ declare(strict_types=1);
 namespace Milpa\Admin\Rendering;
 
 use Milpa\Admin\AdminSettings;
+use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
 use Milpa\Admin\Components\SettingsComponent;
 use Milpa\Admin\Components\StackComponent;
+use Milpa\Admin\Data\DevToolsSource;
 use Milpa\Admin\Data\StackSource;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Stack\ResolvedEnv;
@@ -32,13 +34,14 @@ use Milpa\Live\ValueObjects\RenderTarget;
 use Milpa\Live\ValueObjects\StateSnapshot;
 
 /**
- * Paints the panel's own components — `admin-plugins`, `admin-routes`, `admin-settings` and `admin-stack`
- * — as HTML on the `mui-*` design classes, and closes each with its signed state envelope like every
- * Milpa component.
+ * Paints the panel's own components — `admin-plugins`, `admin-routes`, `admin-settings`, `admin-stack` and
+ * `admin-devtools` — as HTML on the `mui-*` design classes, and closes each with its signed state envelope
+ * like every Milpa component.
  *
  * Every string a human reads comes from the {@see Catalog} — the one the request's {@see ComponentContext}
  * names by locale, else the one the renderer booted with; every value from the state is escaped; the
- * one link it emits (the compose file) is built from the declared {@see AdminSettings}.
+ * links it emits (the compose file, a session's timeline, the way back) are built from the declared
+ * {@see AdminSettings}.
  */
 final class AdminHtmlRenderer implements ComponentRendererInterface
 {
@@ -67,13 +70,15 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             RoutesComponent::NAME => $painter->routes($state),
             SettingsComponent::NAME => $painter->settings($state),
             StackComponent::NAME => $painter->stack($state),
+            DevToolsComponent::NAME => $painter->devtools($state),
             default => throw new \InvalidArgumentException(\sprintf(
-                '%s renders %s, %s, %s and %s, not «%s».',
+                '%s renders %s, %s, %s, %s and %s, not «%s».',
                 self::class,
                 PluginsComponent::NAME,
                 RoutesComponent::NAME,
                 SettingsComponent::NAME,
                 StackComponent::NAME,
+                DevToolsComponent::NAME,
                 $name,
             )),
         };
@@ -492,6 +497,395 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             . '<td>' . $sourceHtml . '</td>'
             . '<td>' . $valueHtml . '</td>'
             . '</tr>';
+    }
+
+    /**
+     * The Dev tools section (greenhouse decisions/0205): the overview — the agent's sessions with their state
+     * and real token cost, each id a link into its timeline; the debt signals by kind, the four real kinds
+     * listed even at zero; the evidence ledger; the declared log's tail — or, when the state carries a
+     * session, the drill-down: its header, the way back, and the timeline. Every block paints its own empty
+     * and error states, so one ledger failing leaves the others readable. Not one form, not one button:
+     * the section reads and never acts.
+     */
+    private function devtools(StateSnapshot $state): string
+    {
+        $data = $state->data;
+
+        return ($data['view'] ?? '') === DevToolsComponent::VIEW_SESSION
+            ? $this->devtoolsSession($data)
+            : $this->devtoolsOverview($data);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function devtoolsOverview(array $data): string
+    {
+        $out = ['<h2 class="mui-h2">' . Html::escape($this->catalog->tr('devtools.heading'))
+            . ' <span class="mui-badge">' . Html::escape($this->catalog->tr('devtools.readonly')) . '</span></h2>'];
+        $out[] = '<p class="admin-devtools__hint">' . Html::escape($this->catalog->tr('devtools.hint')) . '</p>';
+
+        $unavailable = $this->devtoolsUnavailable($data);
+        if ($unavailable !== null) {
+            $out[] = $unavailable;
+        } else {
+            $out[] = $this->devtoolsSessions(\is_array($data['sessions'] ?? null) ? $data['sessions'] : []);
+            $out[] = $this->devtoolsDebt(\is_array($data['debt'] ?? null) ? $data['debt'] : []);
+            $out[] = $this->devtoolsEvidence(\is_array($data['evidence'] ?? null) ? $data['evidence'] : []);
+        }
+        $out[] = $this->devtoolsLog(\is_array($data['log'] ?? null) ? $data['log'] : []);
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * The notice when the agent ledger cannot be read — naming the package when it is not installed, the
+     * kernel when the app registered none — or null when it can.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function devtoolsUnavailable(array $data): ?string
+    {
+        if (($data['available'] ?? false) === true) {
+            return null;
+        }
+
+        return $this->notice($this->catalog->tr(($data['why'] ?? '') === DevToolsSource::WHY_KERNEL ? 'devtools.no_kernel' : 'devtools.no_agent'));
+    }
+
+    /**
+     * @param array<string, mixed> $block
+     */
+    private function devtoolsSessions(array $block): string
+    {
+        $out = ['<h3 class="mui-h3">' . Html::escape($this->catalog->tr('devtools.sessions')) . '</h3>'];
+        $error = $block['error'] ?? null;
+        if (\is_string($error)) {
+            $out[] = $this->notice($this->catalog->tr('devtools.sessions.error', $error), 'danger');
+
+            return implode("\n", $out);
+        }
+        $rows = \is_array($block['rows'] ?? null) ? array_values(array_filter($block['rows'], 'is_array')) : [];
+        if ($rows === []) {
+            $out[] = $this->notice($this->catalog->tr('devtools.sessions.empty'));
+
+            return implode("\n", $out);
+        }
+
+        $cells = [];
+        foreach ($rows as $row) {
+            $cells[] = $this->sessionRow($row);
+        }
+        $out[] = $this->table(['col.session', 'col.state', 'col.goal', 'col.mode', 'col.tokens', 'col.pending'], $cells);
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * One session row: the id linking into its timeline, the state badge, the goal cut short, the mode,
+     * the provider's tokens in/out (or «not reported» — absent is not zero), and what it waits on.
+     *
+     * @param array<mixed> $row
+     */
+    private function sessionRow(array $row): string
+    {
+        $id = (string) ($row['id'] ?? '');
+        $pending = \is_array($row['pending'] ?? null) ? $row['pending'] : null;
+        $pendingHtml = Html::escape($this->catalog->tr('none'));
+        if ($pending !== null) {
+            $reason = (string) ($pending['reason'] ?? '');
+            $pendingHtml = '<span class="mui-badge mui-badge--accent" title="' . Html::escape((string) ($pending['question'] ?? '')) . '">'
+                . Html::escape($reason !== '' ? $reason : $this->catalog->tr('devtools.pending')) . '</span>';
+        }
+
+        return '<tr>'
+            . '<td><a href="' . Html::escape($this->sessionUrl($id)) . '"><code>' . Html::escape($id) . '</code></a></td>'
+            . '<td>' . $this->stateBadge((string) ($row['state'] ?? '')) . '</td>'
+            . '<td>' . Html::escape(self::cut((string) ($row['goal'] ?? ''), 72)) . '</td>'
+            . '<td><code>' . Html::escape((string) ($row['mode'] ?? '')) . '</code></td>'
+            . '<td><code>' . Html::escape($this->tokens($row)) . '</code></td>'
+            . '<td>' . $pendingHtml . '</td>'
+            . '</tr>';
+    }
+
+    /**
+     * @param array<string, mixed> $block
+     */
+    private function devtoolsDebt(array $block): string
+    {
+        $out = ['<h3 class="mui-h3">' . Html::escape($this->catalog->tr('devtools.debt')) . '</h3>'];
+        $out[] = '<p class="admin-devtools__hint">' . Html::escape($this->catalog->tr('devtools.debt.hint')) . '</p>';
+        $error = $block['error'] ?? null;
+        if (\is_string($error)) {
+            $out[] = $this->notice($this->catalog->tr('devtools.debt.error', $error), 'danger');
+
+            return implode("\n", $out);
+        }
+        if (($block['total'] ?? 0) === 0) {
+            $out[] = $this->notice($this->catalog->tr('devtools.debt.empty'));
+        }
+
+        $cells = [];
+        foreach (\is_array($block['kinds'] ?? null) ? $block['kinds'] : [] as $kind) {
+            if (!\is_array($kind)) {
+                continue;
+            }
+            $sessions = \is_array($kind['sessions'] ?? null) ? array_values(array_filter($kind['sessions'], 'is_string')) : [];
+            $links = [];
+            foreach ($sessions as $session) {
+                $links[] = '<a href="' . Html::escape($this->sessionUrl($session)) . '"><code>' . Html::escape($session) . '</code></a>';
+            }
+            $cells[] = '<tr>'
+                . '<td><code>' . Html::escape((string) ($kind['kind'] ?? '')) . '</code></td>'
+                . '<td>' . (int) ($kind['count'] ?? 0) . '</td>'
+                . '<td>' . ($links === [] ? Html::escape($this->catalog->tr('none')) : implode(' ', $links)) . '</td>'
+                . '</tr>';
+        }
+        $out[] = $this->table(['col.kind', 'col.count', 'col.sessions'], $cells);
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * @param array<string, mixed> $block
+     */
+    private function devtoolsEvidence(array $block): string
+    {
+        $out = ['<h3 class="mui-h3">' . Html::escape($this->catalog->tr('devtools.evidence')) . '</h3>'];
+        $out[] = '<p class="admin-devtools__hint">' . Html::escape($this->catalog->tr('devtools.evidence.hint')) . '</p>';
+        $error = $block['error'] ?? null;
+        if (\is_string($error)) {
+            $out[] = $this->notice($this->catalog->tr('devtools.evidence.error', $error), 'danger');
+
+            return implode("\n", $out);
+        }
+        $items = \is_array($block['items'] ?? null) ? array_values(array_filter($block['items'], 'is_array')) : [];
+        if ($items === []) {
+            $out[] = $this->notice($this->catalog->tr('devtools.evidence.empty'));
+
+            return implode("\n", $out);
+        }
+
+        $cells = [];
+        foreach ($items as $item) {
+            $todo = \is_string($item['todo'] ?? null) && $item['todo'] !== '' ? ' <small>' . Html::escape($this->catalog->tr('devtools.evidence.todo', $item['todo'])) . '</small>' : '';
+            $detail = \is_string($item['detail'] ?? null) && $item['detail'] !== '' ? ' <small>' . Html::escape($item['detail']) . '</small>' : '';
+            $session = (string) ($item['session'] ?? '');
+            $cells[] = '<tr>'
+                . '<td>' . $this->time($item['when'] ?? null) . '</td>'
+                . '<td><a href="' . Html::escape($this->sessionUrl($session)) . '"><code>' . Html::escape($session) . '</code></a></td>'
+                . '<td><code>' . Html::escape((string) ($item['kind'] ?? '')) . '</code></td>'
+                . '<td><code>' . Html::escape((string) ($item['reference'] ?? '')) . '</code>' . $todo . $detail . '</td>'
+                . '</tr>';
+        }
+        $out[] = $this->table(['col.time', 'col.session', 'col.kind', 'col.reference'], $cells);
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * The log block: what `admin.log` declared, or that it declared nothing; a missing or unreadable file
+     * as a notice that names the path; an empty file said so; else the tail in a `<pre>`.
+     *
+     * @param array<string, mixed> $log
+     */
+    private function devtoolsLog(array $log): string
+    {
+        $out = ['<h3 class="mui-h3">' . Html::escape($this->catalog->tr('devtools.log')) . '</h3>'];
+        if (($log['declared'] ?? false) !== true) {
+            $out[] = $this->notice($this->catalog->tr('devtools.log.undeclared'));
+
+            return implode("\n", $out);
+        }
+        $path = (string) ($log['path'] ?? '');
+        $error = $log['error'] ?? null;
+        if (\is_string($error)) {
+            $out[] = $this->notice($this->catalog->tr($error === 'missing' ? 'devtools.log.missing' : 'devtools.log.unreadable', $path), 'danger');
+
+            return implode("\n", $out);
+        }
+        $lines = \is_array($log['lines'] ?? null) ? array_values(array_filter($log['lines'], 'is_string')) : [];
+        if ($lines === []) {
+            $out[] = $this->notice($this->catalog->tr('devtools.log.empty', $path));
+
+            return implode("\n", $out);
+        }
+
+        $out[] = '<p class="admin-devtools__hint">' . Html::escape($this->catalog->tr('devtools.log.tail', (string) \count($lines), $path))
+            . (($log['truncated'] ?? false) === true ? ' · ' . Html::escape($this->catalog->tr('devtools.log.truncated')) : '') . '</p>';
+        $out[] = '<pre class="admin-log"><code>' . Html::escape(implode("\n", $lines)) . '</code></pre>';
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * The drill-down of one session: the header with its state, goal, mode, tokens, debt count and
+     * instants; the way back to the ledgers; the timeline — time, event, detail — as the projector paints
+     * it. A session nobody recorded is a notice, not a blank page.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function devtoolsSession(array $data): string
+    {
+        $session = \is_array($data['session'] ?? null) ? $data['session'] : null;
+        $id = (string) ($data['id'] ?? ($session['id'] ?? ''));
+
+        $out = ['<h2 class="mui-h2">' . Html::escape($this->catalog->tr('devtools.session', $id))
+            . ($session !== null ? ' ' . $this->stateBadge((string) ($session['state'] ?? '')) : '') . '</h2>'];
+        $out[] = '<p class="admin-devtools__actions"><a class="mui-btn mui-btn--ghost" href="' . Html::escape($this->settings->sectionUrl(DevToolsComponent::SECTION)) . '">'
+            . Html::escape($this->catalog->tr('devtools.back')) . '</a></p>';
+
+        $unavailable = $this->devtoolsUnavailable($data);
+        $error = $data['error'] ?? null;
+        if ($unavailable !== null) {
+            $out[] = $unavailable;
+
+            return implode("\n", $out);
+        }
+        if (\is_string($error)) {
+            $out[] = $this->notice($this->catalog->tr('devtools.sessions.error', $error), 'danger');
+
+            return implode("\n", $out);
+        }
+        if (($data['found'] ?? false) !== true || $session === null) {
+            $out[] = $this->notice($this->catalog->tr('devtools.session.unknown', $id));
+
+            return implode("\n", $out);
+        }
+
+        $out[] = $this->sessionFacts($session);
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('devtools.timeline')) . '</h3>';
+        $events = \is_array($data['events'] ?? null) ? array_values(array_filter($data['events'], 'is_array')) : [];
+        if ($events === []) {
+            $out[] = $this->notice($this->catalog->tr('devtools.timeline.empty'));
+
+            return implode("\n", $out);
+        }
+
+        $cells = [];
+        foreach ($events as $event) {
+            $cells[] = '<tr>'
+                . '<td>' . $this->time($event['when'] ?? null) . '</td>'
+                . '<td>' . $this->eventLabel((string) ($event['kind'] ?? '')) . $this->flags($event['flags'] ?? null) . '</td>'
+                . '<td>' . Html::escape((string) ($event['detail'] ?? '')) . '</td>'
+                . '</tr>';
+        }
+        $out[] = $this->table(['col.time', 'col.event', 'col.detail'], $cells);
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * The drill-down header as a fact list: goal, mode, tokens in and out, debt signals, events, the first
+     * and last instants, why it ended when it did, and the closure verdict when the house derived one.
+     *
+     * @param array<mixed> $session
+     */
+    private function sessionFacts(array $session): string
+    {
+        $fact = static fn (string $label, string $valueHtml): string => '<dt>' . Html::escape($label) . '</dt><dd>' . $valueHtml . '</dd>';
+        $tokens = fn (mixed $count): string => \is_int($count) ? number_format($count) : $this->catalog->tr('devtools.tokens.unreported');
+
+        $facts = $fact($this->catalog->tr('col.goal'), Html::escape((string) ($session['goal'] ?? '')))
+            . $fact($this->catalog->tr('col.mode'), '<code>' . Html::escape((string) ($session['mode'] ?? '')) . '</code>')
+            . $fact($this->catalog->tr('devtools.tokens.in'), Html::escape($tokens($session['tokensIn'] ?? null)))
+            . $fact($this->catalog->tr('devtools.tokens.out'), Html::escape($tokens($session['tokensOut'] ?? null)))
+            . $fact($this->catalog->tr('devtools.debt'), (string) (int) ($session['debt'] ?? 0))
+            . $fact($this->catalog->tr('devtools.events'), (string) (int) ($session['events'] ?? 0))
+            . $fact($this->catalog->tr('devtools.started'), $this->time($session['startedAt'] ?? null))
+            . $fact($this->catalog->tr('devtools.last'), $this->time($session['lastAt'] ?? null));
+        if (\is_string($session['endedBecause'] ?? null)) {
+            $facts .= $fact($this->catalog->tr('devtools.ended_because'), Html::escape($session['endedBecause']));
+        }
+        $closure = \is_array($session['closure'] ?? null) ? $session['closure'] : null;
+        if ($closure !== null) {
+            $verified = ($closure['verified'] ?? false) === true;
+            $facts .= $fact(
+                $this->catalog->tr('devtools.closure'),
+                '<span class="mui-badge ' . ($verified ? 'mui-badge--success' : 'mui-badge--danger') . '">' . Html::escape($this->catalog->tr($verified ? 'devtools.flag.verified' : 'devtools.flag.unverified')) . '</span>'
+                . ($verified ? '' : ' ' . Html::escape($this->catalog->tr('devtools.closure.reasons', (string) (int) ($closure['reasons'] ?? 0)))),
+            );
+        }
+
+        return '<dl class="admin-devtools__facts">' . $facts . '</dl>';
+    }
+
+    /** The state badge of a session: `running` green, `waiting` accent, `interrupted` amber, `done` plain. */
+    private function stateBadge(string $state): string
+    {
+        $class = match ($state) {
+            DevToolsSource::STATE_RUNNING => 'mui-badge mui-badge--success',
+            DevToolsSource::STATE_WAITING => 'mui-badge mui-badge--accent',
+            DevToolsSource::STATE_INTERRUPTED => 'mui-badge mui-badge--warning',
+            default => 'mui-badge',
+        };
+        $label = $this->catalog->has('devtools.state.' . $state) ? $this->catalog->tr('devtools.state.' . $state) : $state;
+
+        return '<span class="' . $class . '" data-state="' . Html::escape($state) . '">' . Html::escape($label) . '</span>';
+    }
+
+    /** A timeline event's label — the catalog's when it knows the kind, the kind itself otherwise. */
+    private function eventLabel(string $kind): string
+    {
+        $key = 'devtools.event.' . $kind;
+
+        return Html::escape($this->catalog->has($key) ? $this->catalog->tr($key) : $kind);
+    }
+
+    /** The flags of a timeline event as badges: `failed` and `unverified` red, `mutating` amber, `verified` green, anything else plain. */
+    private function flags(mixed $flags): string
+    {
+        $html = '';
+        foreach (\is_array($flags) ? array_filter($flags, 'is_string') : [] as $flag) {
+            $class = match ($flag) {
+                'failed', 'unverified' => ' mui-badge--danger',
+                'mutating' => ' mui-badge--warning',
+                'verified' => ' mui-badge--success',
+                default => '',
+            };
+            $key = 'devtools.flag.' . $flag;
+            $html .= ' <span class="mui-badge' . $class . '">' . Html::escape($this->catalog->has($key) ? $this->catalog->tr($key) : $flag) . '</span>';
+        }
+
+        return $html;
+    }
+
+    /**
+     * «in / out» from the provider's own numbers, or «not reported» when no call carried usage.
+     *
+     * @param array<mixed> $row
+     */
+    private function tokens(array $row): string
+    {
+        $in = $row['tokensIn'] ?? null;
+        $out = $row['tokensOut'] ?? null;
+        if (!\is_int($in) || !\is_int($out)) {
+            return $this->catalog->tr('devtools.tokens.unreported');
+        }
+
+        return number_format($in) . ' / ' . number_format($out);
+    }
+
+    /** An instant as `<time>`, or the none glyph for a record that predates the field. */
+    private function time(mixed $when): string
+    {
+        if (!\is_string($when) || $when === '') {
+            return Html::escape($this->catalog->tr('none'));
+        }
+
+        return '<time datetime="' . Html::escape($when) . '">' . Html::escape($when) . '</time>';
+    }
+
+    /** The URL of one session's timeline inside the Dev tools section. */
+    private function sessionUrl(string $id): string
+    {
+        return $this->settings->sectionUrl(DevToolsComponent::SECTION) . '?' . http_build_query([DevToolsComponent::SESSION_PARAM => $id]);
+    }
+
+    /** The text cut to `$max` code points with an ellipsis — whole characters, no mbstring. */
+    private static function cut(string $text, int $max): string
+    {
+        return preg_match('/^(.{' . ($max - 1) . '}).+/us', $text, $head) === 1 ? $head[1] . '…' : $text;
     }
 
     /** A list of strings as `<code>` chips, or the none glyph. */

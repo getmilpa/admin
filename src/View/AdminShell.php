@@ -34,6 +34,10 @@ use Milpa\Live\ValueObjects\ComponentContext;
  * (the section's props, then its HTML) and `admin.shell.before_render`/`after_render` (the composition
  * and items, then the HTML). The locale travels in the {@see ComponentContext}, so a section's renderer
  * answers in the same language the shell does.
+ *
+ * One small rule for every section: the request's query params reach the active section as
+ * `props['query']` — a section can read its own query (a drill-down, a filter) without the shell
+ * knowing what it means (greenhouse decisions/0205).
  */
 final class AdminShell
 {
@@ -60,8 +64,12 @@ final class AdminShell
         return $shell;
     }
 
-    /** Renders the shell with every discovered section in the sidebar and the active one in main. */
-    public function render(SectionCatalogue $catalogue, AdminSection $active): string
+    /**
+     * Renders the shell with every discovered section in the sidebar and the active one in main.
+     *
+     * @param array<string, mixed> $query the request's query params, handed to the active section as `props['query']`
+     */
+    public function render(SectionCatalogue $catalogue, AdminSection $active, array $query = []): string
     {
         $book = new ComponentBook($this->codec, $this->events);
         foreach ($catalogue->sections() as $section) {
@@ -74,7 +82,7 @@ final class AdminShell
             route: $this->settings->route,
         );
 
-        $sectionHtml = $this->renderSection($book, $active, $context);
+        $sectionHtml = $this->renderSection($book, $active, $context, $query);
 
         $shell = new ShellRender(
             markup: $this->composition($active),
@@ -123,9 +131,15 @@ final class AdminShell
         return $this->catalog->has($section->title) ? $this->catalog->tr($section->title) : $section->title;
     }
 
-    private function renderSection(ComponentBook $book, AdminSection $active, ComponentContext $context): string
+    /**
+     * The active section's HTML, its declared props plus the request's query under `query` — the one prop
+     * every section gets from the shell, open to `admin.section.before_render` like the rest.
+     *
+     * @param array<string, mixed> $query
+     */
+    private function renderSection(ComponentBook $book, AdminSection $active, ComponentContext $context, array $query): string
     {
-        $subject = new SectionRender($active, $active->props);
+        $subject = new SectionRender($active, [...$active->props, 'query' => $query]);
         $this->events?->dispatch(self::SECTION_BEFORE_RENDER, ['section' => $subject]);
 
         $markup = \sprintf(

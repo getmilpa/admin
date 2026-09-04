@@ -101,6 +101,11 @@ final class AdminPage
             . '.milpa-admin .admin-settings__secret{letter-spacing:.1em;margin-right:.5rem}'
             . '.milpa-admin .admin-settings__declared{opacity:.7}'
             . '.milpa-admin .admin-chip+.admin-chip{margin-left:.5rem}'
+            . '.milpa-admin .admin-devtools__hint,.milpa-admin .admin-devtools__actions{margin:0}'
+            . '.milpa-admin .admin-devtools__hint{opacity:.7}'
+            . '.milpa-admin .admin-devtools__facts{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;margin:0}'
+            . '.milpa-admin .admin-devtools__facts dd{margin:0}'
+            . '.milpa-admin .admin-log{margin:0;overflow:auto;white-space:pre;max-height:32rem}'
             . '.milpa-admin-error{padding:var(--space-6,2rem);display:grid;gap:1rem;max-width:60ch}';
     }
 

@@ -15,10 +15,12 @@ declare(strict_types=1);
 namespace Milpa\Admin\Tests\Rendering;
 
 use Milpa\Admin\AdminSettings;
+use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
 use Milpa\Admin\Components\SettingsComponent;
 use Milpa\Admin\Components\StackComponent;
+use Milpa\Admin\Data\DevToolsSource;
 use Milpa\Admin\Data\PluginsSource;
 use Milpa\Admin\Data\RoutesSource;
 use Milpa\Admin\Data\SettingsSource;
@@ -440,6 +442,260 @@ final class AdminHtmlRendererTest extends TestCase
         $liveSecret = self::renderer()->render(self::settings(['live' => ['secret' => 'live-hunter2']]), new RenderRequest(context: new ComponentContext(componentId: 'st9')))->output;
         self::assertStringContainsString('●●●</span>declared (live.secret)</td><td><span class="mui-badge mui-badge--accent">config</span>', $liveSecret);
         self::assertStringNotContainsString('hunter2', $liveSecret);
+    }
+
+    public function testDevToolsOverviewPaintsEveryLedgerWithLinksIntoTheTimelineAndNotOneControl(): void
+    {
+        $state = new StateSnapshot('d1', DevToolsComponent::NAME, '1', [
+            'view' => DevToolsComponent::VIEW_OVERVIEW,
+            'available' => true,
+            'why' => null,
+            'sessions' => ['error' => null, 'rows' => [
+                ['id' => 's_7f21', 'goal' => 'greet <the> house', 'mode' => 'auto', 'state' => 'running', 'tokensIn' => 18204, 'tokensOut' => 3911, 'pending' => ['reason' => 'target_not_named', 'question' => 'Which "target"?']],
+                ['id' => 's_7e0c', 'goal' => 'second', 'mode' => 'ask', 'state' => 'waiting', 'tokensIn' => null, 'tokensOut' => null, 'pending' => ['reason' => '', 'question' => 'ok?']],
+                ['id' => 's_7dfa', 'goal' => 'third', 'mode' => 'ask', 'state' => 'done', 'tokensIn' => 1022, 'tokensOut' => 0, 'pending' => null],
+                ['id' => 's_7d00', 'goal' => 'fourth', 'mode' => 'ask', 'state' => 'interrupted', 'tokensIn' => 0, 'tokensOut' => 0, 'pending' => null],
+                ['id' => 's_zzzz', 'goal' => 'fifth', 'mode' => 'ask', 'state' => 'odd', 'tokensIn' => 1, 'tokensOut' => 1, 'pending' => null],
+                'garbage',
+            ]],
+            'debt' => ['error' => null, 'total' => 3, 'kinds' => [
+                ['kind' => 'admitted_intent_skip', 'count' => 2, 'sessions' => ['s_7f21', 's_7e0c', 42]],
+                ['kind' => 'framework_gap', 'count' => 1, 'sessions' => ['s_7dfa']],
+                ['kind' => 'scope_fragility', 'count' => 0, 'sessions' => []],
+                'garbage',
+            ]],
+            'evidence' => ['error' => null, 'items' => [
+                ['seq' => 9, 'session' => 's_7f21', 'when' => '2026-09-04T14:02:11Z', 'kind' => 'operation_ok', 'reference' => 'capabilities:enable', 'todo' => 't1', 'detail' => 'exit 0'],
+                ['seq' => 8, 'session' => 's_7e0c', 'when' => null, 'kind' => 'artifact_created', 'reference' => 'sha256:4c1e', 'todo' => null, 'detail' => null],
+                'garbage',
+            ]],
+            'log' => ['declared' => true, 'path' => '/srv/app/var/app.log', 'error' => null, 'lines' => ['14:02:11 info  operation completed', '14:01:29 warn  probe timeout <postgres:5432>'], 'truncated' => true],
+        ]);
+
+        $html = self::renderer()->render(self::devtools(), self::request($state))->output;
+
+        self::assertStringContainsString('admin-section--admin-devtools', $html);
+        self::assertStringContainsString('<h2 class="mui-h2">Dev tools — the ledgers the house writes <span class="mui-badge">read-only</span></h2>', $html);
+        self::assertStringContainsString('Nothing here runs anything.', $html);
+        self::assertStringContainsString('<h3 class="mui-h3">Agent sessions</h3>', $html);
+        self::assertStringContainsString('<th scope="col">Session</th><th scope="col">State</th><th scope="col">Goal</th><th scope="col">Mode</th><th scope="col">tokens in / out</th><th scope="col">Pending</th>', $html);
+        self::assertStringContainsString('<td><a href="/milpa/admin/s/devtools?session=s_7f21"><code>s_7f21</code></a></td><td><span class="mui-badge mui-badge--success" data-state="running">running</span></td><td>greet &lt;the&gt; house</td><td><code>auto</code></td><td><code>18,204 / 3,911</code></td><td><span class="mui-badge mui-badge--accent" title="Which &quot;target&quot;?">target_not_named</span></td>', $html);
+        self::assertStringContainsString('<span class="mui-badge mui-badge--accent" data-state="waiting">waiting</span></td><td>second</td><td><code>ask</code></td><td><code>not reported</code></td><td><span class="mui-badge mui-badge--accent" title="ok?">decision</span></td>', $html, 'absent tokens are not zero; a pending without a reason code is a decision');
+        self::assertStringContainsString('<span class="mui-badge" data-state="done">done</span></td><td>third</td><td><code>ask</code></td><td><code>1,022 / 0</code></td><td>—</td>', $html);
+        self::assertStringContainsString('<span class="mui-badge mui-badge--warning" data-state="interrupted">interrupted</span>', $html);
+        self::assertStringContainsString('<span class="mui-badge" data-state="odd">odd</span>', $html, 'a state the catalog lacks is painted as it came');
+        self::assertSame(5, substr_count($html, 'data-state="'), 'garbage rows are skipped');
+
+        self::assertStringContainsString('<h3 class="mui-h3">Debt signals</h3>', $html);
+        self::assertStringContainsString('DebtSignal', $html);
+        self::assertStringNotContainsString('No debt signal recorded yet', $html);
+        self::assertStringContainsString('<th scope="col">Kind</th><th scope="col">Count</th><th scope="col">Sessions</th>', $html);
+        self::assertStringContainsString('<tr><td><code>admitted_intent_skip</code></td><td>2</td><td><a href="/milpa/admin/s/devtools?session=s_7f21"><code>s_7f21</code></a> <a href="/milpa/admin/s/devtools?session=s_7e0c"><code>s_7e0c</code></a></td></tr>', $html);
+        self::assertStringContainsString('<tr><td><code>scope_fragility</code></td><td>0</td><td>—</td></tr>', $html);
+
+        self::assertStringContainsString('<h3 class="mui-h3">Evidence</h3>', $html);
+        self::assertStringContainsString('<th scope="col">Time</th><th scope="col">Session</th><th scope="col">Kind</th><th scope="col">Reference</th>', $html);
+        self::assertStringContainsString('<tr><td><time datetime="2026-09-04T14:02:11Z">2026-09-04T14:02:11Z</time></td><td><a href="/milpa/admin/s/devtools?session=s_7f21"><code>s_7f21</code></a></td><td><code>operation_ok</code></td><td><code>capabilities:enable</code> <small>closes todo t1</small> <small>exit 0</small></td></tr>', $html);
+        self::assertStringContainsString('<tr><td>—</td><td><a href="/milpa/admin/s/devtools?session=s_7e0c"><code>s_7e0c</code></a></td><td><code>artifact_created</code></td><td><code>sha256:4c1e</code></td></tr>', $html, 'a record without its instant keeps the gap');
+
+        self::assertStringContainsString('<h3 class="mui-h3">Logs</h3>', $html);
+        self::assertStringContainsString('<p class="admin-devtools__hint">last 2 lines of /srv/app/var/app.log · older lines not shown</p>', $html);
+        self::assertStringContainsString("<pre class=\"admin-log\"><code>14:02:11 info  operation completed\n14:01:29 warn  probe timeout &lt;postgres:5432&gt;</code></pre>", $html);
+
+        self::assertStringNotContainsString('<form', $html, 'the doctrine control: nothing here acts');
+        self::assertStringNotContainsString('<button', $html);
+        self::assertStringNotContainsString('<input', $html);
+        self::assertStringContainsString('data-milpa-state="d1"', $html);
+    }
+
+    public function testDevToolsEmptyErrorAndNotAvailableStatesEachSayWhatTheyMean(): void
+    {
+        $component = self::devtools();
+        $log = ['declared' => false, 'path' => null, 'error' => null, 'lines' => [], 'truncated' => false];
+        $kinds = array_map(static fn (string $kind): array => ['kind' => $kind, 'count' => 0, 'sessions' => []], DevToolsSource::DEBT_KINDS);
+
+        $empty = new StateSnapshot('d2', DevToolsComponent::NAME, '1', [
+            'view' => 'overview', 'available' => true, 'why' => null,
+            'sessions' => ['error' => null, 'rows' => []],
+            'debt' => ['error' => null, 'total' => 0, 'kinds' => $kinds],
+            'evidence' => ['error' => null, 'items' => []],
+            'log' => $log,
+        ]);
+        $html = self::renderer()->render($component, self::request($empty))->output;
+        self::assertStringContainsString('Nothing recorded yet — sessions appear as the agent runs. An empty ledger is a fresh install, not a fault.', $html);
+        self::assertStringContainsString('No debt signal recorded yet', $html);
+        self::assertSame(4, substr_count($html, '<td>0</td>'), 'the four real kinds are listed at zero: the honest empty');
+        self::assertStringContainsString('<code>high_tier_double_ceremony</code>', $html);
+        self::assertStringContainsString('No evidence recorded yet', $html);
+        self::assertStringContainsString('No log file is declared. Declare admin.log in config/app.php', $html);
+        self::assertStringNotContainsString('<pre', $html);
+
+        $errors = new StateSnapshot('d3', DevToolsComponent::NAME, '1', [
+            'view' => 'overview', 'available' => true, 'why' => null,
+            'sessions' => ['error' => 'Syntax error', 'rows' => []],
+            'debt' => ['error' => 'Syntax error', 'total' => 0, 'kinds' => $kinds],
+            'evidence' => ['error' => 'Syntax error', 'items' => []],
+            'log' => ['declared' => true, 'path' => 'var/coa.log', 'error' => 'unreadable', 'lines' => [], 'truncated' => false],
+        ]);
+        $html = self::renderer()->render($component, self::request($errors))->output;
+        self::assertStringContainsString('<p class="mui-alert mui-alert--danger admin-notice">The session ledger could not be read: Syntax error</p>', $html);
+        self::assertStringContainsString('The debt signals could not be read: Syntax error', $html);
+        self::assertStringContainsString('The evidence ledger could not be read: Syntax error', $html);
+        self::assertStringContainsString('The log file could not be read: var/coa.log. Sessions, debt and evidence read from a different store and are unaffected.', $html);
+        self::assertSame(4, substr_count($html, 'mui-alert--danger'), 'one notice per block, no block blanked');
+
+        $missing = new StateSnapshot('d4', DevToolsComponent::NAME, '1', [
+            'view' => 'overview', 'available' => true, 'why' => null,
+            'sessions' => ['error' => null, 'rows' => []], 'debt' => ['error' => null, 'total' => 0, 'kinds' => $kinds], 'evidence' => ['error' => null, 'items' => []],
+            'log' => ['declared' => true, 'path' => '/srv/nope.log', 'error' => 'missing', 'lines' => [], 'truncated' => false],
+        ]);
+        $html = self::renderer()->render($component, self::request($missing))->output;
+        self::assertStringContainsString('The declared log file does not exist: /srv/nope.log.', $html);
+
+        $blank = new StateSnapshot('d5', DevToolsComponent::NAME, '1', [
+            'view' => 'overview', 'available' => true, 'why' => null,
+            'sessions' => ['error' => null, 'rows' => []], 'debt' => ['error' => null, 'total' => 0, 'kinds' => $kinds], 'evidence' => ['error' => null, 'items' => []],
+            'log' => ['declared' => true, 'path' => '/srv/empty.log', 'error' => null, 'lines' => [], 'truncated' => false],
+        ]);
+        $html = self::renderer()->render($component, self::request($blank))->output;
+        self::assertStringContainsString('<p class="mui-alert mui-alert--info admin-notice">Log file is empty: /srv/empty.log</p>', $html);
+
+        $noAgent = new StateSnapshot('d6', DevToolsComponent::NAME, '1', ['view' => 'overview', 'available' => false, 'why' => DevToolsSource::WHY_AGENT, 'log' => $log]);
+        $html = self::renderer()->render($component, self::request($noAgent))->output;
+        self::assertStringContainsString('Install milpa/agent to read the agent ledger', $html, 'the not-available state names the package');
+        self::assertStringNotContainsString('Agent sessions', $html);
+        self::assertStringContainsString('<h3 class="mui-h3">Logs</h3>', $html, 'the log block is independent of the agent');
+        self::assertStringNotContainsString('<form', $html);
+        self::assertStringNotContainsString('<button', $html);
+
+        $noKernel = new StateSnapshot('d7', DevToolsComponent::NAME, '1', ['view' => 'overview', 'available' => false, 'why' => DevToolsSource::WHY_KERNEL, 'log' => $log]);
+        $html = self::renderer()->render($component, self::request($noKernel))->output;
+        self::assertStringContainsString('The kernel is not in the container: register it in public/index.php so the panel can find the app root the agent ledger lives under.', $html);
+
+        $spanish = self::renderer('es')->render($component, self::request($empty))->output;
+        self::assertStringContainsString('Dev tools — los ledgers que la casa escribe <span class="mui-badge">sólo lectura</span>', $spanish);
+        self::assertStringContainsString('<h3 class="mui-h3">Sesiones del agente</h3>', $spanish);
+        self::assertStringContainsString('Nada registrado todavía', $spanish);
+        self::assertStringContainsString('Ninguna señal de deuda registrada todavía', $spanish);
+        self::assertStringContainsString('No hay archivo de log declarado.', $spanish);
+        self::assertStringContainsString('<th scope="col">Tipo</th><th scope="col">Cuenta</th><th scope="col">Sesiones</th>', $spanish);
+        $spanishNoAgent = self::renderer('es')->render($component, self::request($noAgent))->output;
+        self::assertStringContainsString('Instala milpa/agent para leer el ledger del agente', $spanishNoAgent);
+    }
+
+    public function testDevToolsDrillDownPaintsTheHeaderTheWayBackAndTheTimelineWithoutOneControl(): void
+    {
+        $component = self::devtools();
+        $state = new StateSnapshot('d8', DevToolsComponent::NAME, '1', [
+            'view' => DevToolsComponent::VIEW_SESSION, 'available' => true, 'why' => null, 'id' => 's_7f21', 'found' => true, 'error' => null,
+            'session' => ['id' => 's_7f21', 'goal' => 'greet & wave', 'mode' => 'auto', 'state' => 'done', 'endedBecause' => 'finished <cleanly>', 'tokensIn' => 18204, 'tokensOut' => 3911, 'pending' => null, 'events' => 7, 'debt' => 3, 'closure' => ['verified' => false, 'reasons' => 2], 'startedAt' => '2026-09-04T13:51:02Z', 'lastAt' => '2026-09-04T14:02:11Z'],
+            'events' => [
+                ['seq' => 1, 'when' => '2026-09-04T13:51:02Z', 'kind' => 'opened', 'detail' => 'greet & wave', 'flags' => ['auto']],
+                ['seq' => 2, 'when' => '2026-09-04T13:51:40Z', 'kind' => 'tool', 'detail' => 'fs.write var/log/coa.log', 'flags' => ['mutating']],
+                ['seq' => 3, 'when' => '2026-09-04T13:52:40Z', 'kind' => 'tool', 'detail' => 'fs.read', 'flags' => ['failed', 42]],
+                ['seq' => 4, 'when' => '2026-09-04T13:54:18Z', 'kind' => 'debt', 'detail' => 'admitted_intent_skip — operation=fs.write', 'flags' => []],
+                ['seq' => 5, 'when' => null, 'kind' => 'waiting', 'detail' => 'waiting on a human', 'flags' => []],
+                ['seq' => 6, 'when' => '2026-09-04T14:02:11Z', 'kind' => 'closure', 'detail' => 'todo t1 done without evidence; t2 open', 'flags' => ['unverified']],
+                ['seq' => 7, 'when' => '2026-09-04T14:02:12Z', 'kind' => 'mystery', 'detail' => '', 'flags' => ['verified']],
+                'garbage',
+            ],
+        ]);
+
+        $html = self::renderer()->render($component, self::request($state))->output;
+
+        self::assertStringContainsString('<h2 class="mui-h2">Session s_7f21 <span class="mui-badge" data-state="done">done</span></h2>', $html);
+        self::assertStringContainsString('<p class="admin-devtools__actions"><a class="mui-btn mui-btn--ghost" href="/milpa/admin/s/devtools">Back to ledgers</a></p>', $html, 'the way back is a link, not a button');
+        self::assertStringContainsString('<dl class="admin-devtools__facts"><dt>Goal</dt><dd>greet &amp; wave</dd><dt>Mode</dt><dd><code>auto</code></dd><dt>Tokens in</dt><dd>18,204</dd><dt>Tokens out</dt><dd>3,911</dd><dt>Debt signals</dt><dd>3</dd><dt>Events</dt><dd>7</dd><dt>Started</dt><dd><time datetime="2026-09-04T13:51:02Z">2026-09-04T13:51:02Z</time></dd><dt>Last event</dt><dd><time datetime="2026-09-04T14:02:11Z">2026-09-04T14:02:11Z</time></dd><dt>Ended because</dt><dd>finished &lt;cleanly&gt;</dd><dt>Closure</dt><dd><span class="mui-badge mui-badge--danger">unverified</span> 2 reason(s) in the timeline</dd></dl>', $html);
+        self::assertStringContainsString('<h3 class="mui-h3">Timeline</h3>', $html);
+        self::assertStringContainsString('<th scope="col">Time</th><th scope="col">Event</th><th scope="col">Detail</th>', $html);
+        self::assertStringContainsString('<tr><td><time datetime="2026-09-04T13:51:02Z">2026-09-04T13:51:02Z</time></td><td>session opened <span class="mui-badge">auto</span></td><td>greet &amp; wave</td></tr>', $html);
+        self::assertStringContainsString('<td>tool call <span class="mui-badge mui-badge--warning">mutating</span></td><td>fs.write var/log/coa.log</td>', $html);
+        self::assertStringContainsString('<td>tool call <span class="mui-badge mui-badge--danger">failed</span></td><td>fs.read</td>', $html, 'a flag that is not a string is skipped');
+        self::assertStringContainsString('<td>debt signal</td><td>admitted_intent_skip — operation=fs.write</td>', $html);
+        self::assertStringContainsString('<tr><td>—</td><td>decision pending</td><td>waiting on a human</td></tr>', $html);
+        self::assertStringContainsString('<td>closure verdict <span class="mui-badge mui-badge--danger">unverified</span></td><td>todo t1 done without evidence; t2 open</td>', $html);
+        self::assertStringContainsString('<td>mystery <span class="mui-badge mui-badge--success">verified</span></td><td></td>', $html, 'a kind the catalog lacks is painted as it came');
+        self::assertSame(7, substr_count($html, '<tr><td>'), 'garbage rows are skipped');
+        self::assertStringNotContainsString('<form', $html);
+        self::assertStringNotContainsString('<button', $html);
+
+        $spanish = self::renderer('es')->render($component, self::request($state))->output;
+        self::assertStringContainsString('<h2 class="mui-h2">Sesión s_7f21 <span class="mui-badge" data-state="done">terminada</span></h2>', $spanish);
+        self::assertStringContainsString('Volver a los ledgers', $spanish);
+        self::assertStringContainsString('<dt>Tokens de entrada</dt><dd>18,204</dd>', $spanish);
+        self::assertStringContainsString('<dt>Cierre</dt><dd><span class="mui-badge mui-badge--danger">sin verificar</span> 2 motivo(s) en la línea de tiempo</dd>', $spanish);
+        self::assertStringContainsString('<td>llamada a herramienta <span class="mui-badge mui-badge--warning">muta</span></td>', $spanish);
+
+        $verified = new StateSnapshot('d9', DevToolsComponent::NAME, '1', [
+            'view' => 'session', 'available' => true, 'why' => null, 'id' => 's_1', 'found' => true, 'error' => null,
+            'session' => ['id' => 's_1', 'goal' => 'g', 'mode' => 'ask', 'state' => 'running', 'endedBecause' => null, 'tokensIn' => null, 'tokensOut' => null, 'events' => 1, 'debt' => 0, 'closure' => ['verified' => true, 'reasons' => 0], 'startedAt' => null, 'lastAt' => null],
+            'events' => [],
+        ]);
+        $html = self::renderer()->render($component, self::request($verified))->output;
+        self::assertStringContainsString('<dt>Tokens in</dt><dd>not reported</dd><dt>Tokens out</dt><dd>not reported</dd>', $html);
+        self::assertStringContainsString('<dt>Started</dt><dd>—</dd><dt>Last event</dt><dd>—</dd><dt>Closure</dt><dd><span class="mui-badge mui-badge--success">verified</span></dd></dl>', $html);
+        self::assertStringNotContainsString('Ended because', $html);
+        self::assertStringContainsString('This session has no painted event yet.', $html);
+    }
+
+    public function testDevToolsDrillDownOfAnUnknownOrUnreadableOrUnavailableSessionIsANoticeWithTheWayBack(): void
+    {
+        $component = self::devtools();
+
+        $unknown = new StateSnapshot('d10', DevToolsComponent::NAME, '1', ['view' => 'session', 'available' => true, 'why' => null, 'id' => 'ghost <1>', 'found' => false, 'error' => null, 'session' => null, 'events' => []]);
+        $html = self::renderer()->render($component, self::request($unknown))->output;
+        self::assertStringContainsString('<h2 class="mui-h2">Session ghost &lt;1&gt;</h2>', $html);
+        self::assertStringContainsString('href="/milpa/admin/s/devtools">Back to ledgers</a>', $html);
+        self::assertStringContainsString('No session is named «ghost &lt;1&gt;». The ledger holds no stream under that id.', $html);
+        self::assertStringNotContainsString('Timeline', $html);
+
+        $broken = new StateSnapshot('d11', DevToolsComponent::NAME, '1', ['view' => 'session', 'available' => true, 'why' => null, 'id' => 's_1', 'found' => false, 'error' => 'Syntax error', 'session' => null, 'events' => []]);
+        $html = self::renderer()->render($component, self::request($broken))->output;
+        self::assertStringContainsString('<p class="mui-alert mui-alert--danger admin-notice">The session ledger could not be read: Syntax error</p>', $html);
+        self::assertStringNotContainsString('No session is named', $html);
+
+        $noAgent = new StateSnapshot('d12', DevToolsComponent::NAME, '1', ['view' => 'session', 'available' => false, 'why' => DevToolsSource::WHY_AGENT, 'id' => 's_1', 'found' => false, 'error' => null, 'session' => null, 'events' => []]);
+        $html = self::renderer()->render($component, self::request($noAgent))->output;
+        self::assertStringContainsString('Install milpa/agent', $html);
+        self::assertStringContainsString('Back to ledgers', $html);
+
+        $spanish = self::renderer('es')->render($component, self::request($unknown))->output;
+        self::assertStringContainsString('No hay ninguna sesión llamada «ghost &lt;1&gt;».', $spanish);
+    }
+
+    public function testDevToolsComponentMountsFromItsQueryPropAndRefusesEveryAction(): void
+    {
+        $component = self::devtools();
+
+        $overview = $component->mount(['title' => 'T'], new ComponentContext(componentId: 'd13'));
+        self::assertSame(DevToolsComponent::VIEW_OVERVIEW, $overview->data['view']);
+        self::assertFalse($overview->data['available'], 'no kernel, no injected ledger');
+        self::assertSame(DevToolsSource::WHY_KERNEL, $overview->data['why']);
+        self::assertSame('T', $overview->meta['title']);
+        self::assertArrayHasKey('log', $overview->data);
+
+        $session = $component->mount(['query' => ['session' => 's_1', 'lang' => 'es']], new ComponentContext(componentId: 'd14'));
+        self::assertSame(DevToolsComponent::VIEW_SESSION, $session->data['view']);
+        self::assertSame('s_1', $session->data['id']);
+        self::assertFalse($session->data['found']);
+
+        self::assertSame(DevToolsComponent::VIEW_OVERVIEW, $component->mount(['query' => ['session' => '']], new ComponentContext(componentId: 'd15'))->data['view'], 'an empty session is no session');
+        self::assertSame(DevToolsComponent::VIEW_OVERVIEW, $component->mount(['query' => 'session=s_1'], new ComponentContext(componentId: 'd16'))->data['view'], 'a query that is not an array is no query');
+        self::assertSame(DevToolsComponent::VIEW_OVERVIEW, $component->mount(['query' => ['session' => ['s_1']]], new ComponentContext(componentId: 'd17'))->data['view'], 'a session that is not a string is no session');
+
+        self::assertSame('admin-devtools', DevToolsComponent::contract()->name);
+        self::assertArrayHasKey('query', DevToolsComponent::contract()->propsSchema);
+        self::assertSame([], DevToolsComponent::contract()->actions, 'no action is declared');
+        self::assertArrayHasKey('action', $component->handle(new InteractionRequest('d13', DevToolsComponent::NAME, 'run', $overview))->errors, 'and every one is refused');
+
+        $rendered = self::renderer()->render($component, new RenderRequest(context: new ComponentContext(componentId: 'd18')));
+        self::assertNotNull($rendered->state);
+        self::assertStringContainsString('The kernel is not in the container', $rendered->output, 'mounts when no state is given');
+    }
+
+    private static function devtools(): DevToolsComponent
+    {
+        return new DevToolsComponent(new DevToolsSource(new DIContainer()));
     }
 
     /**

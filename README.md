@@ -31,11 +31,12 @@ return [
 ];
 ```
 
-The panel opens with four sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
+The panel opens with five sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
 **Routes** (every route the booted plugins declared, with handler and per-route middleware), **Settings** (what the
-app declared about the panel itself, key by key, with its source) and **Stack** (every backing service the booted
+app declared about the panel itself, key by key, with its source), **Stack** (every backing service the booted
 plugins declared they need — image, ports, environment with secrets masked, the declaring plugin — and whether its
-port answers on loopback) — and one more per plugin that declares one.
+port answers on loopback) and **Dev tools** (the ledgers the agent writes, read-only) — and one more per plugin
+that declares one.
 
 ## The one idea: a section is a component a plugin declares
 
@@ -133,6 +134,27 @@ route carry `[LoopbackOnlyMiddleware::class]`, the strict gate, never an open on
 the panel names what it received (a danger badge on the row, a notice in Settings, `gate: fallback` in the topbar).
 The topbar always shows the gate in effect (`loopback · custom · open · fallback`) and the locale. Any panel page
 accepts `?lang=en|es` to render in another catalog language for that request (greenhouse `decisions/0204`).
+
+## Dev tools: the ledgers the house already writes, read — nothing runs
+
+The **Dev tools** section reads what the agent already wrote and adds nothing of its own: the **sessions** in
+`var/agent-sessions.jsonl` — the ledger the `agent` operation writes, replayed through `milpa/agent`'s
+`SessionStore` — each with its state derived from the stream (`running · waiting · done · interrupted`), its
+goal and mode, the provider's own token count in/out (`not reported` when no call carried usage — absent is not
+zero) and what it waits on; the **debt signals** (`session.debt_signaled`) grouped by their four real kinds, the
+kinds listed even at zero; the **evidence** (`session.evidence_recorded`); and a **log** — the file the app
+declares under `admin.log` (absolute, or relative to the app root), tailed to its last 200 lines. With no
+declaration the section says so and invents no path; a missing or unreadable file is a notice that names it,
+and never blanks the other blocks. A session's id opens its **timeline** inside the section
+(`{route}/s/devtools?session=<id>`): what `SessionProjector` paints — turns, tool calls, todos, questions and
+answers, the goal changing, the end — plus the audit facts it leaves to audit surfaces: the opening, each debt
+signal with its context, trial runs, the closure verdict.
+
+The coupling to `milpa/agent` is soft: without the package the section degrades to a notice naming it, and the
+log block still reads. There is no form, no button and no command box anywhere in it — every mutation of the
+house is a governed operation, and this section only reads (greenhouse `decisions/0205`). One rule it
+introduced for every section: the request's query params reach the active section as `props['query']`, so
+a section can read its own query without the shell interpreting it.
 
 ## Measured, not assumed
 
