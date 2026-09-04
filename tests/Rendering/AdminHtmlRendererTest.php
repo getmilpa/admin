@@ -294,12 +294,49 @@ final class AdminHtmlRendererTest extends TestCase
 
         self::assertStringContainsString('<p class="mui-alert mui-alert--info admin-notice">Running entirely on defaults: config/app.php has no admin key. Add one to change the route, the locale or the gate:</p>', $html);
         self::assertStringContainsString('<pre class="admin-snippet"><code>', $html);
-        self::assertStringContainsString('\Milpa\Admin\Http\LoopbackOnlyMiddleware::class]],</code></pre>', $html);
+        self::assertStringContainsString("\\Milpa\\Admin\\Http\\LoopbackOnlyMiddleware::class]],\n// or, with milpa/app-runtime&#039;s PasskeyPlugin: &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class],</code></pre>", $html, 'the passkey gate is the second line of the snippet, offered as the alternative');
+        self::assertStringNotContainsString('Behind a passkey', $html, 'the notice is for a panel that IS behind one');
         self::assertSame(5, substr_count($html, '<span class="mui-badge">default</span>'), 'the five values, every one a default');
         self::assertStringNotContainsString('mui-badge--accent', $html);
         self::assertStringContainsString('●●●</span>derived</td>', $html);
         self::assertStringContainsString('<option value="server">server (en)</option>', $html);
         self::assertStringNotContainsString('mui-alert--danger', $html);
+    }
+
+    public function testSettingsNamesThePasskeyGateOnTheMiddlewareRowAndInANoticeInBothLanguages(): void
+    {
+        $html = self::renderer()->render(
+            self::settings(['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]),
+            new RenderRequest(context: new ComponentContext(componentId: 'st20')),
+        )->output;
+
+        self::assertStringContainsString('<tr><td><code>middleware</code></td><td><code>PasskeyGateMiddleware</code> <span class="mui-badge mui-badge--success">passkey</span></td><td><span class="mui-badge mui-badge--accent">config</span></td></tr>', $html, 'the row names it');
+        self::assertStringContainsString('<p class="mui-alert mui-alert--info admin-notice">Behind a passkey: milpa/app-runtime&#039;s PasskeyPlugin mints the session at /webauthn/signin and its gate checks the scope. The panel names the gate and shows who it let in — it reads no cookie itself.</p>', $html);
+        self::assertStringNotContainsString('mui-badge--danger', $html, 'a gate the panel knows by name is nothing to fix');
+        self::assertStringNotContainsString('admin-snippet', $html, 'the app declared: no snippet');
+        self::assertSame('passkey', self::envelopeOf($html)->data['gate'], 'the state carries the name too');
+
+        $spanish = self::renderer('es')->render(
+            self::settings(['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]),
+            new RenderRequest(context: new ComponentContext(componentId: 'st21')),
+        )->output;
+        self::assertStringContainsString('<code>PasskeyGateMiddleware</code> <span class="mui-badge mui-badge--success">passkey</span>', $spanish);
+        self::assertStringContainsString('Detrás de una passkey: el PasskeyPlugin de milpa/app-runtime acuña la sesión en /webauthn/signin', $spanish);
+
+        $snippet = self::renderer('es')->render(self::settings([]), new RenderRequest(context: new ComponentContext(componentId: 'st22')))->output;
+        self::assertStringContainsString("\n// o, con el PasskeyPlugin de milpa/app-runtime: &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class],</code></pre>", $snippet, 'the snippet\'s comment speaks the catalog\'s language');
+
+        $custom = self::renderer()->render(
+            self::settings(['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE, LoopbackOnlyMiddleware::class]]]),
+            new RenderRequest(context: new ComponentContext(componentId: 'st23')),
+        )->output;
+        self::assertStringContainsString('<td><code>PasskeyGateMiddleware, LoopbackOnlyMiddleware</code></td>', $custom, 'the control: the passkey gate inside a bigger stack is a custom stack, not «passkey»');
+        self::assertStringNotContainsString('mui-badge--success', $custom);
+        self::assertStringNotContainsString('Behind a passkey', $custom);
+
+        $stale = new StateSnapshot(componentId: 'st24', componentName: SettingsComponent::NAME, version: '1', data: ['declared' => false, 'gate' => 'loopback', 'locale' => 'en', 'rows' => [], 'unresolved' => [], 'malformed' => false, 'snippet' => 'x']);
+        $carried = self::renderer()->render(self::settings([]), self::request($stale))->output;
+        self::assertStringContainsString('<pre class="admin-snippet"><code>x</code></pre>', $carried, 'an envelope from before the alternative line paints no half a line');
     }
 
     public function testSettingsUnresolvedMiddlewareWearsTheDangerBadgeAndSaysThePanelFellBack(): void

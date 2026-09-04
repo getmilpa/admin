@@ -28,8 +28,9 @@ use Milpa\Live\ValueObjects\ComponentContext;
  * The panel's shell, composed — not hand-written — from Milpa Components.
  *
  * `<milpa:dashboard-shell>` holds a sidebar (one item per discovered section), a topbar (the active
- * section's title, and two chips: the gate in effect and the locale) and a main region carrying the
- * active section's component, all compiled by `XhtmlComponentCompiler` over the {@see ComponentBook}.
+ * section's title, and the chips: who signed in when a gate authenticated the request, the gate in
+ * effect, the locale) and a main region carrying the active section's component, all compiled by
+ * `XhtmlComponentCompiler` over the {@see ComponentBook}.
  * Two lifecycle pairs make it extensible without touching it: `admin.section.before_render`/`after_render`
  * (the section's props, then its HTML) and `admin.shell.before_render`/`after_render` (the composition
  * and items, then the HTML). The locale travels in the {@see ComponentContext}, so a section's renderer
@@ -67,9 +68,10 @@ final class AdminShell
     /**
      * Renders the shell with every discovered section in the sidebar and the active one in main.
      *
-     * @param array<string, mixed> $query the request's query params, handed to the active section as `props['query']`
+     * @param array<string, mixed> $query     the request's query params, handed to the active section as `props['query']`
+     * @param string|null          $principal who the gate let in — the authenticated actor's id, never a session id — or null when nobody is signed in
      */
-    public function render(SectionCatalogue $catalogue, AdminSection $active, array $query = []): string
+    public function render(SectionCatalogue $catalogue, AdminSection $active, array $query = [], ?string $principal = null): string
     {
         $book = new ComponentBook($this->codec, $this->events);
         foreach ($catalogue->sections() as $section) {
@@ -92,7 +94,7 @@ final class AdminShell
 
         $defaults = [
             'dashboard-sidebar' => ['items' => $shell->items],
-            'dashboard-topbar' => ['childrenHtml' => $this->chips()],
+            'dashboard-topbar' => ['childrenHtml' => $this->chips($principal)],
             'dashboard-main' => ['childrenHtml' => $sectionHtml],
         ];
         $shell->html = $book->compiler($defaults)->compile($shell->markup, $context)->output;
@@ -101,8 +103,12 @@ final class AdminShell
         return $shell->html;
     }
 
-    /** The empty-state body when no plugin declared a section — still inside the shell. */
-    public function renderEmpty(SectionCatalogue $catalogue): string
+    /**
+     * The empty-state body when no plugin declared a section — still inside the shell, chips included.
+     *
+     * @param string|null $principal who the gate let in, or null when nobody is signed in
+     */
+    public function renderEmpty(SectionCatalogue $catalogue, ?string $principal = null): string
     {
         $book = new ComponentBook($this->codec, $this->events);
         $context = new ComponentContext(componentId: self::COMPONENT_ID, locale: $this->catalog->locale(), route: $this->settings->route);
@@ -118,7 +124,7 @@ final class AdminShell
         $notice = '<p class="mui-alert mui-alert--info admin-notice">' . htmlspecialchars($this->catalog->tr('section.none'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
         $defaults = [
             'dashboard-sidebar' => ['items' => []],
-            'dashboard-topbar' => ['childrenHtml' => $this->chips()],
+            'dashboard-topbar' => ['childrenHtml' => $this->chips($principal)],
             'dashboard-main' => ['childrenHtml' => $notice],
         ];
 
@@ -173,17 +179,25 @@ final class AdminShell
     }
 
     /**
-     * The topbar's end slot: the gate in effect (`gate: loopback | custom | open | fallback` — a fallback
-     * wears the warning badge, because a misdeclared gate is something to fix) and the locale answering.
+     * The topbar's end slot: who signed in (`signed in as <actor id>` — only when a gate authenticated
+     * the request; the panel invents no identity), the gate in effect (`gate: loopback | custom | passkey
+     * | open | fallback` — a fallback wears the warning badge, because a misdeclared gate is something to
+     * fix) and the locale answering.
      */
-    private function chips(): string
+    private function chips(?string $principal): string
     {
-        $kind = $this->settings->gateKind();
-        $gateClass = 'mui-badge admin-chip admin-chip--gate' . ($kind === AdminSettings::GATE_FALLBACK ? ' mui-badge--warning' : '');
+        $label = $this->settings->gateLabel();
+        $gateClass = 'mui-badge admin-chip admin-chip--gate' . ($this->settings->gateKind() === AdminSettings::GATE_FALLBACK ? ' mui-badge--warning' : '');
         $locale = $this->catalog->locale();
+        $signedIn = $principal === null
+            ? ''
+            : '<span class="mui-badge admin-chip admin-chip--principal" data-principal="' . self::attr($principal) . '">'
+                . self::attr($this->catalog->tr('topbar.signed_in', $principal))
+                . '</span>';
 
-        return '<span class="' . $gateClass . '" data-gate="' . self::attr($kind) . '">'
-            . self::attr($this->catalog->tr('chip.gate', $this->catalog->tr('gate.kind.' . $kind)))
+        return $signedIn
+            . '<span class="' . $gateClass . '" data-gate="' . self::attr($label) . '">'
+            . self::attr($this->catalog->tr('chip.gate', $this->catalog->tr('gate.kind.' . $label)))
             . '</span>'
             . '<span class="mui-badge admin-chip admin-chip--locale" data-locale="' . self::attr($locale) . '">'
             . self::attr($locale)

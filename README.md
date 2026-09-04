@@ -136,8 +136,26 @@ falls back to loopback-only and Settings says so.** A non-string entry, an assoc
 list, an empty string, a class that does not exist, a class that is not a PSR-15 middleware — each makes every panel
 route carry `[LoopbackOnlyMiddleware::class]`, the strict gate, never an open one and never the half that loads, and
 the panel names what it received (a danger badge on the row, a notice in Settings, `gate: fallback` in the topbar).
-The topbar always shows the gate in effect (`loopback · custom · open · fallback`) and the locale. Any panel page
-accepts `?lang=en|es` to render in another catalog language for that request (greenhouse `decisions/0204`).
+The topbar always shows the gate in effect (`loopback · custom · passkey · open · fallback`) and the locale. Any
+panel page accepts `?lang=en|es` to render in another catalog language for that request (greenhouse `decisions/0204`).
+
+## Behind a passkey
+
+The panel does not authenticate anyone — it **names its gate**. `milpa/app-runtime`'s `PasskeyPlugin` owns the
+ceremony (register a key at `/webauthn/enroll`, enroll the id with `identity:enroll --scopes=milpa.admin`, sign in
+at `/webauthn/signin`) and registers the one middleware the panel needs:
+
+```php
+'admin' => ['middleware' => [\Milpa\AppRuntime\Web\PasskeyGateMiddleware::class]],
+```
+
+That gate reads the session cookie against its own store, redirects a browser without a valid session to the sign-in
+page (a JSON client gets 401), answers 403 to a session that lacks the scope, and leaves the authenticated
+`AuthContext` on the request under the attribute `milpa.auth`. The panel reads only that attribute — no cookie, no
+session id — and the topbar says `signed in as <actor id>`; when that class is the whole stack, Settings and the
+gate chip name it `passkey` instead of `custom`, and the empty state's snippet offers the line above as the
+alternative to loopback-only. `milpa/admin` takes no dependency on `milpa/auth` or `milpa/app-runtime` for any of it
+(greenhouse `decisions/0206`).
 
 ## Dev tools: the ledgers the house already writes, read — nothing runs
 

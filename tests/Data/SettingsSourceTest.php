@@ -93,6 +93,24 @@ final class SettingsSourceTest extends TestCase
         self::assertSame('custom', $custom['gate']);
         self::assertSame('AllowAllMiddleware', $custom['rows'][2]['value']);
         self::assertSame([], $custom['unresolved']);
+
+        $passkey = (new SettingsSource(AdminSettings::fromConfig(new Config(['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]))))->snapshot();
+        self::assertSame('passkey', $passkey['gate'], 'the gate is what the panel names it: app-runtime\'s gate, alone, is «passkey»');
+        self::assertSame('PasskeyGateMiddleware', $passkey['rows'][2]['value']);
+        self::assertSame('config', $passkey['rows'][2]['source']);
+        self::assertSame([], $passkey['unresolved']);
+    }
+
+    public function testTheSnippetOffersThePasskeyGateAsTheAlternativeLine(): void
+    {
+        $snapshot = (new SettingsSource(AdminSettings::fromConfig(null)))->snapshot();
+
+        self::assertSame(
+            "'middleware' => [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class],",
+            $snapshot['passkeySnippet'],
+            'fully qualified, so it works pasted as-is — the words around it are the renderer\'s, in the catalog\'s language',
+        );
+        self::assertSame(SettingsSource::passkeySnippet(), $snapshot['passkeySnippet']);
     }
 
     public function testARejectedKeyShowsTheEffectiveValueWhatWasDeclaredAndTheRejectedSource(): void

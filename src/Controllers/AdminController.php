@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin\Controllers;
 
 use Milpa\Admin\Components\UnknownComponentException;
+use Milpa\Admin\Http\RequestPrincipal;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\SectionCatalogue;
@@ -39,6 +40,9 @@ use Psr\Http\Message\ServerRequestInterface;
  * {@see Catalog} carries — the browser-side override the Settings section offers. The rest of the query
  * travels to the active section as `props['query']`, so a section can read its own (`?session=<id>` opens
  * a timeline inside Dev tools); the shell never interprets it.
+ *
+ * Who is signed in is whatever the gate in front of the route left on the request ({@see RequestPrincipal}):
+ * the panel reads no cookie and mints no identity — it shows the actor the gate authenticated, or nobody.
  */
 final class AdminController
 {
@@ -59,7 +63,7 @@ final class AdminController
     /** `GET {route}` — the first section in sidebar order. */
     public function index(ServerRequestInterface $request): ResponseInterface
     {
-        return $this->show(null, $this->catalogFor($request), self::queryParams($request));
+        return $this->show(null, $this->catalogFor($request), self::queryParams($request), RequestPrincipal::of($request));
     }
 
     /** `GET {route}/s/{id}` — one section, 404 when no plugin declared it. */
@@ -68,7 +72,7 @@ final class AdminController
         $result = $request->getAttribute(RouteResult::ATTRIBUTE);
         $id = $result instanceof RouteResult ? (string) ($result->parameters['id'] ?? '') : '';
 
-        return $this->show($id, $this->catalogFor($request), self::queryParams($request));
+        return $this->show($id, $this->catalogFor($request), self::queryParams($request), RequestPrincipal::of($request));
     }
 
     /**
@@ -86,9 +90,10 @@ final class AdminController
     }
 
     /**
-     * @param array<string, mixed> $query the request's query params, handed to the active section
+     * @param array<string, mixed> $query     the request's query params, handed to the active section
+     * @param string|null          $principal the actor the gate authenticated, or null when nobody is signed in
      */
-    private function show(?string $id, Catalog $catalog, array $query): ResponseInterface
+    private function show(?string $id, Catalog $catalog, array $query, ?string $principal): ResponseInterface
     {
         $shell = $this->shell->withCatalog($catalog);
         $page = $this->page->withCatalog($catalog);
@@ -100,7 +105,7 @@ final class AdminController
         }
 
         if ($catalogue->isEmpty()) {
-            return $this->html(200, $page->render($shell->renderEmpty($catalogue)));
+            return $this->html(200, $page->render($shell->renderEmpty($catalogue, $principal)));
         }
 
         $active = $id === null ? $catalogue->first() : $catalogue->find($id);
@@ -114,7 +119,7 @@ final class AdminController
         }
 
         try {
-            $body = $shell->render($catalogue, $active, $query);
+            $body = $shell->render($catalogue, $active, $query, $principal);
         } catch (UnknownComponentException $unknown) {
             return $this->html(500, $page->error(500, $catalog->tr('section.conflict', $unknown->getMessage())));
         }

@@ -27,7 +27,9 @@ use Milpa\Admin\Http\LoopbackOnlyMiddleware;
  * only where it came from, never the value nor a fragment of it. A declared middleware list is shown
  * entry by entry — short names for the classes that load, the whole name for a typo, the type for an
  * entry that is not a name, `(empty)` for an empty string — and every defect is listed in `unresolved`,
- * so the renderer can say the panel fell back to the strict gate (greenhouse decisions/0204).
+ * so the renderer can say the panel fell back to the strict gate (greenhouse decisions/0204). The `gate`
+ * is what the panel NAMES it ({@see AdminSettings::gateLabel()}): app-runtime's passkey gate, alone, is
+ * `passkey`; and the empty state offers that gate as the alternative line of its snippet (decisions/0206).
  */
 final class SettingsSource
 {
@@ -36,10 +38,11 @@ final class SettingsSource
     }
 
     /**
-     * The five rows, the effective gate, whether the app declared anything, whether the gate was
-     * malformed, and the snippet to paste when the app declared nothing.
+     * The five rows, the gate as the panel names it, whether the app declared anything, whether the gate
+     * was malformed, and the snippet to paste when the app declared nothing — plus the passkey line it
+     * offers as the alternative.
      *
-     * @return array{declared: bool, gate: string, locale: string, rows: list<array{key: string, value: string, source: string, declared: string|null}>, unresolved: list<string>, malformed: bool, snippet: string}
+     * @return array{declared: bool, gate: string, locale: string, rows: list<array{key: string, value: string, source: string, declared: string|null}>, unresolved: list<string>, malformed: bool, snippet: string, passkeySnippet: string}
      */
     public function snapshot(): array
     {
@@ -68,13 +71,20 @@ final class SettingsSource
 
         return [
             'declared' => $settings->declared(),
-            'gate' => $settings->gateKind(),
+            'gate' => $settings->gateLabel(),
             'locale' => $settings->locale,
             'rows' => $rows,
             'unresolved' => $settings->unresolvedMiddleware(),
             'malformed' => $malformed,
             'snippet' => self::snippet(),
+            'passkeySnippet' => self::passkeySnippet(),
         ];
+    }
+
+    /** The `middleware` line that puts the panel behind app-runtime's passkey gate — the alternative the empty state offers. */
+    public static function passkeySnippet(): string
+    {
+        return \sprintf("'middleware' => [\\%s::class],", AdminSettings::PASSKEY_GATE);
     }
 
     /** The `admin` key a fresh app pastes into `config/app.php` — the defaults, spelled out. */

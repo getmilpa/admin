@@ -136,14 +136,17 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
      * The Settings section: the viewer's panel preferences (browser-local, `[data-pref]` controls the page's
      * delegated script stores and applies), then the read-only configuration table — key, value, source —
      * with the empty state's snippet when the app declared nothing (worded «entirely on defaults» only when
-     * every source IS a default) and the danger notice when the declared gate cannot be carried: one that
-     * names each defective entry, or one that names what was received when it was not a list at all.
+     * every source IS a default; the snippet's second line is the passkey gate as the alternative), the
+     * notice that names the passkey gate when that is the gate in effect, and the danger notice when the
+     * declared gate cannot be carried: one that names each defective entry, or one that names what was
+     * received when it was not a list at all.
      */
     private function settings(StateSnapshot $state): string
     {
         $data = $state->data;
         $declared = ($data['declared'] ?? false) === true;
         $malformed = ($data['malformed'] ?? false) === true;
+        $gate = (string) ($data['gate'] ?? '');
         $unresolved = \is_array($data['unresolved'] ?? null) ? array_values(array_filter($data['unresolved'], 'is_string')) : [];
         $rows = \is_array($data['rows'] ?? null) ? array_values(array_filter($data['rows'], 'is_array')) : [];
 
@@ -154,7 +157,10 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $out[] = '<p class="admin-settings__hint">' . Html::escape($this->catalog->tr('settings.config.hint')) . '</p>';
         if (!$declared) {
             $out[] = $this->notice($this->catalog->tr(self::allDefault($rows) ? 'settings.empty' : 'settings.empty.partial'));
-            $out[] = '<pre class="admin-snippet"><code>' . Html::escape((string) ($data['snippet'] ?? '')) . '</code></pre>';
+            $out[] = '<pre class="admin-snippet"><code>' . Html::escape((string) ($data['snippet'] ?? '')) . $this->passkeySnippet($data) . '</code></pre>';
+        }
+        if ($gate === AdminSettings::GATE_PASSKEY) {
+            $out[] = $this->notice($this->catalog->tr('gate.passkey'));
         }
         if ($unresolved !== []) {
             $out[] = $this->notice(
@@ -167,11 +173,27 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
 
         $cells = [];
         foreach ($rows as $row) {
-            $cells[] = $this->settingRow($row, $unresolved);
+            $cells[] = $this->settingRow($row, $unresolved, $gate);
         }
         $out[] = $this->table(['col.key', 'col.value', 'col.source'], $cells);
 
         return implode("\n", $out);
+    }
+
+    /**
+     * The snippet's second line — the passkey gate as the alternative, a comment in the catalog's language
+     * over the code the source gives — or nothing when the state carries no such line.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function passkeySnippet(array $data): string
+    {
+        $line = $data['passkeySnippet'] ?? null;
+        if (!\is_string($line) || $line === '') {
+            return '';
+        }
+
+        return "\n// " . Html::escape($this->catalog->tr('settings.snippet.passkey', $line));
     }
 
     /**
@@ -192,14 +214,16 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
 
     /**
      * One configuration row. The secret's value is only where it came from, behind the mask glyph. A
-     * declared middleware list with a defective entry wears the danger badge on the value; a key the
+     * declared middleware list with a defective entry wears the danger badge on the value; the one that
+     * is app-runtime's passkey gate wears the `passkey` badge — the panel names it, that is all; a key the
      * panel rejected shows the EFFECTIVE value, what the app declared next to it, and the danger badge
      * on the source — never `default` for something the app did write.
      *
      * @param array<mixed> $row
      * @param list<string> $unresolved
+     * @param string       $gate       the gate as the panel names it — `passkey` badges the middleware row
      */
-    private function settingRow(array $row, array $unresolved): string
+    private function settingRow(array $row, array $unresolved, string $gate): string
     {
         $key = (string) ($row['key'] ?? '');
         $value = (string) ($row['value'] ?? '');
@@ -211,12 +235,14 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $rejected = $source === AdminSettings::SOURCE_REJECTED;
         $declaredAs = \is_string($row['declared'] ?? null) ? $row['declared'] : null;
         $broken = $key === 'middleware' && $unresolved !== [] && !$rejected;
+        $passkey = $key === 'middleware' && $gate === AdminSettings::GATE_PASSKEY && !$broken && !$rejected;
 
         $valueHtml = match ($key) {
             'secret' => '<span class="admin-settings__secret" aria-hidden="true">' . Html::escape($this->catalog->tr('settings.secret.mask')) . '</span>'
                 . Html::escape($this->catalog->tr(self::secretKey($value))),
             default => '<code>' . Html::escape($value) . '</code>'
                 . ($broken ? ' <span class="mui-badge mui-badge--danger">' . Html::escape($this->catalog->tr('settings.unresolved.badge')) . '</span>' : '')
+                . ($passkey ? ' <span class="mui-badge mui-badge--success">' . Html::escape($this->catalog->tr('gate.kind.passkey')) . '</span>' : '')
                 . ($rejected && $declaredAs !== null ? ' <span class="admin-settings__declared">' . Html::escape($this->catalog->tr('settings.declared_as', $declaredAs)) . '</span>' : ''),
         };
         $badge = match ($source) {

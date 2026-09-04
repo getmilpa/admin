@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin\Tests;
 
 use Milpa\Admin\AdminPlugin;
+use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
 use Milpa\Admin\Controllers\StackController;
@@ -24,6 +25,7 @@ use Milpa\Admin\Tests\Fixtures\DuplicatePlugin;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
 use Milpa\Admin\Tests\Fixtures\HubPlugin;
+use Milpa\Admin\Tests\Fixtures\PasskeyGateStub;
 use Milpa\Admin\Tests\Fixtures\RivalHubPlugin;
 use Milpa\Agent\SessionStore;
 use Milpa\Container\DIContainer;
@@ -245,6 +247,44 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('data-gate="custom">gate: custom</span>', (string) $custom->getBody());
     }
 
+    /**
+     * greenhouse decisions/0206, the admin's side: the app NAMES app-runtime's passkey gate in `admin.middleware`,
+     * the routes carry it, the kernel runs it, and what it leaves on the request — the authenticated actor —
+     * is what the topbar says. The suite runs the gate's SHAPE ({@see PasskeyGateStub}, bound to the real
+     * name by the bootstrap): the real gate, the cookie and the session store are app-runtime's to prove.
+     */
+    public function testThroughTheKernelThePasskeyGateIsNamedAsSuchAndTheTopbarSaysWhoSignedIn(): void
+    {
+        $response = self::dispatch(['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]], '10.0.0.5');
+        self::assertSame(200, $response->getStatusCode(), 'the gate named in config is the one that ran, and it let this request through');
+        $html = (string) $response->getBody();
+        self::assertStringContainsString(
+            '<span class="mui-badge admin-chip admin-chip--principal" data-principal="' . PasskeyGateStub::PRINCIPAL . '">signed in as ' . PasskeyGateStub::PRINCIPAL . '</span><span class="mui-badge admin-chip admin-chip--gate" data-gate="passkey">gate: passkey</span>',
+            $html,
+            'the actor the gate left on the request, and the gate named as such',
+        );
+        self::assertStringNotContainsString('gate: custom', $html);
+
+        $plain = (string) self::dispatch(['admin' => ['middleware' => [AllowAllMiddleware::class]]], '10.0.0.5')->getBody();
+        self::assertStringNotContainsString('admin-chip--principal', $plain, 'the control: a gate that authenticates nobody leaves nobody to show');
+        self::assertStringNotContainsString('signed in as', $plain);
+
+        [$container] = self::boot([AdminPlugin::class], ['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]);
+        $admin = self::admin($container);
+        self::assertSame([AdminSettings::PASSKEY_GATE], $admin->routes()[0]->middleware, 'carried as declared');
+        self::assertSame('custom', $admin->settings()->gateKind());
+        self::assertSame('passkey', $admin->settings()->gateLabel());
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+        $settings = (string) $controller->section(self::sectionRequest('settings'))->getBody();
+        self::assertStringContainsString('<td><code>middleware</code></td><td><code>PasskeyGateMiddleware</code> <span class="mui-badge mui-badge--success">passkey</span></td><td><span class="mui-badge mui-badge--accent">config</span></td>', $settings);
+        self::assertStringContainsString('Behind a passkey: milpa/app-runtime&#039;s PasskeyPlugin', $settings);
+        self::assertStringNotContainsString('admin-chip--principal', $settings, 'no gate ran in this direct call: nobody is signed in, and the panel says nothing');
+        $spanish = (string) $controller->section(self::sectionRequest('settings', 'lang=es'))->getBody();
+        self::assertStringContainsString('data-gate="passkey">puerta: passkey</span>', $spanish);
+        self::assertStringContainsString('Detrás de una passkey', $spanish);
+    }
+
     public function testARejectedLocaleRunsTheDefaultEverywhereAndSettingsSaysWhatWasDeclared(): void
     {
         [$container] = self::boot([AdminPlugin::class], ['admin' => ['locale' => 'fr']]);
@@ -306,7 +346,7 @@ final class AdminPluginTest extends TestCase
 
         self::assertStringContainsString('Running entirely on defaults: config/app.php has no admin key', $html, 'every one of the five is a default, so the wording is earned');
         self::assertStringContainsString('<pre class="admin-snippet"><code>', $html);
-        self::assertStringContainsString('LoopbackOnlyMiddleware::class]],</code></pre>', $html);
+        self::assertStringContainsString("LoopbackOnlyMiddleware::class]],\n// or, with milpa/app-runtime&#039;s PasskeyPlugin: &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class],</code></pre>", $html, 'and the passkey gate as the alternative');
         self::assertSame(5, substr_count($html, '<span class="mui-badge">default</span>'));
         self::assertStringContainsString('●●●</span>derived</td>', $html);
         self::assertStringContainsString('data-gate="loopback">gate: loopback</span>', $html);

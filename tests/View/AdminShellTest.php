@@ -157,6 +157,44 @@ final class AdminShellTest extends TestCase
         self::assertStringContainsString('mui-badge--warning" data-gate="fallback">gate: fallback</span>', self::shell(settings: new AdminSettings(middleware: [\stdClass::class]))->render($catalogue, $active), 'a class that exists but is not a middleware is not a gate');
     }
 
+    public function testTheGateChipNamesThePasskeyGateWhenItIsTheWholeStack(): void
+    {
+        $catalogue = SectionCatalogue::discover([new HolaPlugin(new DIContainer())]);
+        $active = $catalogue->find('hola');
+        self::assertNotNull($active);
+
+        $passkey = self::shell(settings: new AdminSettings(middleware: [AdminSettings::PASSKEY_GATE]));
+        self::assertStringContainsString('<span class="mui-badge admin-chip admin-chip--gate" data-gate="passkey">gate: passkey</span>', $passkey->render($catalogue, $active), 'not «custom»: the panel knows this one by name');
+        self::assertStringContainsString('data-gate="passkey">puerta: passkey</span>', $passkey->withCatalog(new Catalog('es'))->render($catalogue, $active));
+        self::assertStringContainsString('data-gate="passkey">gate: passkey</span>', $passkey->renderEmpty(SectionCatalogue::discover([])), 'the empty state too');
+
+        self::assertStringContainsString('data-gate="custom">gate: custom</span>', self::shell(settings: new AdminSettings(middleware: [AdminSettings::PASSKEY_GATE, AllowAllMiddleware::class]))->render($catalogue, $active), 'the control: inside a bigger stack it is a custom stack');
+    }
+
+    public function testTheTopbarSaysWhoSignedInWhenAGateAuthenticatedTheRequestAndNothingOtherwise(): void
+    {
+        $catalogue = SectionCatalogue::discover([new HolaPlugin(new DIContainer())]);
+        $active = $catalogue->find('hola');
+        self::assertNotNull($active);
+        $shell = self::shell(settings: new AdminSettings(middleware: [AdminSettings::PASSKEY_GATE]));
+
+        $html = $shell->render($catalogue, $active, [], 'passkey:rod');
+        self::assertStringContainsString(
+            '<div class="mui-topbar__end"><span class="mui-badge admin-chip admin-chip--principal" data-principal="passkey:rod">signed in as passkey:rod</span><span class="mui-badge admin-chip admin-chip--gate" data-gate="passkey">gate: passkey</span><span class="mui-badge admin-chip admin-chip--locale" data-locale="en">en</span></div>',
+            $html,
+            'who, then the gate, then the locale',
+        );
+        self::assertStringContainsString('data-principal="passkey:rod">sesión iniciada como passkey:rod</span>', $shell->withCatalog(new Catalog('es'))->render($catalogue, $active, [], 'passkey:rod'));
+        self::assertStringContainsString('data-principal="passkey:rod">signed in as passkey:rod</span>', $shell->renderEmpty(SectionCatalogue::discover([]), 'passkey:rod'), 'the empty state wears it too');
+        self::assertStringContainsString('data-principal="&lt;b&gt;x&quot;">signed in as &lt;b&gt;x&quot;</span>', $shell->render($catalogue, $active, [], '<b>x"'), 'a principal is a value, never markup');
+
+        $nobody = $shell->render($catalogue, $active);
+        self::assertStringContainsString('<div class="mui-topbar__end"><span class="mui-badge admin-chip admin-chip--gate"', $nobody, 'no principal: the gate chip comes first');
+        self::assertStringNotContainsString('admin-chip--principal', $nobody);
+        self::assertStringNotContainsString('signed in as', $nobody, 'the panel invents no identity');
+        self::assertStringNotContainsString('admin-chip--principal', $shell->renderEmpty(SectionCatalogue::discover([])));
+    }
+
     public function testWithCatalogAnswersInAnotherLanguageAndLeavesTheOriginalAlone(): void
     {
         $shell = self::shell();

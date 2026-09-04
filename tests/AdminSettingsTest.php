@@ -259,4 +259,24 @@ final class AdminSettingsTest extends TestCase
         self::assertSame([AllowAllMiddleware::class . ' (not a class name)'], $instance->unresolvedMiddleware(), 'an instance is not a class name');
         self::assertSame([LoopbackOnlyMiddleware::class], $instance->effectiveMiddleware());
     }
+
+    public function testTheLabelNamesThePasskeyGateWhenItIsTheWholeStackAndIsTheKindOtherwise(): void
+    {
+        self::assertSame('Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware', AdminSettings::PASSKEY_GATE, 'named as a string: the panel does not depend on app-runtime');
+
+        $passkey = AdminSettings::fromConfig(new Config(['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]));
+        self::assertSame('custom', $passkey->gateKind(), 'the kind is unchanged: it is the app\'s own stack');
+        self::assertSame('passkey', $passkey->gateLabel(), 'the label names it');
+        self::assertSame([AdminSettings::PASSKEY_GATE], $passkey->effectiveMiddleware(), 'the routes carry the class as declared');
+
+        $leadingSlash = new AdminSettings(middleware: ['\\' . AdminSettings::PASSKEY_GATE]);
+        self::assertSame('passkey', $leadingSlash->gateLabel(), 'however the name was spelled');
+
+        $stacked = new AdminSettings(middleware: [AdminSettings::PASSKEY_GATE, AllowAllMiddleware::class]);
+        self::assertSame('custom', $stacked->gateLabel(), 'the passkey gate plus something else is a custom stack, not «passkey»');
+
+        foreach ([AdminSettings::fromConfig(null), new AdminSettings(middleware: []), new AdminSettings(middleware: [AllowAllMiddleware::class]), new AdminSettings(middleware: ['Acme\\Nope'])] as $other) {
+            self::assertSame($other->gateKind(), $other->gateLabel(), 'every other stack is labelled by its kind');
+        }
+    }
 }
