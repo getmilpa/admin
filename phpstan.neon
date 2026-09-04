@@ -2,3 +2,6 @@ parameters:
     level: 6
     paths:
         - src
+    # A section provider is FOREIGN code: its `@return list<AdminSection>` is a promise the panel
+    # verifies at runtime and refuses loudly when broken. PHPDoc types are hints here, not certainties.
+    treatPhpDocTypesAsCertain: false

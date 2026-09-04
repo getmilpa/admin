@@ -14,165 +14,193 @@ declare(strict_types=1);
 
 namespace Milpa\Admin;
 
+use Milpa\Admin\Components\PluginsComponent;
+use Milpa\Admin\Components\RoutesComponent;
+use Milpa\Admin\Controllers\AdminController;
+use Milpa\Admin\Controllers\AssetsController;
+use Milpa\Admin\Data\PluginsSource;
+use Milpa\Admin\Data\RoutesSource;
+use Milpa\Admin\Http\LoopbackOnlyMiddleware;
+use Milpa\Admin\I18n\Catalog;
+use Milpa\Admin\Rendering\AdminHtmlRenderer;
+use Milpa\Admin\Section\AdminSection;
+use Milpa\Admin\Section\AdminSectionProvider;
+use Milpa\Admin\View\AdminPage;
+use Milpa\Admin\View\AdminShell;
 use Milpa\Attributes\PluginMetadata;
-use Milpa\Interfaces\Di\DIContainerInterface;
-use Milpa\Interfaces\Plugin\PluginInterface;
-use Milpa\Plugin\PluginBase;
-use Milpa\Console\Contracts\RouteTableSource;
-use Milpa\Admin\Contracts\StorageRootSource;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
+use Milpa\Interfaces\Di\DIContainerInterface;
+use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
+use Milpa\Interfaces\Plugin\PluginInterface;
+use Milpa\Live\Security\HmacStateSigner;
+use Milpa\Live\Security\SignedXhtmlStateTransferCodec;
+use Milpa\Live\Transport\XhtmlStateTransferCodec;
+use Milpa\Runtime\Config;
 use Milpa\Runtime\Http\RouteProviderInterface;
-use Milpa\Console\Section\{Section, SectionProvider};
-use Milpa\Admin\Settings\SettingsStore;
-use Milpa\Console\State\SectionStateProvider;
-use Milpa\Console\State\SectionStateSource;
-use Milpa\Console\State\PluginsStateProvider;
-use Milpa\Console\State\RoutesStateProvider;
 
 /**
- * El panel de administración de Milpa: la superficie `/milpa/admin`.
+ * The administration panel of a Milpa app — the surface where a human leaves the house ready for the agent.
  *
- * {@see Controllers\MilpaAdminController} es el Hub (ADR#12): descubre las secciones registradas
- * vía {@see SectionProvider} y redirige a la default, sin renderizar nada él mismo. Cada
- * sección es dueña de su ruta, su gate y su render; el panel no conoce ninguna por nombre.
+ * Add it to `config/plugins.php` and `/milpa/admin` exists: a shell of Milpa Components whose sidebar
+ * lists every section the booted plugins declared through {@see AdminSectionProvider}. This plugin's own
+ * sections — the plugins the app boots and the routes they declare — enter through that same contract,
+ * so the panel has no privileged path and names no plugin.
  *
- * Este plugin aporta tres: **Settings** (la configuración del sitio, con form y CSRF), **Plugins**
- * (qué plugins tiene el host y cuáles arrancan, sobre las operaciones de `milpa/plugin`) y
- * **Sistema** (la tabla de rutas, read-only). Cualquier otro plugin puede aportar las suyas
- * implementando {@see SectionProvider} — el panel las descubre y las pinta en la navegación
- * sin cambiar una línea de aquí.
- *
- * **Lo que un host tiene que darle:** un `SessionStore` y el middleware de scopes de `milpa/auth`
- * (el gate vive detrás de `milpa.admin`), un `PluginRegistryInterface` si quiere la sección de
- * plugins, y un {@see RouteTableSource} si quiere la de Sistema. Lo que no registre, simplemente
- * no aparece — el panel no truena por una sección que este host no puede servir.
+ * What the app declares (`admin.*` in its config): `route` (default `/milpa/admin`), `locale` (`en`|`es`),
+ * `middleware` (PSR-15 classes attached to every panel route; default {@see LoopbackOnlyMiddleware}),
+ * `secret` (state signing; falls back to `live.secret`, then a derived one), `title`.
  */
 #[PluginMetadata(
-    version: '1.0.0',
+    version: '0.6.0',
     author: 'Rodrigo Vicente - TeamX Agency',
     site: 'https://teamx.agency',
-    name: 'MilpaAdmin',
+    name: 'Admin',
     type: 'Web',
-    provides: [],
-    requires: []
 )]
-class AdminPlugin extends PluginBase implements PluginInterface, SectionProvider, SectionStateSource, RouteProviderInterface
+final class AdminPlugin implements PluginInterface, RouteProviderInterface, AdminSectionProvider
 {
-    public function __construct(DIContainerInterface $container)
+    private ?AdminSettings $settings = null;
+
+    /** @var list<AdminSection> */
+    private array $sections = [];
+
+    public function __construct(private readonly DIContainerInterface $container)
     {
-        parent::__construct($container);
+    }
+
+    /** Wires the panel's collaborators from the declared settings and registers its controllers. */
+    public function boot(): void
+    {
+        $config = $this->tryGet(Config::class);
+        $settings = AdminSettings::fromConfig($config instanceof Config ? $config : null);
+        $this->settings = $settings;
+
+        $events = $this->tryGet(MilpaEventDispatcherInterface::class);
+        $events = $events instanceof MilpaEventDispatcherInterface ? $events : null;
+
+        $catalog = new Catalog($settings->locale);
+        $codec = new SignedXhtmlStateTransferCodec(
+            new XhtmlStateTransferCodec(),
+            new HmacStateSigner($settings->signingSecret()),
+            null,
+        );
+        $renderer = new AdminHtmlRenderer($codec, $catalog);
+
+        $this->sections = [
+            new AdminSection(
+                id: 'plugins',
+                title: 'nav.plugins',
+                component: PluginsComponent::NAME,
+                order: 10,
+                group: 'admin',
+                definition: new PluginsComponent(new PluginsSource($this->container)),
+                renderer: $renderer,
+            ),
+            new AdminSection(
+                id: 'routes',
+                title: 'nav.routes',
+                component: RoutesComponent::NAME,
+                order: 20,
+                group: 'admin',
+                definition: new RoutesComponent(new RoutesSource($this->container, $this)),
+                renderer: $renderer,
+            ),
+        ];
+
+        $shell = new AdminShell($settings, $catalog, $codec, $events);
+        $page = new AdminPage($settings, $catalog);
+
+        $this->container->registerService(
+            AdminController::class,
+            new AdminController($this->container, $this, $catalog, $shell, $page),
+        );
+        $this->container->registerService(AssetsController::class, new AssetsController());
+        if (!$this->container->has(LoopbackOnlyMiddleware::class)) {
+            $this->container->registerService(LoopbackOnlyMiddleware::class, new LoopbackOnlyMiddleware($catalog));
+        }
     }
 
     /**
-     * Las rutas del panel, declaradas y ya atadas a su handler.
-     *
-     * Explícitas y no escaneadas de atributos: escanear obliga a un host a traer un cargador de
-     * atributos, y la familia no publica ninguno — era justo lo que amarraba este panel a un host.
-     * Con seis rutas, decirlas cuesta menos que la maquinaria para adivinarlas, y se leen todas de
-     * un jalón en un archivo.
+     * The panel's routes, each carrying the declared middleware stack.
      *
      * @return list<Route>
      */
     public function routes(): array
     {
+        $settings = $this->settings ?? AdminSettings::fromConfig(null);
+        $route = $settings->route;
+        $middleware = $settings->middleware;
+
         return [
-            $this->route('/milpa/admin', HttpMethod::GET, 'milpa_admin', Controllers\MilpaAdminController::class, 'index'),
-            $this->route('/milpa/admin/settings', HttpMethod::GET, 'milpa_admin_settings_show', Controllers\SettingsController::class, 'show'),
-            $this->route('/milpa/admin/settings', HttpMethod::POST, 'milpa_admin_settings', Controllers\SettingsController::class, 'save'),
-            $this->route('/milpa/admin/plugins', HttpMethod::GET, 'milpa_admin_plugins_show', Controllers\PluginsController::class, 'show'),
-            $this->route('/milpa/admin/plugins', HttpMethod::POST, 'milpa_admin_plugins', Controllers\PluginsController::class, 'toggle'),
-            $this->route('/milpa/admin/system', HttpMethod::GET, 'milpa_admin_system', Controllers\SystemController::class, 'show'),
+            new Route(
+                path: $route,
+                methods: HttpMethod::GET,
+                name: 'milpa_admin',
+                middleware: $middleware,
+                handler: HandlerReference::method(AdminController::class, 'index'),
+            ),
+            new Route(
+                path: $route . '/s/{id}',
+                methods: HttpMethod::GET,
+                name: 'milpa_admin_section',
+                middleware: $middleware,
+                handler: HandlerReference::method(AdminController::class, 'section'),
+            ),
+            new Route(
+                path: $route . '/assets/{file}',
+                methods: HttpMethod::GET,
+                name: 'milpa_admin_asset',
+                middleware: $middleware,
+                handler: HandlerReference::method(AssetsController::class, 'serve'),
+            ),
         ];
     }
 
     /**
-     * @param class-string $controller
-     */
-    private function route(string $path, HttpMethod $method, string $name, string $controller, string $handler): Route
-    {
-        return (new Route(path: $path, methods: $method, name: $name))
-            ->withHandler(HandlerReference::method($controller, $handler));
-    }
-
-    /**
-     * Las secciones propias del plugin (ui.admin.section — ADR#12): Settings (order 10), la primera
-     * del admin; Plugins (order 15, justo después — el 20 ya es de `architecture`) — qué plugins
-     * tiene el host y cuáles arrancan, sobre las
-     * operaciones de `milpa/plugin`, que sirve {@see Controllers\PluginsController}; y Sistema
-     * (order 30, P5.7) — la tabla read-only de rutas registradas que sirve
-     * {@see Controllers\SystemController}.
+     * The panel's own sections — Plugins and Routes — through the same contract every plugin uses.
      *
-     * @return list<Section>
+     * @return list<AdminSection>
      */
-    public function sections(): array
+    public function adminSections(): array
     {
-        return [
-            new Section('settings', 'Settings', '/milpa/admin/settings', 10),
-            new Section('plugins', 'Plugins', '/milpa/admin/plugins', 15),
-            new Section('system', 'Sistema', '/milpa/admin/system', 30),
-        ];
+        return $this->sections;
     }
 
-    /**
-     * El estado de las secciones propias del plugin (settings + plugins + system) — el MISMO que el shell web
-     * consume, ahora disponible para el shell CLI (`coa:admin`). `architecture` es web-only (sin estado
-     * inspectable), así que no aparece aquí. El estado de `system` son las rutas registradas, leídas de
-     * la fuente de verdad ({@see RouteTableAssembler}, la autoridad única registrada como instancia en
-     * el container tras `loadPlugins()` — Ola 4d.3a).
-     *
-     * @return array<string, SectionStateProvider>
-     */
-    public function sectionStates(): array
+    /** The settings the panel booted with, or the defaults before boot. */
+    public function settings(): AdminSettings
     {
-        $states = [
-            'settings' => SettingsStore::provider(),
-            'plugins' => PluginsStateProvider::fromContainer($this->container),
-        ];
-
-        // Sistema sólo existe si el host dijo de dónde sacar su tabla de rutas. Inventarle una
-        // vacía sería peor que no ofrecer la sección: diría que esta app no tiene rutas.
-        $source = $this->tryGetService(RouteTableSource::class);
-        if ($source instanceof RouteTableSource) {
-            $states['system'] = new RoutesStateProvider($source->routes());
-        }
-
-        return $states;
+        return $this->settings ?? AdminSettings::fromConfig(null);
     }
 
-    /**
-     * Lo único que arranca: atar la raíz de almacenamiento que el host haya registrado.
-     *
-     * Si no registró ninguna, no se ata nada y {@see SettingsStore::path()} lanza cuando alguien
-     * intente leer o escribir settings — con el nombre del puerto que falta. Callar aquí y adivinar
-     * allá es cómo el panel terminó escribiendo dentro de `vendor/`.
-     */
-    public function boot(): void
-    {
-        $storage = $this->tryGetService(StorageRootSource::class);
-        if ($storage instanceof StorageRootSource) {
-            SettingsStore::bindStorageRoot($storage);
-        }
-    }
-
-    /** Nada que instalar: el panel no tiene datos propios. */
+    /** Nothing to install: the panel keeps no data of its own. */
     public function install(): void
     {
     }
 
-    /** Nada que desinstalar: quitar el panel no toca lo que el panel administra. */
+    /** Nothing to uninstall: removing the panel touches nothing it administers. */
     public function uninstall(): void
     {
     }
 
-    /** Nada que prender: las secciones aparecen porque el panel las descubrió. */
+    /** Nothing to enable: sections exist because the panel discovered them. */
     public function enable(): void
     {
     }
 
-    /** Nada que apagar. */
+    /** Nothing to disable. */
     public function disable(): void
     {
+    }
+
+    private function tryGet(string $id): ?object
+    {
+        if (!$this->container->has($id)) {
+            return null;
+        }
+        $service = $this->container->get($id);
+
+        return \is_object($service) ? $service : null;
     }
 }

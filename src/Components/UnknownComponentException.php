@@ -12,4 +12,13 @@
 
 declare(strict_types=1);
 
-require __DIR__ . '/../vendor/autoload.php';
+namespace Milpa\Admin\Components;
+
+/**
+ * A section named a component nothing registered, and brought no definition of its own.
+ *
+ * The message lists what IS registered, so the fix is one edit away.
+ */
+final class UnknownComponentException extends \RuntimeException
+{
+}
