@@ -9,142 +9,99 @@
 
 # Milpa Admin
 
-> The **administration panel** of the Milpa PHP framework — a section shell that discovers what your app can actually do, server-rendered, no JavaScript required.
+> The **administration panel** of the Milpa PHP framework — the surface where a human leaves the house ready for the agent. Composed of Milpa Components, event-driven, and extended by declaration: every installed plugin adds its own section without the panel knowing its name.
 
 [![CI](https://github.com/getmilpa/admin/actions/workflows/ci.yml/badge.svg)](https://github.com/getmilpa/admin/actions/workflows/ci.yml)
-[![Packagist](https://img.shields.io/packagist/v/milpa/admin.svg)](https://packagist.org/packages/milpa/admin)
-[![PHP](https://img.shields.io/badge/php-%E2%89%A5%208.3-777bb4.svg)](https://www.php.net/)
+[![Packagist](https://img.shields.io/packagist/v/milpa/admin)](https://packagist.org/packages/milpa/admin)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Add one plugin to your app and `/milpa/admin` exists: a navigation, a settings form, a plugin
-manager, and a route inspector — behind your own auth, rendered on the server.
+## What it is
 
-## Install
+Milpa is a framework a human administers and an **agent operates**. Everything the agent can do is a governed
+operation; everything the human sees is a projection of the same operations. The admin panel is the human's
+projection: install capabilities, read the routes and middleware every plugin declared, stand up the services the
+app needs, adjust configuration, read the ledgers of what the agent did.
 
-```bash
-composer require milpa/admin
-```
+Add one plugin to `config/plugins.php` and `/milpa/admin` exists:
 
 ```php
-// config/plugins.php
 return [
     Milpa\Admin\AdminPlugin::class,
-    // ...
+    // …your plugins
 ];
 ```
 
-## The one idea
+The panel opens with two sections of its own — **Plugins** (what the app boots, and the capabilities it can grow)
+and **Routes** (every route the booted plugins declared, with handler and per-route middleware) — and one more per
+plugin that declares one.
 
-**The panel knows no section by name.** It asks every booted plugin for its sections and renders
-what it gets back:
+## The one idea: a section is a component a plugin declares
 
 ```php
-final class BillingPlugin implements PluginInterface, AdminSectionProvider
+use Milpa\Admin\Section\{AdminSection, AdminSectionProvider};
+
+final class InventoryPlugin implements PluginInterface, AdminSectionProvider
 {
     public function adminSections(): array
     {
-        return [new AdminSection('billing', 'Facturación', '/milpa/admin/billing', 40)];
+        return [
+            // a dashboard primitive the panel already knows, with props
+            new AdminSection(id: 'stock', title: 'Stock', component: 'metric-card',
+                props: ['title' => 'Units in stock', 'value' => '1,204'], order: 30),
+
+            // or a component you bring yourself — definition + renderer, registered under `component`
+            new AdminSection(id: 'inventory', title: 'Inventory', component: 'inventory-table',
+                definition: new InventoryComponent($repo), renderer: new InventoryRenderer(), order: 31),
+        ];
     }
 }
 ```
 
-That is the whole extension point. Your section appears in the navigation, in order, with no change
-to this package — and the same list drives the terminal shell (`coa:admin`, `coa:tui`), so a
-section you add is a section you can also inspect without a browser.
+The panel discovers implementers by `instanceof` over the booted plugins, **at request time** (boot order does not
+matter), lists each section in the sidebar in the declared order, routes it at `/milpa/admin/s/<id>`, and renders
+it inside the shell. A duplicate id is a loud 500 naming both plugins — never a silent "last one wins".
 
-## What it ships with
+Two lifecycle pairs let another plugin extend a section or the shell without touching either:
+`admin.section.before_render` / `after_render` (props, then HTML — both mutable) and
+`admin.shell.before_render` / `after_render` (the composition and sidebar items, then HTML).
 
-| Section | What it does |
-|---------|--------------|
-| **Settings** | The site configuration, as a form generated from the schema of a governed tool — with CSRF, validation, and redisplay of what you typed when it is rejected. |
-| **Plugins** | What your app has, what boots, and a button per row. It drives `milpa/plugin`'s operations, so the panel and `coa plugins.list` cannot disagree. |
-| **Sistema** | The route table, read-only. |
+## What the app declares
 
-## What a host has to provide
+Everything under the `admin` key of the app's config; every knob has a safe default.
 
-Nothing is assumed and nothing is faked. A capability you did not wire simply does not appear —
-there are no dead controls (that is a rule, not a habit: see ADR-0005, *surface honesty*).
+| key | default | what it does |
+|---|---|---|
+| `admin.route` | `/milpa/admin` | the mount point |
+| `admin.locale` | `en` | the panel's own copy — `en` or `es` |
+| `admin.middleware` | `[LoopbackOnlyMiddleware::class]` | PSR-15 classes attached to **every** panel route, outermost first. The default answers only to loopback; declare your passkey/scope gate here. `[]` opens the panel on purpose. |
+| `admin.secret` | `live.secret`, else derived | the HMAC secret that signs component state |
+| `admin.title` | `Milpa Admin` | the brand in the sidebar and the document title |
 
-| You register | You get |
-|--------------|---------|
-| `SessionStore` + `milpa/auth`'s scope middleware | The panel at all — every section is behind `milpa.admin`. |
-| `PluginRegistryInterface` | The **Plugins** section: list, enable, disable. |
-| `PluginInstallerInterface` | Install, update and remove on top of it. Without it those three operations do not exist, so no surface renders a button that fails when pressed. |
-| `RouteTableSource` | The **Sistema** section. Every host builds its route table differently; this port is how yours gets in. |
-| `StorageRootSource` | Where the panel keeps its settings. **Required** if you use the Settings section — see below. |
+Assets (design tokens, bundle, the `milpa/live-web` client runtime and Alpine) are served by the panel itself under
+`{route}/assets/` — no build step, nothing copied into `public/`.
 
-### Where settings are stored
+## Measured, not assumed
 
-The panel writes one file, `<your storage root>/milpa-admin/settings.json`, and it will not guess
-where that root is:
+Every slice of this panel is proven on a fresh `composer create-project milpa/framework` app in the framework's
+house (greenhouse `decisions/0200`, `evidence/0514`): a plugin written in the app, unknown to the panel, gets its
+sections listed and rendered; an unknown section is 404; a non-loopback origin is 403; `/desktop` keeps serving.
 
-```php
-final class MyStorageRoot implements Milpa\Admin\Contracts\StorageRootSource
-{
-    public function storageRoot(): string
-    {
-        return __DIR__ . '/../storage';   // wherever YOUR app keeps mutable state
-    }
-}
+## Lineage
+
+`milpa/admin` up to `v0.5.2` was the panel of the original TeamX host — Symfony-shaped controllers, a gate wired to
+that host's login, three shells. It never dispatched on a fresh framework app (greenhouse `evidence/0513`). From
+`0.6.0` the package is the framework's own panel, rebuilt on the same mould as the Desktop (`milpa/desktop-app`):
+PSR-7 in and out, Milpa Components all the way down, declared not scanned. The old line stays citable at its tag.
+
+## Develop
+
+```bash
+composer install
+vendor/bin/phpunit --testsuite Admin
+vendor/bin/phpstan analyse src
+vendor/bin/php-cs-fixer fix --dry-run --diff
 ```
-
-Register it in the container before the panel boots, and `AdminPlugin::boot()` picks it up. If
-nothing is registered, reading or writing settings throws with the name of the port it needs —
-`MILPA_ADMIN_SETTINGS_PATH` also overrides the whole path if you want to point at one exact file.
-
-Until `0.2.0` the path was computed by counting directories up from the package's own source file.
-That worked while the code lived inside a host and broke the moment it did not: installed through
-Composer it resolved to somewhere **inside `vendor/`**, a directory the next `composer install` can
-delete. A package cannot know the root of whoever installs it — so now it asks.
-
-## No JavaScript required
-
-Every control is a real `<form>` with a real submit. The panel enhances with JS when it is there and
-works identically when it is not — which matters most at the exact moment you need it: turning off
-the plugin that broke the page is not the time to depend on that page's JavaScript.
-
-Two more decisions worth knowing:
-
-- **Installing is not consenting to run.** A freshly installed plugin arrives **disabled**.
-- **A plugin declared in your code cannot be removed from the panel** — it would delete files your
-  own source still names. The panel says so, and offers to disable it instead.
-
-## The HTTP policy for operations
-
-`milpa/console` can expose any declared operation over HTTP, but it deliberately knows nothing about
-who is calling: identity sits behind its `OperationHttpPolicy` interface. This package publishes the
-implementation that uses `milpa/auth`, because it already requires it.
-
-```php
-use Milpa\Admin\Http\AuthOperationHttpPolicy;
-use Milpa\Console\Http\HttpProjector;
-
-new HttpProjector($operations, $container, $psr17, $psr17, policy: new AuthOperationHttpPolicy($container));
-```
-
-An operation typed by `scopes` goes through `RequireScopeMiddleware` and then the same `PolicyGate`
-that guards MCP; one typed by `permission` goes through `RequirePermissionMiddleware`. Denied is a
-401 or a 403 with the code that names it. A protected operation on a host that wired **no** auth
-chain is a 500, never a 4xx — the caller did nothing wrong.
-
-## Requirements
-
-- PHP **≥ 8.3**
-- [`milpa/core`](https://packagist.org/packages/milpa/core) **^0.6** · [`milpa/auth`](https://packagist.org/packages/milpa/auth) **^0.3** · [`milpa/command`](https://packagist.org/packages/milpa/command) **^0.3** · [`milpa/data`](https://packagist.org/packages/milpa/data) **^0.2**
-- [`milpa/http`](https://packagist.org/packages/milpa/http) **^0.1.5** · [`milpa/http-symfony`](https://packagist.org/packages/milpa/http-symfony) **^0.1** · [`milpa/runtime`](https://packagist.org/packages/milpa/runtime) **^0.7**
-- [`milpa/plugin`](https://packagist.org/packages/milpa/plugin) **^0.5** — the operations the Plugins section drives
-- [`milpa/live-web`](https://packagist.org/packages/milpa/live-web) **^0.2** · [`milpa/live-tui`](https://packagist.org/packages/milpa/live-tui) **^0.3** · [`milpa/tool-runtime`](https://packagist.org/packages/milpa/tool-runtime) **^0.9**
-
-## Contributing
-
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Please report security issues
-via [SECURITY.md](SECURITY.md), and note that this project follows a
-[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-[Apache-2.0](LICENSE) © Rodrigo Vicente - TeamX Agency.
-
----
-
-Milpa is designed, built, and maintained by **[Rodrigo Vicente - TeamX Agency](https://teamx.agency/?utm_source=github&utm_medium=readme&utm_campaign=milpa&utm_content=admin)**.
+Apache-2.0 — (c) Rodrigo Vicente - TeamX Agency. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

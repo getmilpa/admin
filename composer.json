@@ -1,14 +1,15 @@
 {
   "name": "milpa/admin",
-  "description": "The administration panel of the Milpa PHP framework: a discoverable section shell over the plugin, settings and routing surfaces a host exposes \u2014 server-rendered, no JavaScript required.",
+  "description": "The administration panel of the Milpa PHP framework: an event-driven dashboard composed of Milpa Components, where every installed plugin declares its own section, routes and services — and the panel discovers them without knowing any plugin by name.",
   "keywords": [
     "php",
     "milpa",
     "framework",
     "admin-panel",
-    "server-rendered",
+    "dashboard",
     "plugins",
-    "no-javascript"
+    "milpa-components",
+    "server-rendered"
   ],
   "type": "library",
   "license": "Apache-2.0",
@@ -20,30 +21,27 @@
   ],
   "require": {
     "php": ">=8.3",
-    "guzzlehttp/psr7": "^2.6",
-    "milpa/auth": ">=0.3.1 <1.0",
-    "milpa/command": ">=0.3.1 <1.0",
-    "milpa/console": ">=0.6 <1.0",
-    "milpa/core": ">=0.6.2 <1.0",
-    "milpa/data": ">=0.2 <1.0",
-    "milpa/http": ">=0.1.5 <1.0",
-    "milpa/http-symfony": ">=0.1 <1.0",
-    "milpa/live": ">=0.4 <1.0",
-    "milpa/live-tui": ">=0.4 <1.0",
-    "milpa/live-web": ">=0.2 <1.0",
-    "milpa/plugin": ">=0.7 <1.0",
-    "milpa/runtime": ">=0.7 <1.0",
-    "milpa/tool-runtime": ">=0.9 <1.0",
-    "psr/log": "^3",
-    "symfony/http-foundation": "^7.4",
-    "symfony/psr-http-message-bridge": "^7.0"
+    "ext-dom": "*",
+    "milpa/core": ">=0.10 <1.0",
+    "milpa/http": ">=0.2 <1.0",
+    "milpa/live": ">=0.17 <1.0",
+    "milpa/live-web": ">=0.13 <1.0",
+    "milpa/plugin": ">=0.13 <1.0",
+    "milpa/runtime": ">=0.9.1 <1.0",
+    "nyholm/psr7": "^1.8",
+    "psr/http-message": "^1.1 || ^2.0",
+    "psr/http-server-handler": "^1.0",
+    "psr/http-server-middleware": "^1.0"
   },
   "require-dev": {
     "friendsofphp/php-cs-fixer": "^3.65",
-    "milpa/container": ">=0.1 <1.0",
+    "milpa/container": ">=0.2 <1.0",
     "phpstan/phpdoc-parser": "^2.3",
     "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^11.5"
+  },
+  "suggest": {
+    "milpa/app-runtime": "The Plugins section also lists the capabilities this app has and can grow (Capabilities::answer())."
   },
   "autoload": {
     "psr-4": {
@@ -55,5 +53,23 @@
       "Milpa\\Admin\\Tests\\": "tests/",
       "Milpa\\Docs\\": "vendor/milpa/core/tools/gen-docs/"
     }
-  }
+  },
+  "extra": {
+    "milpa": {
+      "capability": {
+        "id": "admin",
+        "title": "The admin panel — where a human leaves the house ready for the agent",
+        "unlocks": [],
+        "provides": [
+          "admin-panel"
+        ],
+        "briefing": "This app serves an administration panel at /milpa/admin (loopback-only until the app declares its own gate). Every plugin that implements Milpa\\Admin\\Section\\AdminSectionProvider gets a section in it; the panel lists the booted plugins and every route they declared."
+      }
+    }
+  },
+  "config": {
+    "sort-packages": true
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
 }

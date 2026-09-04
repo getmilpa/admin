@@ -14,61 +14,66 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\View;
 
-use Milpa\Live\Support\MilpaDesign;
+use Milpa\Admin\AdminSettings;
+use Milpa\Admin\I18n\Catalog;
 
 /**
- * Envuelve el fragmento del shell de Milpa Admin (la salida de `XhtmlComponentCompiler`) en una
- * página HTML completa, enlazando el CSS de `@milpa/design` cuando resuelve.
+ * Wraps the shell into a full HTML document: the design tokens and bundle, the client runtime and Alpine
+ * (served by the panel itself, no build step), the declared locale as `lang`.
  *
- * DEUDA (spec §CSS): aquí se lee e inlinea el CSS desde su ruta resuelta en disco (dev/dogfood).
- * En build/deploy el asset de `@milpa/design` debe ir compilado/copiado al host — NUNCA una
- * ruta-local-absoluta como esta en producción.
+ * Owns no surface markup — that is the components' — only the document around them.
  */
 final class AdminPage
 {
-    /**
-     * Envuelve el cuerpo en el documento completo del panel.
-     *
-     * @param array<int, string> $scripts URLs del runtime diferido (Alpine + Client Runtime Entry);
-     *                                    cada una se emite como `<script src="..." defer>`.
-     */
-    public static function wrap(string $fragment, array $scripts = []): string
+    public function __construct(
+        private readonly AdminSettings $settings,
+        private readonly Catalog $catalog,
+    ) {
+    }
+
+    /** The document around a rendered shell. */
+    public function render(string $shellHtml, string $title = ''): string
     {
-        $styleTag = '';
+        $documentTitle = $title === '' ? $this->settings->title : $title . ' · ' . $this->settings->title;
 
-        try {
-            foreach (MilpaDesign::cssFiles() as $file) {
-                // `is_file()` explícito en vez de `@file_get_contents`: el host lintea contra `@`
-                // de supresión de errores; el guard documenta la misma tolerancia a un archivo
-                // faltante sin silenciar errores reales de lectura.
-                if (is_file($file)) {
-                    $css = file_get_contents($file);
-                    if ($css !== false) {
-                        $styleTag .= '<style>' . $css . '</style>';
-                    }
-                }
-            }
-        } catch (\RuntimeException) {
-            // @milpa/design no resuelto (MILPA_DESIGN_PATH sin setear y node_modules/@milpa/design
-            // ausente): fallback estructural, sin estilos. La página sigue siendo válida y
-            // navegable — el CSS nunca debe bloquear el cierre del shell.
-            $styleTag = '';
-        }
+        return '<!doctype html>' . "\n"
+            . '<html lang="' . self::e($this->catalog->locale()) . '" data-theme="dark">' . "\n"
+            . '<head>' . "\n"
+            . '<meta charset="utf-8">' . "\n"
+            . '<meta name="viewport" content="width=device-width, initial-scale=1">' . "\n"
+            . '<title>' . self::e($documentTitle) . '</title>' . "\n"
+            . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl('tokens.css')) . '">' . "\n"
+            . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl('bundle.css')) . '">' . "\n"
+            . '<style>' . self::css() . '</style>' . "\n"
+            . '</head>' . "\n"
+            . '<body class="mui-body milpa-admin">' . "\n"
+            . $shellHtml . "\n"
+            . '<script src="' . self::e($this->settings->assetUrl('milpa-live.js')) . '" defer></script>' . "\n"
+            . '<script src="' . self::e($this->settings->assetUrl('alpine.min.js')) . '" defer></script>' . "\n"
+            . '</body>' . "\n"
+            . '</html>' . "\n";
+    }
 
-        // Reveal de controles JS-only (ADR#5): el toggle de navegación del topbar es JS-only, así
-        // que se esconde salvo cuando milpa-live.js marca <html class="milpa-js"> (Alpine vivo).
-        // Regla host-inline: SIEMPRE presente, independiente de que @milpa/design resuelva o no.
-        // Nunca esconde contenido server-truth (ADR#8) — solo el control que sin JS no ejecuta.
-        $jsRevealStyle = '<style>html:not(.milpa-js) .mui-topbar__nav-toggle{display:none!important}</style>';
+    /** A plain error document in the same skin — the 404 of an unknown section, the 500 of a conflict. */
+    public function error(int $status, string $message): string
+    {
+        $shell = '<main class="mui-shell__main milpa-admin-error"><h1 class="mui-h1">' . $status . '</h1><p class="mui-alert mui-alert--warning">' . self::e($message) . '</p>'
+            . '<p><a class="mui-btn mui-btn--ghost" href="' . self::e($this->settings->route) . '">' . self::e($this->settings->title) . '</a></p></main>';
 
-        $scriptTags = '';
-        foreach ($scripts as $src) {
-            $scriptTags .= '<script src="' . htmlspecialchars((string) $src, \ENT_QUOTES, 'UTF-8') . '" defer></script>';
-        }
+        return $this->render($shell, (string) $status);
+    }
 
-        return '<!doctype html><html lang="es"><head><meta charset="utf-8">'
-            . '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            . '<title>Milpa Admin</title>' . $styleTag . $jsRevealStyle . $scriptTags
-            . '</head><body>' . $fragment . '</body></html>';
+    private static function css(): string
+    {
+        return '.milpa-admin .admin-section{display:grid;gap:var(--space-4,1rem);padding:var(--space-4,1rem)}'
+            . '.milpa-admin .admin-notice{margin:0}'
+            . '.milpa-admin .admin-capabilities{display:grid;gap:.25rem;padding-left:1.25rem}'
+            . '.milpa-admin .mui-table td,.milpa-admin .mui-table th{vertical-align:top}'
+            . '.milpa-admin-error{padding:var(--space-6,2rem);display:grid;gap:1rem;max-width:60ch}';
+    }
+
+    private static function e(string $value): string
+    {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }
