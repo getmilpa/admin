@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.8.0](https://github.com/getmilpa/admin/compare/v0.7.0...v0.8.0) (2026-09-04)
+
+
+### Features
+
+* the Settings section — what the app declared, with its source; a misdeclared gate falls back to loopback-only ([#41](https://github.com/getmilpa/admin/issues/41)) ([1ac36f0](https://github.com/getmilpa/admin/commit/1ac36f0fe2cd241a7d5551173431d90a70abb1af))
+
 ## [0.7.0](https://github.com/getmilpa/admin/compare/v0.6.0...v0.7.0) (2026-09-04)
 
 
