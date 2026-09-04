@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.7.0](https://github.com/getmilpa/admin/compare/v0.6.0...v0.7.0) (2026-09-04)
+
+
+### Features
+
+* the Stack section — plugins declare the services they need; the panel shows, probes and projects them ([#39](https://github.com/getmilpa/admin/issues/39)) ([b4aedba](https://github.com/getmilpa/admin/commit/b4aedbaec2ee1caa2c3384426922e53d79fd056e))
+
 ## [0.6.0](https://github.com/getmilpa/admin/compare/v0.5.2...v0.6.0) (2026-09-04)
 
 
