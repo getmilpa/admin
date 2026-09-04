@@ -17,6 +17,7 @@ namespace Milpa\Admin\Rendering;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
+use Milpa\Admin\Components\SettingsComponent;
 use Milpa\Admin\Components\StackComponent;
 use Milpa\Admin\Data\StackSource;
 use Milpa\Admin\I18n\Catalog;
@@ -31,17 +32,19 @@ use Milpa\Live\ValueObjects\RenderTarget;
 use Milpa\Live\ValueObjects\StateSnapshot;
 
 /**
- * Paints the panel's own components — `admin-plugins`, `admin-routes` and `admin-stack` — as HTML on the
- * `mui-*` design classes, and closes each with its signed state envelope like every Milpa component.
+ * Paints the panel's own components — `admin-plugins`, `admin-routes`, `admin-settings` and `admin-stack`
+ * — as HTML on the `mui-*` design classes, and closes each with its signed state envelope like every
+ * Milpa component.
  *
- * Every string a human reads comes from the {@see Catalog}; every value from the state is escaped; the
+ * Every string a human reads comes from the {@see Catalog} — the one the request's {@see ComponentContext}
+ * names by locale, else the one the renderer booted with; every value from the state is escaped; the
  * one link it emits (the compose file) is built from the declared {@see AdminSettings}.
  */
 final class AdminHtmlRenderer implements ComponentRendererInterface
 {
     public function __construct(
         private readonly StateTransferCodecInterface $codec,
-        private readonly Catalog $catalog,
+        private Catalog $catalog,
         private readonly AdminSettings $settings,
     ) {
     }
@@ -57,16 +60,19 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     {
         $state = $request->state ?? $component->mount($request->props, $request->context);
         $name = $component::contract()->name;
+        $painter = $this->forLocale($request->context->locale);
 
         $body = match ($name) {
-            PluginsComponent::NAME => $this->plugins($state),
-            RoutesComponent::NAME => $this->routes($state),
-            StackComponent::NAME => $this->stack($state),
+            PluginsComponent::NAME => $painter->plugins($state),
+            RoutesComponent::NAME => $painter->routes($state),
+            SettingsComponent::NAME => $painter->settings($state),
+            StackComponent::NAME => $painter->stack($state),
             default => throw new \InvalidArgumentException(\sprintf(
-                '%s renders %s, %s and %s, not «%s».',
+                '%s renders %s, %s, %s and %s, not «%s».',
                 self::class,
                 PluginsComponent::NAME,
                 RoutesComponent::NAME,
+                SettingsComponent::NAME,
                 StackComponent::NAME,
                 $name,
             )),
@@ -84,6 +90,145 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         );
 
         return new RenderResult(output: $html, state: $state, format: RenderTarget::HTML);
+    }
+
+    /** This renderer answering in the context's locale when the catalog carries it — itself otherwise. */
+    private function forLocale(?string $locale): self
+    {
+        if ($locale === null || $locale === $this->catalog->locale() || !\in_array($locale, Catalog::locales(), true)) {
+            return $this;
+        }
+        $painter = clone $this;
+        $painter->catalog = new Catalog($locale);
+
+        return $painter;
+    }
+
+    /**
+     * The Settings section: the viewer's panel preferences (browser-local, `[data-pref]` controls the page's
+     * delegated script stores and applies), then the read-only configuration table — key, value, source —
+     * with the empty state's snippet when the app declared nothing and the fallback notice when a declared
+     * middleware class does not exist.
+     */
+    private function settings(StateSnapshot $state): string
+    {
+        $data = $state->data;
+        $declared = ($data['declared'] ?? false) === true;
+        $unresolved = \is_array($data['unresolved'] ?? null) ? array_values(array_filter($data['unresolved'], 'is_string')) : [];
+        $rows = \is_array($data['rows'] ?? null) ? $data['rows'] : [];
+
+        $out = ['<h2 class="mui-h2">' . Html::escape($this->catalog->tr('settings.heading')) . '</h2>'];
+        $out[] = $this->preferences((string) ($data['locale'] ?? AdminSettings::DEFAULT_LOCALE));
+
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('settings.config')) . '</h3>';
+        $out[] = '<p class="admin-settings__hint">' . Html::escape($this->catalog->tr('settings.config.hint')) . '</p>';
+        if (!$declared) {
+            $out[] = $this->notice($this->catalog->tr('settings.empty'));
+            $out[] = '<pre class="admin-snippet"><code>' . Html::escape((string) ($data['snippet'] ?? '')) . '</code></pre>';
+        }
+        if ($unresolved !== []) {
+            $out[] = $this->notice($this->catalog->tr('settings.unresolved', $this->join($unresolved)), 'danger');
+        }
+
+        $cells = [];
+        foreach ($rows as $row) {
+            if (!\is_array($row)) {
+                continue;
+            }
+            $cells[] = $this->settingRow($row, $unresolved);
+        }
+        $out[] = $this->table(['col.key', 'col.value', 'col.source'], $cells);
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * One configuration row. The secret's value is only where it came from, behind the mask glyph; the
+     * middleware row wears the danger badge when a declared class does not exist.
+     *
+     * @param array<mixed> $row
+     * @param list<string> $unresolved
+     */
+    private function settingRow(array $row, array $unresolved): string
+    {
+        $key = (string) ($row['key'] ?? '');
+        $value = (string) ($row['value'] ?? '');
+        $source = ($row['source'] ?? '') === AdminSettings::SOURCE_CONFIG ? AdminSettings::SOURCE_CONFIG : AdminSettings::SOURCE_DEFAULT;
+        $broken = $key === 'middleware' && $unresolved !== [];
+
+        $valueHtml = match ($key) {
+            'secret' => '<span class="admin-settings__secret" aria-hidden="true">' . Html::escape($this->catalog->tr('settings.secret.mask')) . '</span>'
+                . Html::escape($this->catalog->tr(self::secretKey($value))),
+            default => '<code>' . Html::escape($value) . '</code>'
+                . ($broken ? ' <span class="mui-badge mui-badge--danger">' . Html::escape($this->catalog->tr('settings.unresolved.badge')) . '</span>' : ''),
+        };
+        $sourceHtml = '<span class="mui-badge' . ($source === AdminSettings::SOURCE_CONFIG ? ' mui-badge--accent' : '') . '">'
+            . Html::escape($this->catalog->tr('settings.source.' . $source)) . '</span>';
+
+        return '<tr' . ($broken ? ' class="admin-settings__row--unresolved"' : '') . '>'
+            . '<td><code>' . Html::escape($key) . '</code></td>'
+            . '<td>' . $valueHtml . '</td>'
+            . '<td>' . $sourceHtml . '</td>'
+            . '</tr>';
+    }
+
+    /** The catalog key for a secret's provenance token — never the secret, which never reaches this renderer. */
+    private static function secretKey(string $source): string
+    {
+        return match ($source) {
+            AdminSettings::SECRET_ADMIN => 'settings.secret.admin',
+            AdminSettings::SECRET_LIVE => 'settings.secret.live',
+            default => 'settings.secret.derived',
+        };
+    }
+
+    /**
+     * The «Panel preferences» card: theme, density, language override and remembered filters — plain
+     * controls tagged `data-pref`, no state of their own; the page's delegated script owns them.
+     */
+    private function preferences(string $serverLocale): string
+    {
+        $languages = ['server' => $this->catalog->tr('settings.lang.server', $serverLocale)];
+        foreach (Catalog::locales() as $code) {
+            $languages[$code] = $code;
+        }
+
+        return '<article class="mui-card admin-settings__prefs">'
+            . '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('settings.prefs')) . '</h3>'
+            . '<p class="admin-settings__hint">' . Html::escape($this->catalog->tr('settings.prefs.hint')) . '</p>'
+            . '<form class="admin-prefs" data-prefs="">'
+            . $this->select('theme', 'settings.pref.theme', [
+                'dark' => $this->catalog->tr('settings.theme.dark'),
+                'light' => $this->catalog->tr('settings.theme.light'),
+                'system' => $this->catalog->tr('settings.theme.system'),
+            ])
+            . $this->select('density', 'settings.pref.density', [
+                'comfortable' => $this->catalog->tr('settings.density.comfortable'),
+                'compact' => $this->catalog->tr('settings.density.compact'),
+            ])
+            . $this->select('lang', 'settings.pref.lang', $languages, $this->catalog->tr('settings.pref.lang.hint'))
+            . '<label class="admin-prefs__check"><input type="checkbox" data-pref="filters" id="admin-pref-filters"> '
+            . Html::escape($this->catalog->tr('settings.pref.filters')) . '</label>'
+            . '</form>'
+            . '</article>';
+    }
+
+    /**
+     * @param array<string, string> $options value → label
+     */
+    private function select(string $pref, string $labelKey, array $options, string $hint = ''): string
+    {
+        $html = '<label class="admin-prefs__field" for="admin-pref-' . $pref . '"><span>' . Html::escape($this->catalog->tr($labelKey)) . '</span>'
+            . '<select class="mui-input mui-input--sm" data-pref="' . $pref . '" id="admin-pref-' . $pref . '">';
+        foreach ($options as $value => $label) {
+            $html .= '<option value="' . Html::escape($value) . '">' . Html::escape($label) . '</option>';
+        }
+        $html .= '</select>';
+        if ($hint !== '') {
+            $html .= '<small class="admin-settings__hint">' . Html::escape($hint) . '</small>';
+        }
+
+        return $html . '</label>';
     }
 
     private function plugins(StateSnapshot $state): string

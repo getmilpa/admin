@@ -16,12 +16,14 @@ namespace Milpa\Admin;
 
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
+use Milpa\Admin\Components\SettingsComponent;
 use Milpa\Admin\Components\StackComponent;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
 use Milpa\Admin\Controllers\StackController;
 use Milpa\Admin\Data\PluginsSource;
 use Milpa\Admin\Data\RoutesSource;
+use Milpa\Admin\Data\SettingsSource;
 use Milpa\Admin\Data\StackSource;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 use Milpa\Admin\I18n\Catalog;
@@ -50,12 +52,15 @@ use Milpa\Runtime\Http\RouteProviderInterface;
  *
  * Add it to `config/plugins.php` and `/milpa/admin` exists: a shell of Milpa Components whose sidebar
  * lists every section the booted plugins declared through {@see AdminSectionProvider}. This plugin's own
- * sections — the plugins the app boots, the routes they declare and the backing services they need —
- * enter through that same contract, so the panel has no privileged path and names no plugin.
+ * sections — the plugins the app boots, the routes they declare, what the app declared about the panel
+ * itself, and the backing services the plugins need — enter through that same contract, so the panel
+ * has no privileged path and names no plugin.
  *
  * What the app declares (`admin.*` in its config): `route` (default `/milpa/admin`), `locale` (`en`|`es`),
  * `middleware` (PSR-15 classes attached to every panel route; default {@see LoopbackOnlyMiddleware}),
- * `secret` (state signing; falls back to `live.secret`, then a derived one), `title`.
+ * `secret` (state signing; falls back to `live.secret`, then a derived one), `title`. A `middleware`
+ * class that does not exist makes every panel route fall back to loopback-only — the Settings section
+ * and the topbar chip say so (greenhouse decisions/0204).
  */
 #[PluginMetadata(
     version: '0.6.0',
@@ -115,6 +120,15 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 renderer: $renderer,
             ),
             new AdminSection(
+                id: 'settings',
+                title: 'nav.settings',
+                component: SettingsComponent::NAME,
+                order: 25,
+                group: 'admin',
+                definition: new SettingsComponent(new SettingsSource($settings)),
+                renderer: $renderer,
+            ),
+            new AdminSection(
                 id: 'stack',
                 title: 'nav.stack',
                 component: StackComponent::NAME,
@@ -140,7 +154,8 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
     }
 
     /**
-     * The panel's routes, each carrying the declared middleware stack.
+     * The panel's routes, each carrying the EFFECTIVE middleware stack — the declared one when every
+     * class in it exists, loopback-only the moment one does not ({@see AdminSettings::effectiveMiddleware()}).
      *
      * @return list<Route>
      */
@@ -148,7 +163,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
     {
         $settings = $this->settings ?? AdminSettings::fromConfig(null);
         $route = $settings->route;
-        $middleware = $settings->middleware;
+        $middleware = $settings->effectiveMiddleware();
 
         return [
             new Route(
@@ -183,7 +198,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
     }
 
     /**
-     * The panel's own sections — Plugins, Routes and Stack — through the same contract every plugin uses.
+     * The panel's own sections — Plugins, Routes, Settings and Stack — through the same contract every plugin uses.
      *
      * @return list<AdminSection>
      */

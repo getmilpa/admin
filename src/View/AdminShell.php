@@ -28,10 +28,12 @@ use Milpa\Live\ValueObjects\ComponentContext;
  * The panel's shell, composed — not hand-written — from Milpa Components.
  *
  * `<milpa:dashboard-shell>` holds a sidebar (one item per discovered section), a topbar (the active
- * section's title) and a main region carrying the active section's component, all compiled by
- * `XhtmlComponentCompiler` over the {@see ComponentBook}. Two lifecycle pairs make it extensible without
- * touching it: `admin.section.before_render`/`after_render` (the section's props, then its HTML) and
- * `admin.shell.before_render`/`after_render` (the composition and items, then the HTML).
+ * section's title, and two chips: the gate in effect and the locale) and a main region carrying the
+ * active section's component, all compiled by `XhtmlComponentCompiler` over the {@see ComponentBook}.
+ * Two lifecycle pairs make it extensible without touching it: `admin.section.before_render`/`after_render`
+ * (the section's props, then its HTML) and `admin.shell.before_render`/`after_render` (the composition
+ * and items, then the HTML). The locale travels in the {@see ComponentContext}, so a section's renderer
+ * answers in the same language the shell does.
  */
 final class AdminShell
 {
@@ -43,10 +45,19 @@ final class AdminShell
 
     public function __construct(
         private readonly AdminSettings $settings,
-        private readonly Catalog $catalog,
+        private Catalog $catalog,
         private readonly StateTransferCodecInterface $codec,
         private readonly ?MilpaEventDispatcherInterface $events = null,
     ) {
+    }
+
+    /** The same shell answering in another catalog — a request's `?lang=` — with everything else shared. */
+    public function withCatalog(Catalog $catalog): self
+    {
+        $shell = clone $this;
+        $shell->catalog = $catalog;
+
+        return $shell;
     }
 
     /** Renders the shell with every discovered section in the sidebar and the active one in main. */
@@ -73,6 +84,7 @@ final class AdminShell
 
         $defaults = [
             'dashboard-sidebar' => ['items' => $shell->items],
+            'dashboard-topbar' => ['childrenHtml' => $this->chips()],
             'dashboard-main' => ['childrenHtml' => $sectionHtml],
         ];
         $shell->html = $book->compiler($defaults)->compile($shell->markup, $context)->output;
@@ -98,6 +110,7 @@ final class AdminShell
         $notice = '<p class="mui-alert mui-alert--info admin-notice">' . htmlspecialchars($this->catalog->tr('section.none'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
         $defaults = [
             'dashboard-sidebar' => ['items' => []],
+            'dashboard-topbar' => ['childrenHtml' => $this->chips()],
             'dashboard-main' => ['childrenHtml' => $notice],
         ];
 
@@ -143,6 +156,24 @@ final class AdminShell
             self::attr($this->settings->title),
             self::attr($active->id),
         );
+    }
+
+    /**
+     * The topbar's end slot: the gate in effect (`gate: loopback | custom | open | fallback` — a fallback
+     * wears the warning badge, because a misdeclared gate is something to fix) and the locale answering.
+     */
+    private function chips(): string
+    {
+        $kind = $this->settings->gateKind();
+        $gateClass = 'mui-badge admin-chip admin-chip--gate' . ($kind === AdminSettings::GATE_FALLBACK ? ' mui-badge--warning' : '');
+        $locale = $this->catalog->locale();
+
+        return '<span class="' . $gateClass . '" data-gate="' . self::attr($kind) . '">'
+            . self::attr($this->catalog->tr('chip.gate', $this->catalog->tr('gate.kind.' . $kind)))
+            . '</span>'
+            . '<span class="mui-badge admin-chip admin-chip--locale" data-locale="' . self::attr($locale) . '">'
+            . self::attr($locale)
+            . '</span>';
     }
 
     /**

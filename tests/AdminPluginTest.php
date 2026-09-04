@@ -19,6 +19,7 @@ use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
 use Milpa\Admin\Controllers\StackController;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
+use Milpa\Admin\Tests\Fixtures\AllowAllMiddleware;
 use Milpa\Admin\Tests\Fixtures\DuplicatePlugin;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
@@ -57,7 +58,7 @@ final class AdminPluginTest extends TestCase
         self::assertTrue($container->has(AssetsController::class));
         self::assertTrue($container->has(StackController::class));
         self::assertTrue($container->has(LoopbackOnlyMiddleware::class));
-        self::assertSame(['plugins', 'routes', 'stack'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
+        self::assertSame(['plugins', 'routes', 'settings', 'stack'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
         self::assertSame('/milpa/admin', $plugin->settings()->route);
 
         $plugin->install();
@@ -159,8 +160,110 @@ final class AdminPluginTest extends TestCase
 
         $missing = $controller->section(self::sectionRequest('ghost'));
         self::assertSame(404, $missing->getStatusCode());
-        self::assertStringContainsString('No section is named «ghost»', (string) $missing->getBody());
+        $body = (string) $missing->getBody();
+        self::assertStringContainsString('No section is named «ghost». The sections present are: ', $body);
+        foreach (['hola', 'echo', 'plugins', 'routes', 'settings', 'stack'] as $present) {
+            self::assertMatchesRegularExpression('~The sections present are: [^.]*\b' . $present . '\b~', $body, 'the 404 lists ' . $present);
+        }
         self::assertSame(404, $controller->section(new ServerRequest('GET', '/x'))->getStatusCode(), 'no route result → empty id → nothing is named that');
+        self::assertStringContainsString('Las secciones presentes son: ', (string) $controller->section(self::sectionRequest('ghost', 'lang=es'))->getBody());
+    }
+
+    public function testAMisdeclaredGateFallsBackToLoopbackOnlyAndSettingsSaysSo(): void
+    {
+        [$container] = self::boot([AdminPlugin::class], ['admin' => ['middleware' => [AllowAllMiddleware::class, 'Acme\\Nope']]]);
+        $admin = self::admin($container);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        foreach ($admin->routes() as $route) {
+            self::assertSame([LoopbackOnlyMiddleware::class], $route->middleware, $route->path . ' carries the strict gate, and only it');
+        }
+        self::assertSame('fallback', $admin->settings()->gateKind());
+        self::assertSame(['plugins', 'routes', 'settings', 'stack'], array_map(static fn ($s): string => $s->id, $admin->adminSections()));
+
+        $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
+        self::assertStringContainsString('href="/milpa/admin/s/settings"', $index, 'the Settings section is in the sidebar');
+        self::assertStringContainsString('data-gate="fallback">gate: fallback</span>', $index, 'the chip says so on every page');
+        self::assertStringContainsString('admin-chip--gate mui-badge--warning', $index);
+
+        $settings = $controller->section(self::sectionRequest('settings'));
+        self::assertSame(200, $settings->getStatusCode(), 'the panel keeps serving');
+        $html = (string) $settings->getBody();
+        self::assertStringContainsString('admin-section--admin-settings', $html);
+        self::assertStringContainsString('admin.middleware names Acme\Nope, which does not exist. The panel fell back to the loopback-only gate', $html);
+        self::assertStringContainsString('<code>AllowAllMiddleware, Acme\Nope</code> <span class="mui-badge mui-badge--danger">unresolved</span>', $html);
+        self::assertStringContainsString('<title>Settings · Milpa Admin</title>', $html);
+    }
+
+    public function testACustomGateThatExistsIsCarriedAsDeclaredAndAnOpenOneStaysOpen(): void
+    {
+        [$container] = self::boot([AdminPlugin::class], ['admin' => ['middleware' => [AllowAllMiddleware::class]]]);
+        $admin = self::admin($container);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        self::assertSame([AllowAllMiddleware::class], $admin->routes()[0]->middleware);
+        self::assertSame('custom', $admin->settings()->gateKind());
+        $html = (string) $controller->section(self::sectionRequest('settings'))->getBody();
+        self::assertStringContainsString('data-gate="custom">gate: custom</span>', $html);
+        self::assertStringContainsString('<td><code>middleware</code></td><td><code>AllowAllMiddleware</code></td><td><span class="mui-badge mui-badge--accent">config</span></td>', $html);
+        self::assertStringNotContainsString('mui-badge--danger', $html);
+        self::assertStringNotContainsString('has no admin key', $html);
+
+        [$container] = self::boot([AdminPlugin::class], ['admin' => ['middleware' => []]]);
+        self::assertSame([], self::admin($container)->routes()[0]->middleware, 'the app opened the panel on purpose');
+        self::assertSame('open', self::admin($container)->settings()->gateKind());
+    }
+
+    public function testAFreshAppSeesFiveDefaultsAndTheSnippetToPaste(): void
+    {
+        [$container] = self::boot([AdminPlugin::class]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $html = (string) $controller->section(self::sectionRequest('settings'))->getBody();
+
+        self::assertStringContainsString('config/app.php has no admin key', $html);
+        self::assertStringContainsString('<pre class="admin-snippet"><code>', $html);
+        self::assertStringContainsString('LoopbackOnlyMiddleware::class]],</code></pre>', $html);
+        self::assertSame(5, substr_count($html, '<span class="mui-badge">default</span>'));
+        self::assertStringContainsString('●●●</span>derived</td>', $html);
+        self::assertStringContainsString('data-gate="loopback">gate: loopback</span>', $html);
+        self::assertStringContainsString('<script data-admin-prefs="early">', $html);
+        self::assertStringContainsString('<script data-admin-prefs="delegated">', $html);
+    }
+
+    public function testTheLanguageQueryOverridesTheLocaleForThatRequestOnlyWhenTheCatalogCarriesIt(): void
+    {
+        $container = new DIContainer();
+        $plugin = new AdminPlugin($container);
+        $plugin->boot();
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $es = (string) $controller->index((new ServerRequest('GET', '/milpa/admin?lang=es'))->withQueryParams(['lang' => 'es']))->getBody();
+        self::assertStringContainsString('<html lang="es"', $es);
+        self::assertStringContainsString('Rutas', $es, 'the sidebar speaks Spanish');
+        self::assertStringContainsString('Plugins que esta app arranca', $es, 'so does the section body');
+        self::assertStringContainsString('data-locale="es">es</span>', $es, 'and the chip');
+        self::assertStringContainsString('<title>Plugins · Milpa Admin</title>', $es);
+
+        $fromUri = (string) $controller->index(new ServerRequest('GET', '/milpa/admin?lang=es'))->getBody();
+        self::assertStringContainsString('Rutas', $fromUri, 'read from the URI when the host did not parse the query');
+
+        $unknown = (string) $controller->index(new ServerRequest('GET', '/milpa/admin?lang=xx'))->getBody();
+        self::assertStringContainsString('<html lang="en"', $unknown, 'a locale the catalog lacks is ignored');
+        self::assertStringContainsString('Routes', $unknown);
+        self::assertStringNotContainsString('Rutas', $unknown);
+
+        $plain = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
+        self::assertStringContainsString('<html lang="en"', $plain, 'nothing stuck: the override was for one request');
+        self::assertStringNotContainsString('Rutas', $plain);
+
+        $section = (string) $controller->section(self::sectionRequest('settings', 'lang=es'))->getBody();
+        self::assertStringContainsString('Preferencias del panel', $section);
+        self::assertStringContainsString('<title>Ajustes · Milpa Admin</title>', $section);
     }
 
     public function testADuplicateSectionIdIsA500ThatNamesBothPlugins(): void
@@ -206,16 +309,19 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('<html lang="es"', $html);
         self::assertStringContainsString('href="/panel/s/plugins"', $html);
         self::assertStringContainsString('Rutas', $html);
+        self::assertSame([], self::admin($container)->routes()[0]->middleware, 'the app opened the panel on purpose');
+    }
+
+    private static function admin(DIContainer $container): AdminPlugin
+    {
         $kernel = $container->get(Kernel::class);
         \assert($kernel instanceof Kernel);
-        $admin = null;
         foreach ($kernel->plugins() as $plugin) {
             if ($plugin instanceof AdminPlugin) {
-                $admin = $plugin;
+                return $plugin;
             }
         }
-        self::assertNotNull($admin);
-        self::assertSame([], $admin->routes()[0]->middleware, 'the app opened the panel on purpose');
+        self::fail('the kernel did not boot the admin plugin');
     }
 
     /**
@@ -233,11 +339,11 @@ final class AdminPluginTest extends TestCase
         return [$container, $kernel];
     }
 
-    private static function sectionRequest(string $id): ServerRequest
+    private static function sectionRequest(string $id, string $query = ''): ServerRequest
     {
         $route = new Route(path: '/milpa/admin/s/{id}', handler: HandlerReference::method(AdminController::class, 'section'));
 
-        return (new ServerRequest('GET', '/milpa/admin/s/' . $id))
+        return (new ServerRequest('GET', '/milpa/admin/s/' . $id . ($query === '' ? '' : '?' . $query)))
             ->withAttribute(RouteResult::ATTRIBUTE, RouteResult::matched($route, ['id' => $id]));
     }
 }

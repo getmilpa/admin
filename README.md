@@ -31,10 +31,11 @@ return [
 ];
 ```
 
-The panel opens with three sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
-**Routes** (every route the booted plugins declared, with handler and per-route middleware) and **Stack** (every
-backing service the booted plugins declared they need — image, ports, environment with secrets masked, the
-declaring plugin — and whether its port answers on loopback) — and one more per plugin that declares one.
+The panel opens with four sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
+**Routes** (every route the booted plugins declared, with handler and per-route middleware), **Settings** (what the
+app declared about the panel itself, key by key, with its source) and **Stack** (every backing service the booted
+plugins declared they need — image, ports, environment with secrets masked, the declaring plugin — and whether its
+port answers on loopback) — and one more per plugin that declares one.
 
 ## The one idea: a section is a component a plugin declares
 
@@ -112,6 +113,21 @@ Everything under the `admin` key of the app's config; every knob has a safe defa
 
 Assets (design tokens, bundle, the `milpa/live-web` client runtime and Alpine) are served by the panel itself under
 `{route}/assets/` — no build step, nothing copied into `public/`.
+
+## Settings: what was declared, with its source
+
+The **Settings** section reads the `admin` key back to you — `route · locale · middleware · secret · title`, each
+with a `default` or `config` badge — and never writes it: changing configuration is a governed operation, not a
+form. The secret shows only where it came from (`declared (admin.secret)`, `declared (live.secret)`, `derived`),
+never the value. A fresh app with no `admin` key sees five defaults and the exact snippet to paste. Above the table,
+**Panel preferences** — theme (`dark · light · system`), density, a language override and remembered filters — are
+browser-local: stored in `localStorage` under `milpa.admin.prefs`, applied by the page, never sent to the server.
+
+The one rule the panel enforces rather than copies: **if any class in `admin.middleware` does not exist, every panel
+route falls back to `[LoopbackOnlyMiddleware::class]`** — the strict gate, never an open one and never the half that
+loads — and the panel says so (a danger badge on the row, a notice in Settings, `gate: fallback` in the topbar).
+The topbar always shows the gate in effect (`loopback · custom · open · fallback`) and the locale. Any panel page
+accepts `?lang=en|es` to render in another catalog language for that request (greenhouse `decisions/0204`).
 
 ## Measured, not assumed
 

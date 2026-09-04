@@ -28,6 +28,7 @@ use Milpa\Container\DIContainer;
 use Milpa\Live\Security\HmacStateSigner;
 use Milpa\Live\Security\SignedXhtmlStateTransferCodec;
 use Milpa\Live\Transport\XhtmlStateTransferCodec;
+use Milpa\Runtime\Config;
 use PHPUnit\Framework\TestCase;
 
 final class AdminShellTest extends TestCase
@@ -113,11 +114,46 @@ final class AdminShellTest extends TestCase
         self::assertStringContainsString('No plugin declared an admin section yet', $html);
     }
 
-    private static function shell(?RecordingDispatcher $events = null): AdminShell
+    public function testTopbarChipsSayTheGateInEffectAndTheLocale(): void
+    {
+        $catalogue = SectionCatalogue::discover([new HolaPlugin(new DIContainer())]);
+        $active = $catalogue->find('hola');
+        self::assertNotNull($active);
+
+        $html = self::shell()->render($catalogue, $active);
+        self::assertStringContainsString('<div class="mui-topbar__end"><span class="mui-badge admin-chip admin-chip--gate" data-gate="loopback">gate: loopback</span><span class="mui-badge admin-chip admin-chip--locale" data-locale="en">en</span></div>', $html);
+
+        $fallback = self::shell(settings: AdminSettings::fromConfig(new Config(['admin' => ['middleware' => ['Acme\\Nope']]])), catalog: new Catalog('es'));
+        $html = $fallback->render($catalogue, $active);
+        self::assertStringContainsString('<span class="mui-badge admin-chip admin-chip--gate mui-badge--warning" data-gate="fallback">puerta: respaldo</span>', $html, 'a misdeclared gate is something to fix');
+        self::assertStringContainsString('<span class="mui-badge admin-chip admin-chip--locale" data-locale="es">es</span>', $html);
+        self::assertStringContainsString('data-gate="fallback"', $fallback->renderEmpty(SectionCatalogue::discover([])), 'the empty state wears the chips too');
+
+        self::assertStringContainsString('data-gate="open">gate: open</span>', self::shell(settings: AdminSettings::fromConfig(new Config(['admin' => ['middleware' => []]])))->render($catalogue, $active));
+        self::assertStringContainsString('data-gate="custom">gate: custom</span>', self::shell(settings: new AdminSettings(middleware: [\stdClass::class]))->render($catalogue, $active));
+    }
+
+    public function testWithCatalogAnswersInAnotherLanguageAndLeavesTheOriginalAlone(): void
+    {
+        $shell = self::shell();
+        $spanish = $shell->withCatalog(new Catalog('es'));
+        $routes = new AdminSection('r', 'nav.routes', 'metric-card');
+
+        self::assertSame('Rutas', $spanish->title($routes));
+        self::assertSame('Routes', $shell->title($routes));
+
+        $catalogue = SectionCatalogue::discover([new HolaPlugin(new DIContainer())]);
+        $active = $catalogue->find('hola');
+        self::assertNotNull($active);
+        self::assertStringContainsString('data-locale="es">es</span>', $spanish->render($catalogue, $active));
+        self::assertStringContainsString('Ningún plugin declaró todavía', $spanish->renderEmpty(SectionCatalogue::discover([])));
+    }
+
+    private static function shell(?RecordingDispatcher $events = null, ?AdminSettings $settings = null, ?Catalog $catalog = null): AdminShell
     {
         return new AdminShell(
-            AdminSettings::fromConfig(null),
-            new Catalog(),
+            $settings ?? AdminSettings::fromConfig(null),
+            $catalog ?? new Catalog(),
             new SignedXhtmlStateTransferCodec(new XhtmlStateTransferCodec(), new HmacStateSigner('test-secret-0123456789'), null),
             $events,
         );
