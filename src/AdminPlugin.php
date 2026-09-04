@@ -58,12 +58,13 @@ use Milpa\Runtime\Http\RouteProviderInterface;
  *
  * What the app declares (`admin.*` in its config): `route` (default `/milpa/admin`), `locale` (`en`|`es`),
  * `middleware` (PSR-15 classes attached to every panel route; default {@see LoopbackOnlyMiddleware}),
- * `secret` (state signing; falls back to `live.secret`, then a derived one), `title`. A `middleware`
- * class that does not exist makes every panel route fall back to loopback-only — the Settings section
- * and the topbar chip say so (greenhouse decisions/0204).
+ * `secret` (state signing; falls back to `live.secret`, then a derived one), `title`. Only a literally
+ * empty `middleware` list opens the panel; any misdeclaration — a non-string entry, a map, a value that
+ * is not a list, a class that does not exist or is not PSR-15 — makes every panel route fall back to
+ * loopback-only, and the Settings section and the topbar chip say so (greenhouse decisions/0204).
  */
 #[PluginMetadata(
-    version: '0.6.0',
+    version: '0.8.0', // x-release-please-version
     author: 'Rodrigo Vicente - TeamX Agency',
     site: 'https://teamx.agency',
     name: 'Admin',
@@ -155,7 +156,8 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
 
     /**
      * The panel's routes, each carrying the EFFECTIVE middleware stack — the declared one when every
-     * class in it exists, loopback-only the moment one does not ({@see AdminSettings::effectiveMiddleware()}).
+     * entry names a PSR-15 middleware class (an empty list included), loopback-only the moment the
+     * declaration is anything else ({@see AdminSettings::effectiveMiddleware()}).
      *
      * @return list<Route>
      */

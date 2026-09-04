@@ -19,13 +19,15 @@ use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 
 /**
  * What the app declared about its panel, as the Settings section shows it: one row per key with the
- * value the panel is using and where it came from.
+ * value the panel is using, where it came from, and — when the panel refused what was declared — what
+ * the app wrote.
  *
  * Pure — it reads the {@see AdminSettings} the panel booted with and nothing else. Values are shown as
  * declared (route, locale, title verbatim; middleware as class names), except the secret: its row carries
- * only where it came from, never the value nor a fragment of it. A middleware class that does not exist
- * is kept in the row under its full name — that is the one to fix — and listed in `unresolved`, so the
- * renderer can say the panel fell back to the strict gate (greenhouse decisions/0204).
+ * only where it came from, never the value nor a fragment of it. A declared middleware list is shown
+ * entry by entry — short names for the classes that load, the whole name for a typo, the type for an
+ * entry that is not a name, `(empty)` for an empty string — and every defect is listed in `unresolved`,
+ * so the renderer can say the panel fell back to the strict gate (greenhouse decisions/0204).
  */
 final class SettingsSource
 {
@@ -34,27 +36,34 @@ final class SettingsSource
     }
 
     /**
-     * The five rows, the effective gate, whether the app declared anything, and the snippet to paste when it did not.
+     * The five rows, the effective gate, whether the app declared anything, whether the gate was
+     * malformed, and the snippet to paste when the app declared nothing.
      *
-     * @return array{declared: bool, gate: string, locale: string, rows: list<array{key: string, value: string, source: string}>, unresolved: list<string>, snippet: string}
+     * @return array{declared: bool, gate: string, locale: string, rows: list<array{key: string, value: string, source: string, declared: string|null}>, unresolved: list<string>, malformed: bool, snippet: string}
      */
     public function snapshot(): array
     {
         $settings = $this->settings;
         $sources = $settings->sources();
-        $unresolved = $settings->unresolvedMiddleware();
+        $rejected = $settings->rejected();
+        $malformed = $settings->malformed();
 
         $values = [
             'route' => $settings->route,
             'locale' => $settings->locale,
-            'middleware' => self::middleware($settings->middleware, $unresolved),
+            'middleware' => self::middleware($malformed ? $settings->effectiveMiddleware() : $settings->middleware),
             'secret' => $settings->secretSource(),
             'title' => $settings->title,
         ];
 
         $rows = [];
         foreach (AdminSettings::KEYS as $key) {
-            $rows[] = ['key' => $key, 'value' => $values[$key], 'source' => $sources[$key] ?? AdminSettings::SOURCE_DEFAULT];
+            $rows[] = [
+                'key' => $key,
+                'value' => $values[$key],
+                'source' => $sources[$key] ?? AdminSettings::SOURCE_DEFAULT,
+                'declared' => $rejected[$key] ?? null,
+            ];
         }
 
         return [
@@ -62,7 +71,8 @@ final class SettingsSource
             'gate' => $settings->gateKind(),
             'locale' => $settings->locale,
             'rows' => $rows,
-            'unresolved' => $unresolved,
+            'unresolved' => $settings->unresolvedMiddleware(),
+            'malformed' => $malformed,
             'snippet' => self::snippet(),
         ];
     }
@@ -79,22 +89,34 @@ final class SettingsSource
     }
 
     /**
-     * The declared stack for a human: `[]` when the app opened the panel on purpose, else short class
-     * names — except the unresolved ones, kept whole so the typo is visible.
+     * A middleware list for a human: `[]` when the app opened the panel on purpose, else one item per
+     * entry — see {@see self::entry()}.
      *
-     * @param list<string> $middleware
-     * @param list<string> $unresolved
+     * @param list<mixed> $middleware
      */
-    private static function middleware(array $middleware, array $unresolved): string
+    private static function middleware(array $middleware): string
     {
         if ($middleware === []) {
             return '[]';
         }
 
-        return implode(', ', array_map(
-            static fn (string $class): string => \in_array($class, $unresolved, true) ? $class : self::shortName($class),
-            $middleware,
-        ));
+        return implode(', ', array_map(self::entry(...), $middleware));
+    }
+
+    /**
+     * One declared entry: the short name of a class that loads, the whole name of one that does not
+     * (that is the one to fix), the type of anything that is not a name, `(empty)` for an empty string.
+     */
+    private static function entry(mixed $entry): string
+    {
+        if (!\is_string($entry)) {
+            return get_debug_type($entry);
+        }
+        if ($entry === '') {
+            return AdminSettings::EMPTY;
+        }
+
+        return AdminSettings::middlewareDefect($entry) === null ? self::shortName($entry) : $entry;
     }
 
     private static function shortName(string $class): string

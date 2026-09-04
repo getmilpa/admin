@@ -253,14 +253,15 @@ final class AdminHtmlRendererTest extends TestCase
         self::assertStringContainsString('admin-section--admin-settings', $html);
         self::assertStringContainsString('What this app declared about its panel', $html);
         self::assertStringContainsString('<h3 class="mui-h3">Panel preferences</h3>', $html);
-        self::assertStringContainsString('This browser only — applied instantly, never sent to the server.', $html);
+        self::assertStringContainsString('Theme and density are this browser only — applied instantly, never sent to the server.', $html);
         self::assertStringContainsString('<form class="admin-prefs" data-prefs="">', $html);
         self::assertStringContainsString('<select class="mui-input mui-input--sm" data-pref="theme" id="admin-pref-theme"><option value="dark">dark</option><option value="light">light</option><option value="system">system</option></select>', $html);
         self::assertStringContainsString('data-pref="density"', $html);
         self::assertStringContainsString('<option value="comfortable">comfortable</option><option value="compact">compact</option>', $html);
         self::assertStringContainsString('<select class="mui-input mui-input--sm" data-pref="lang" id="admin-pref-lang"><option value="server">server (es)</option><option value="en">en</option><option value="es">es</option></select>', $html, 'server means admin.locale, which this app declared as es');
-        self::assertStringContainsString('overrides admin.locale in this browser only', $html);
-        self::assertStringContainsString('<input type="checkbox" data-pref="filters" id="admin-pref-filters"> Remember table filters', $html);
+        self::assertStringContainsString('sent as ?lang= with each request, never stored on the server', $html, 'the override travels, it is not kept server-side');
+        self::assertStringNotContainsString('data-pref="filters"', $html, 'nothing consumes a remembered-filters preference, so the panel does not offer one');
+        self::assertStringNotContainsString('type="checkbox"', $html);
         self::assertStringNotContainsString('x-data', $html, 'no per-instance state: the page\'s delegated script owns the controls');
         self::assertStringNotContainsString('type="submit"', $html, 'nothing to save');
 
@@ -276,6 +277,8 @@ final class AdminHtmlRendererTest extends TestCase
         self::assertStringNotContainsString('hunter2', $html);
         self::assertStringNotContainsString('has no admin key', $html);
         self::assertStringNotContainsString('mui-alert--danger', $html);
+        self::assertStringNotContainsString('mui-badge--danger', $html);
+        self::assertStringNotContainsString('admin-settings__declared', $html, 'nothing was refused, nothing to explain');
         self::assertStringNotContainsString('admin-snippet', $html);
         self::assertStringContainsString('data-milpa-state="st1"', $html);
 
@@ -305,7 +308,7 @@ final class AdminHtmlRendererTest extends TestCase
         )->output;
 
         self::assertStringContainsString(
-            '<p class="mui-alert mui-alert--danger admin-notice">One configured value does not resolve: admin.middleware names Acme\Nope, which does not exist. The panel fell back to the loopback-only gate for every request — never to open. Every other key loaded.</p>',
+            '<p class="mui-alert mui-alert--danger admin-notice">One configured value does not resolve: admin.middleware names «Acme\Nope (class does not exist)». Every entry must name a PSR-15 middleware class, so the panel fell back to the loopback-only gate for every request — never to open. Every other key loaded.</p>',
             $html,
         );
         self::assertStringContainsString(
@@ -319,7 +322,92 @@ final class AdminHtmlRendererTest extends TestCase
             self::settings(['admin' => ['middleware' => ['Acme\\Nope', 'Acme\\Missing']]]),
             new RenderRequest(context: new ComponentContext(componentId: 'st4')),
         )->output;
-        self::assertStringContainsString('admin.middleware names Acme\Nope and Acme\Missing, which do', $two);
+        self::assertStringContainsString('admin.middleware names «Acme\Nope (class does not exist)» and «Acme\Missing (class does not exist)». Every entry', $two);
+
+        $int = self::renderer()->render(
+            self::settings(['admin' => ['middleware' => [42]]]),
+            new RenderRequest(context: new ComponentContext(componentId: 'st4b')),
+        )->output;
+        self::assertStringContainsString('admin.middleware names «int (not a class name)». Every entry', $int);
+        self::assertStringContainsString('<td><code>middleware</code></td><td><code>int</code> <span class="mui-badge mui-badge--danger">unresolved</span></td><td><span class="mui-badge mui-badge--accent">config</span></td>', $int, 'a list was declared: config, with the defect on the value');
+
+        $empty = self::renderer()->render(
+            self::settings(['admin' => ['middleware' => ['']]]),
+            new RenderRequest(context: new ComponentContext(componentId: 'st4c')),
+        )->output;
+        self::assertStringContainsString('admin.middleware names «(empty)». Every entry', $empty, 'never an empty name in the sentence');
+        self::assertStringContainsString('<td><code>middleware</code></td><td><code>(empty)</code> <span class="mui-badge mui-badge--danger">unresolved</span></td>', $empty);
+
+        $notMiddleware = self::renderer()->render(
+            self::settings(['admin' => ['middleware' => [\stdClass::class]]]),
+            new RenderRequest(context: new ComponentContext(componentId: 'st4d')),
+        )->output;
+        self::assertStringContainsString('admin.middleware names «stdClass (not a PSR-15 middleware)». Every entry', $notMiddleware);
+    }
+
+    public function testSettingsRejectedRowsShowTheEffectiveValueWhatWasDeclaredAndADangerSource(): void
+    {
+        $component = self::settings(['admin' => ['route' => 42, 'locale' => 'fr', 'middleware' => 'Acme\\Nope', 'title' => '']]);
+
+        $html = self::renderer()->render($component, new RenderRequest(context: new ComponentContext(componentId: 'st10')))->output;
+
+        self::assertStringContainsString(
+            '<p class="mui-alert mui-alert--danger admin-notice">One configured value is malformed: admin.middleware must be a list of PSR-15 middleware class names, but the app declared string (not a list). The panel fell back to the loopback-only gate for every request — never to open. Every other key loaded.</p>',
+            $html,
+        );
+        self::assertStringContainsString(
+            '<tr class="admin-settings__row--rejected"><td><code>route</code></td><td><code>/milpa/admin</code> <span class="admin-settings__declared">(declared: int)</span></td><td><span class="mui-badge mui-badge--danger">rejected</span></td></tr>',
+            $html,
+        );
+        self::assertStringContainsString(
+            '<tr class="admin-settings__row--rejected"><td><code>locale</code></td><td><code>en</code> <span class="admin-settings__declared">(declared: fr)</span></td><td><span class="mui-badge mui-badge--danger">rejected</span></td></tr>',
+            $html,
+            'the effective value in the row, what was declared next to it',
+        );
+        self::assertStringContainsString(
+            '<tr class="admin-settings__row--rejected"><td><code>middleware</code></td><td><code>LoopbackOnlyMiddleware</code> <span class="admin-settings__declared">(declared: string)</span></td><td><span class="mui-badge mui-badge--danger">rejected</span></td></tr>',
+            $html,
+            'a non-list gate is rejected whole: the strict gate in the row, no per-entry badge',
+        );
+        self::assertStringContainsString(
+            '<tr class="admin-settings__row--rejected"><td><code>title</code></td><td><code>Milpa Admin</code> <span class="admin-settings__declared">(declared: (empty))</span></td><td><span class="mui-badge mui-badge--danger">rejected</span></td></tr>',
+            $html,
+        );
+        self::assertStringContainsString('<tr><td><code>secret</code></td><td><span class="admin-settings__secret" aria-hidden="true">●●●</span>derived</td><td><span class="mui-badge">default</span></td></tr>', $html);
+        self::assertSame(4, substr_count($html, 'mui-badge--danger'), 'four rejected sources, no unresolved badge');
+        self::assertSame(1, substr_count($html, '<span class="mui-badge">default</span>'), 'only the secret is a plain default: nothing the app wrote is painted default');
+        self::assertStringNotContainsString('has no admin key', $html, 'declared, so no empty state');
+        self::assertStringContainsString('<option value="server">server (en)</option>', $html, 'the server locale is the one in effect, not the one refused');
+
+        $spanish = self::renderer('es')->render($component, new RenderRequest(context: new ComponentContext(componentId: 'st11')))->output;
+        self::assertStringContainsString('Un valor configurado está mal formado: admin.middleware debe ser una lista de nombres de clase de middleware PSR-15, pero la app declaró string (not a list).', $spanish);
+        self::assertStringContainsString('<code>en</code> <span class="admin-settings__declared">(declarado: fr)</span></td><td><span class="mui-badge mui-badge--danger">rechazado</span>', $spanish);
+
+        $map = self::renderer()->render(
+            self::settings(['admin' => ['middleware' => [LoopbackOnlyMiddleware::class => true]]]),
+            new RenderRequest(context: new ComponentContext(componentId: 'st12')),
+        )->output;
+        self::assertStringContainsString('but the app declared array (not a list).', $map);
+        self::assertStringContainsString('<code>LoopbackOnlyMiddleware</code> <span class="admin-settings__declared">(declared: array)</span>', $map);
+    }
+
+    public function testSettingsEmptyStateSaysEntirelyOnDefaultsOnlyWhenEverySourceIsADefault(): void
+    {
+        $liveSecret = self::renderer()->render(self::settings(['live' => ['secret' => 'live-hunter2']]), new RenderRequest(context: new ComponentContext(componentId: 'st13')))->output;
+
+        self::assertStringContainsString(
+            '<p class="mui-alert mui-alert--info admin-notice">config/app.php has no admin key: the panel runs on defaults, except the secret it takes from live.secret. Add one to change the route, the locale or the gate:</p>',
+            $liveSecret,
+        );
+        self::assertStringNotContainsString('Running entirely on defaults', $liveSecret, 'the secret is not a default, so the panel does not say it is');
+        self::assertStringContainsString('<pre class="admin-snippet"><code>', $liveSecret, 'the snippet to paste is still offered');
+        self::assertStringContainsString('●●●</span>declared (live.secret)</td><td><span class="mui-badge mui-badge--accent">config</span>', $liveSecret);
+        self::assertSame(4, substr_count($liveSecret, '<span class="mui-badge">default</span>'));
+        self::assertStringNotContainsString('hunter2', $liveSecret);
+
+        $spanish = self::renderer('es')->render(self::settings(['live' => ['secret' => 'live-hunter2']]), new RenderRequest(context: new ComponentContext(componentId: 'st14')))->output;
+        self::assertStringContainsString('config/app.php no tiene llave admin: el panel corre en defaults, salvo el secreto que toma de live.secret.', $spanish);
+        self::assertStringNotContainsString('Corriendo enteramente en defaults', $spanish);
     }
 
     public function testSettingsSpanishTwinAndTheContextLocaleChoosesTheCatalog(): void
@@ -333,7 +421,7 @@ final class AdminHtmlRendererTest extends TestCase
         self::assertStringContainsString('<option value="server">servidor (en)</option>', $spanish);
         self::assertStringContainsString('<h3 class="mui-h3">Configuración</h3>', $spanish);
         self::assertStringContainsString('<th scope="col">Llave</th><th scope="col">Valor</th><th scope="col">Origen</th>', $spanish);
-        self::assertStringContainsString('Un valor configurado no resuelve: admin.middleware nombra Acme\Nope, que no existe. El panel cayó a la puerta sólo-loopback', $spanish);
+        self::assertStringContainsString('Un valor configurado no resuelve: admin.middleware nombra «Acme\Nope (class does not exist)». Cada entrada debe nombrar una clase de middleware PSR-15, así que el panel cayó a la puerta sólo-loopback', $spanish);
         self::assertStringContainsString('<span class="mui-badge mui-badge--danger">no resuelve</span>', $spanish);
         self::assertStringContainsString('●●●</span>declarado (admin.secret)', $spanish);
         self::assertStringNotContainsString('hunter2', $spanish);

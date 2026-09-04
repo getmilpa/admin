@@ -25,8 +25,9 @@ use Milpa\Admin\I18n\Catalog;
  * that keep the viewer's panel preferences: one at the top of `<body>` that applies the stored theme
  * before anything paints, one at the end that stores what the Settings section's `[data-pref]` controls
  * say (`localStorage`, key {@see self::PREFS_KEY}) and applies it — theme on `<html data-theme>`, density
- * on `.mui-shell[data-density]`, the language override by navigating with `?lang=`. Nothing of it reaches
- * the server; a delegated listener, no per-instance state (greenhouse decisions/0204).
+ * on `.mui-shell[data-density]`, the language override by navigating with `?lang=` and keeping it on every
+ * in-panel link. Nothing of it is stored on the server; a delegated listener, no per-instance state
+ * (greenhouse decisions/0204).
  */
 final class AdminPage
 {
@@ -67,7 +68,7 @@ final class AdminPage
             . $shellHtml . "\n"
             . '<script src="' . self::e($this->settings->assetUrl('milpa-live.js')) . '" defer></script>' . "\n"
             . '<script src="' . self::e($this->settings->assetUrl('alpine.min.js')) . '" defer></script>' . "\n"
-            . '<script data-admin-prefs="delegated">' . self::prefsScript() . '</script>' . "\n"
+            . '<script data-admin-prefs="delegated">' . $this->prefsScript() . '</script>' . "\n"
             . '</body>' . "\n"
             . '</html>' . "\n";
     }
@@ -97,8 +98,8 @@ final class AdminPage
             . '.milpa-admin .admin-settings__hint{margin:0;opacity:.7}'
             . '.milpa-admin .admin-prefs{display:grid;gap:var(--space-3,.75rem);grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));margin:0}'
             . '.milpa-admin .admin-prefs__field{display:grid;gap:.25rem}'
-            . '.milpa-admin .admin-prefs__check{display:flex;gap:.5rem;align-items:center}'
             . '.milpa-admin .admin-settings__secret{letter-spacing:.1em;margin-right:.5rem}'
+            . '.milpa-admin .admin-settings__declared{opacity:.7}'
             . '.milpa-admin .admin-chip+.admin-chip{margin-left:.5rem}'
             . '.milpa-admin-error{padding:var(--space-6,2rem);display:grid;gap:1rem;max-width:60ch}';
     }
@@ -118,29 +119,36 @@ final class AdminPage
     /**
      * One delegated `change` listener over `[data-pref]` controls: store, then apply. Theme and density
      * apply in place; the language override navigates with `?lang=` (the server renders the locale) and
-     * stays sticky — sidebar links carry it, and a page that arrived without it is sent back with it.
+     * stays sticky — every anchor under the shell root whose `href` starts with the panel's route carries
+     * it (section links, the brand, the compose file), and a page that arrived without it is sent back
+     * with it. The brand anchor the sidebar component paints as `#` is pointed at the panel's root first,
+     * so it is a panel link like the others.
      */
-    private static function prefsScript(): string
+    private function prefsScript(): string
     {
-        return '(function(){var KEY="' . self::PREFS_KEY . '";'
+        $root = json_encode($this->settings->route, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+        return '(function(){var KEY="' . self::PREFS_KEY . '",ROOT=' . $root . ';'
             . 'function read(){try{var v=JSON.parse(localStorage.getItem(KEY)||"{}");return v&&typeof v==="object"?v:{};}catch(e){return {};}}'
             . 'function write(p){try{localStorage.setItem(KEY,JSON.stringify(p));}catch(e){}}'
             . 'function theme(t){if(t==="system"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}'
             . 'document.documentElement.setAttribute("data-theme",t==="light"?"light":"dark");}'
             . 'function density(d){var s=document.querySelector(".mui-shell");if(s){s.setAttribute("data-density",d==="compact"?"compact":"comfortable");}}'
-            . 'function withLang(href,code){var u=new URL(href,location.href);if(code&&code!=="server"){u.searchParams.set("lang",code);}else{u.searchParams.delete("lang");}return u.href;}'
+            . 'function withLang(href,code){var u=new URL(href,location.href);if(code&&code!=="server"){u.searchParams.set("lang",code);}else{u.searchParams.delete("lang");}return u.pathname+u.search+u.hash;}'
+            . 'function inPanel(h){return h===ROOT||h.indexOf(ROOT+"/")===0||h.indexOf(ROOT+"?")===0;}'
             . 'function apply(p){theme(p.theme||"dark");density(p.density||"comfortable");'
-            . 'var cs=document.querySelectorAll("[data-pref]");for(var i=0;i<cs.length;i++){var c=cs[i],k=c.getAttribute("data-pref");'
-            . 'if(c.type==="checkbox"){c.checked=p[k]===true;}else if(typeof p[k]==="string"){c.value=p[k];}}}'
+            . 'var cs=document.querySelectorAll("[data-pref]");for(var i=0;i<cs.length;i++){var c=cs[i],k=c.getAttribute("data-pref");if(typeof p[k]==="string"){c.value=p[k];}}}'
+            . 'function home(){var b=document.querySelector(".mui-sidebar__brand");if(b&&b.getAttribute("href")==="#"){b.setAttribute("href",ROOT);}}'
             . 'function sticky(p){var l=p.lang;if(!l||l==="server"){return;}'
-            . 'var links=document.querySelectorAll(".mui-sidebar a[href^=\'/\']");for(var i=0;i<links.length;i++){links[i].setAttribute("href",withLang(links[i].getAttribute("href"),l));}'
+            . 'var root=document.querySelector(".mui-shell")||document.body,links=root.querySelectorAll("a[href]");'
+            . 'for(var i=0;i<links.length;i++){var h=links[i].getAttribute("href");if(inPanel(h)){links[i].setAttribute("href",withLang(h,l));}}'
             . 'if(document.documentElement.lang!==l&&!new URL(location.href).searchParams.has("lang")){location.replace(withLang(location.href,l));}}'
             . 'document.addEventListener("change",function(e){var c=e.target;if(!c||!c.getAttribute){return;}var k=c.getAttribute("data-pref");if(!k){return;}'
-            . 'var p=read();p[k]=c.type==="checkbox"?c.checked:c.value;write(p);'
+            . 'var p=read();p[k]=c.value;write(p);'
             . 'if(k==="theme"){theme(p.theme);}else if(k==="density"){density(p.density);}else if(k==="lang"){location.href=withLang(location.href,p.lang);}});'
             . 'document.addEventListener("submit",function(e){if(e.target&&e.target.hasAttribute&&e.target.hasAttribute("data-prefs")){e.preventDefault();}});'
             . 'try{window.matchMedia("(prefers-color-scheme: light)").addEventListener("change",function(){if(read().theme==="system"){theme("system");}});}catch(e){}'
-            . 'function boot(){var p=read();apply(p);sticky(p);}'
+            . 'function boot(){var p=read();apply(p);home();sticky(p);}'
             . 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",boot);}else{boot();}'
             . '})();';
     }

@@ -51,6 +51,7 @@ final class SettingsComponent implements ComponentDefinitionInterface
                 'locale' => ['type' => 'string'],
                 'rows' => ['type' => 'array'],
                 'unresolved' => ['type' => 'array'],
+                'malformed' => ['type' => 'boolean'],
                 'snippet' => ['type' => 'string'],
             ],
         );

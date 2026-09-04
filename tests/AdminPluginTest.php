@@ -29,9 +29,13 @@ use Milpa\Container\DIContainer;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
 use Milpa\Http\Routing\RouteResult;
+use Milpa\Runtime\Http\RequestHandler;
 use Milpa\Runtime\Kernel;
+use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\ServerRequest;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * The panel booted by the real kernel next to a plugin it never heard of — the refuting slice, in-process.
@@ -191,9 +195,81 @@ final class AdminPluginTest extends TestCase
         self::assertSame(200, $settings->getStatusCode(), 'the panel keeps serving');
         $html = (string) $settings->getBody();
         self::assertStringContainsString('admin-section--admin-settings', $html);
-        self::assertStringContainsString('admin.middleware names Acme\Nope, which does not exist. The panel fell back to the loopback-only gate', $html);
+        self::assertStringContainsString('admin.middleware names «Acme\Nope (class does not exist)». Every entry must name a PSR-15 middleware class, so the panel fell back to the loopback-only gate', $html);
         self::assertStringContainsString('<code>AllowAllMiddleware, Acme\Nope</code> <span class="mui-badge mui-badge--danger">unresolved</span>', $html);
         self::assertStringContainsString('<title>Settings · Milpa Admin</title>', $html);
+    }
+
+    /**
+     * The shapes the first form of the rule let through — each one either opened the panel to the LAN
+     * or killed every panel route with a 500. Now each one is the strict gate, served.
+     *
+     * @return iterable<string, array{0: mixed}>
+     */
+    public static function misdeclaredGatesEndToEnd(): iterable
+    {
+        yield 'a non-string entry' => [[42]];
+        yield 'a class that exists but is not a middleware' => [[\stdClass::class]];
+        yield 'a string, not a list' => ['Acme\\Nope'];
+        yield 'an associative map' => [[AllowAllMiddleware::class => true]];
+        yield 'half a gate' => [[AllowAllMiddleware::class, 42]];
+    }
+
+    #[DataProvider('misdeclaredGatesEndToEnd')]
+    public function testThroughTheKernelAMisdeclaredGateIs403FromTheLanAnd200FallbackFromLoopback(mixed $declared): void
+    {
+        $lan = self::dispatch(['admin' => ['middleware' => $declared]], '10.0.0.5');
+        self::assertSame(403, $lan->getStatusCode(), 'the LAN is refused: the strict gate is what runs');
+        self::assertStringNotContainsString('data-gate=', (string) $lan->getBody(), 'nothing of the panel is served past the gate');
+
+        $loopback = self::dispatch(['admin' => ['middleware' => $declared]], '127.0.0.1');
+        self::assertSame(200, $loopback->getStatusCode(), 'loopback is served: the panel did not die with the cause hidden');
+        self::assertStringContainsString('data-gate="fallback">gate: fallback</span>', (string) $loopback->getBody(), 'and the topbar says so');
+    }
+
+    public function testThroughTheKernelALiterallyEmptyListIsTheOneDeclarationThatOpensThePanel(): void
+    {
+        $open = self::dispatch(['admin' => ['middleware' => []]], '10.0.0.5');
+        self::assertSame(200, $open->getStatusCode(), 'the control: [] opens, on purpose');
+        self::assertStringContainsString('data-gate="open">gate: open</span>', (string) $open->getBody());
+
+        self::assertSame(403, self::dispatch([], '10.0.0.5')->getStatusCode(), 'no admin key: loopback-only');
+        self::assertSame(200, self::dispatch([], '127.0.0.1')->getStatusCode());
+
+        $custom = self::dispatch(['admin' => ['middleware' => [AllowAllMiddleware::class]]], '10.0.0.5');
+        self::assertSame(200, $custom->getStatusCode(), 'a real PSR-15 gate is carried as declared');
+        self::assertStringContainsString('data-gate="custom">gate: custom</span>', (string) $custom->getBody());
+    }
+
+    public function testARejectedLocaleRunsTheDefaultEverywhereAndSettingsSaysWhatWasDeclared(): void
+    {
+        [$container] = self::boot([AdminPlugin::class], ['admin' => ['locale' => 'fr']]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $html = (string) $controller->section(self::sectionRequest('settings'))->getBody();
+
+        self::assertStringContainsString('<html lang="en"', $html, 'the document speaks the locale in effect');
+        self::assertStringContainsString('data-locale="en">en</span>', $html, 'so does the chip');
+        self::assertStringContainsString('<code>locale</code></td><td><code>en</code> <span class="admin-settings__declared">(declared: fr)</span></td><td><span class="mui-badge mui-badge--danger">rejected</span>', $html, 'and the row does not pretend the app declared nothing');
+        self::assertStringContainsString('<option value="server">server (en)</option>', $html);
+        self::assertStringContainsString('data-gate="loopback">gate: loopback</span>', $html, 'the gate was not declared: untouched');
+        self::assertStringNotContainsString('mui-alert--danger', $html, 'a rejected locale is not a gate problem');
+    }
+
+    public function testWithOnlyALiveSecretThePanelDoesNotClaimToRunEntirelyOnDefaults(): void
+    {
+        [$container] = self::boot([AdminPlugin::class], ['live' => ['secret' => 'live-hunter2-0123456789']]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $html = (string) $controller->section(self::sectionRequest('settings'))->getBody();
+
+        self::assertStringContainsString('config/app.php has no admin key: the panel runs on defaults, except the secret it takes from live.secret.', $html);
+        self::assertStringNotContainsString('Running entirely on defaults', $html);
+        self::assertStringContainsString('●●●</span>declared (live.secret)</td><td><span class="mui-badge mui-badge--accent">config</span>', $html);
+        self::assertSame(4, substr_count($html, '<span class="mui-badge">default</span>'));
+        self::assertStringNotContainsString('hunter2', $html);
     }
 
     public function testACustomGateThatExistsIsCarriedAsDeclaredAndAnOpenOneStaysOpen(): void
@@ -224,7 +300,7 @@ final class AdminPluginTest extends TestCase
 
         $html = (string) $controller->section(self::sectionRequest('settings'))->getBody();
 
-        self::assertStringContainsString('config/app.php has no admin key', $html);
+        self::assertStringContainsString('Running entirely on defaults: config/app.php has no admin key', $html, 'every one of the five is a default, so the wording is earned');
         self::assertStringContainsString('<pre class="admin-snippet"><code>', $html);
         self::assertStringContainsString('LoopbackOnlyMiddleware::class]],</code></pre>', $html);
         self::assertSame(5, substr_count($html, '<span class="mui-badge">default</span>'));
@@ -345,5 +421,19 @@ final class AdminPluginTest extends TestCase
 
         return (new ServerRequest('GET', '/milpa/admin/s/' . $id . ($query === '' ? '' : '?' . $query)))
             ->withAttribute(RouteResult::ATTRIBUTE, RouteResult::matched($route, ['id' => $id]));
+    }
+
+    /**
+     * One GET of the panel's index through the real kernel and request handler — routing, the
+     * effective middleware, the controller — as a request from the given address would see it.
+     *
+     * @param array<string, mixed> $config
+     */
+    private static function dispatch(array $config, string $remoteAddress): ResponseInterface
+    {
+        [, $kernel] = self::boot([AdminPlugin::class], $config);
+        $handler = new RequestHandler($kernel, new Psr17Factory());
+
+        return $handler->handle(new ServerRequest('GET', '/milpa/admin', [], null, '1.1', ['REMOTE_ADDR' => $remoteAddress]));
     }
 }

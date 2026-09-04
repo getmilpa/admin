@@ -107,15 +107,17 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     /**
      * The Settings section: the viewer's panel preferences (browser-local, `[data-pref]` controls the page's
      * delegated script stores and applies), then the read-only configuration table — key, value, source —
-     * with the empty state's snippet when the app declared nothing and the fallback notice when a declared
-     * middleware class does not exist.
+     * with the empty state's snippet when the app declared nothing (worded «entirely on defaults» only when
+     * every source IS a default) and the danger notice when the declared gate cannot be carried: one that
+     * names each defective entry, or one that names what was received when it was not a list at all.
      */
     private function settings(StateSnapshot $state): string
     {
         $data = $state->data;
         $declared = ($data['declared'] ?? false) === true;
+        $malformed = ($data['malformed'] ?? false) === true;
         $unresolved = \is_array($data['unresolved'] ?? null) ? array_values(array_filter($data['unresolved'], 'is_string')) : [];
-        $rows = \is_array($data['rows'] ?? null) ? $data['rows'] : [];
+        $rows = \is_array($data['rows'] ?? null) ? array_values(array_filter($data['rows'], 'is_array')) : [];
 
         $out = ['<h2 class="mui-h2">' . Html::escape($this->catalog->tr('settings.heading')) . '</h2>'];
         $out[] = $this->preferences((string) ($data['locale'] ?? AdminSettings::DEFAULT_LOCALE));
@@ -123,18 +125,20 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('settings.config')) . '</h3>';
         $out[] = '<p class="admin-settings__hint">' . Html::escape($this->catalog->tr('settings.config.hint')) . '</p>';
         if (!$declared) {
-            $out[] = $this->notice($this->catalog->tr('settings.empty'));
+            $out[] = $this->notice($this->catalog->tr(self::allDefault($rows) ? 'settings.empty' : 'settings.empty.partial'));
             $out[] = '<pre class="admin-snippet"><code>' . Html::escape((string) ($data['snippet'] ?? '')) . '</code></pre>';
         }
         if ($unresolved !== []) {
-            $out[] = $this->notice($this->catalog->tr('settings.unresolved', $this->join($unresolved)), 'danger');
+            $out[] = $this->notice(
+                $malformed
+                    ? $this->catalog->tr('settings.malformed', $this->join($unresolved))
+                    : $this->catalog->tr('settings.unresolved', $this->join(array_map(static fn (string $name): string => '«' . $name . '»', $unresolved))),
+                'danger',
+            );
         }
 
         $cells = [];
         foreach ($rows as $row) {
-            if (!\is_array($row)) {
-                continue;
-            }
             $cells[] = $this->settingRow($row, $unresolved);
         }
         $out[] = $this->table(['col.key', 'col.value', 'col.source'], $cells);
@@ -143,8 +147,26 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     }
 
     /**
-     * One configuration row. The secret's value is only where it came from, behind the mask glyph; the
-     * middleware row wears the danger badge when a declared class does not exist.
+     * True when every row's source is `default` — the wording «entirely on defaults» is earned, not assumed.
+     *
+     * @param list<array<mixed>> $rows
+     */
+    private static function allDefault(array $rows): bool
+    {
+        foreach ($rows as $row) {
+            if (($row['source'] ?? AdminSettings::SOURCE_DEFAULT) !== AdminSettings::SOURCE_DEFAULT) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * One configuration row. The secret's value is only where it came from, behind the mask glyph. A
+     * declared middleware list with a defective entry wears the danger badge on the value; a key the
+     * panel rejected shows the EFFECTIVE value, what the app declared next to it, and the danger badge
+     * on the source — never `default` for something the app did write.
      *
      * @param array<mixed> $row
      * @param list<string> $unresolved
@@ -153,19 +175,35 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     {
         $key = (string) ($row['key'] ?? '');
         $value = (string) ($row['value'] ?? '');
-        $source = ($row['source'] ?? '') === AdminSettings::SOURCE_CONFIG ? AdminSettings::SOURCE_CONFIG : AdminSettings::SOURCE_DEFAULT;
-        $broken = $key === 'middleware' && $unresolved !== [];
+        $source = match ($row['source'] ?? '') {
+            AdminSettings::SOURCE_CONFIG => AdminSettings::SOURCE_CONFIG,
+            AdminSettings::SOURCE_REJECTED => AdminSettings::SOURCE_REJECTED,
+            default => AdminSettings::SOURCE_DEFAULT,
+        };
+        $rejected = $source === AdminSettings::SOURCE_REJECTED;
+        $declaredAs = \is_string($row['declared'] ?? null) ? $row['declared'] : null;
+        $broken = $key === 'middleware' && $unresolved !== [] && !$rejected;
 
         $valueHtml = match ($key) {
             'secret' => '<span class="admin-settings__secret" aria-hidden="true">' . Html::escape($this->catalog->tr('settings.secret.mask')) . '</span>'
                 . Html::escape($this->catalog->tr(self::secretKey($value))),
             default => '<code>' . Html::escape($value) . '</code>'
-                . ($broken ? ' <span class="mui-badge mui-badge--danger">' . Html::escape($this->catalog->tr('settings.unresolved.badge')) . '</span>' : ''),
+                . ($broken ? ' <span class="mui-badge mui-badge--danger">' . Html::escape($this->catalog->tr('settings.unresolved.badge')) . '</span>' : '')
+                . ($rejected && $declaredAs !== null ? ' <span class="admin-settings__declared">' . Html::escape($this->catalog->tr('settings.declared_as', $declaredAs)) . '</span>' : ''),
         };
-        $sourceHtml = '<span class="mui-badge' . ($source === AdminSettings::SOURCE_CONFIG ? ' mui-badge--accent' : '') . '">'
-            . Html::escape($this->catalog->tr('settings.source.' . $source)) . '</span>';
+        $badge = match ($source) {
+            AdminSettings::SOURCE_CONFIG => ' mui-badge--accent',
+            AdminSettings::SOURCE_REJECTED => ' mui-badge--danger',
+            default => '',
+        };
+        $sourceHtml = '<span class="mui-badge' . $badge . '">' . Html::escape($this->catalog->tr('settings.source.' . $source)) . '</span>';
+        $rowClass = match (true) {
+            $broken => ' class="admin-settings__row--unresolved"',
+            $rejected => ' class="admin-settings__row--rejected"',
+            default => '',
+        };
 
-        return '<tr' . ($broken ? ' class="admin-settings__row--unresolved"' : '') . '>'
+        return '<tr' . $rowClass . '>'
             . '<td><code>' . Html::escape($key) . '</code></td>'
             . '<td>' . $valueHtml . '</td>'
             . '<td>' . $sourceHtml . '</td>'
@@ -183,7 +221,8 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     }
 
     /**
-     * The «Panel preferences» card: theme, density, language override and remembered filters — plain
+     * The «Panel preferences» card: theme and density (this browser only, applied in place) and the
+     * language override (sent as `?lang=` with each request, stored only in this browser) — plain
      * controls tagged `data-pref`, no state of their own; the page's delegated script owns them.
      */
     private function preferences(string $serverLocale): string
@@ -207,8 +246,6 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
                 'compact' => $this->catalog->tr('settings.density.compact'),
             ])
             . $this->select('lang', 'settings.pref.lang', $languages, $this->catalog->tr('settings.pref.lang.hint'))
-            . '<label class="admin-prefs__check"><input type="checkbox" data-pref="filters" id="admin-pref-filters"> '
-            . Html::escape($this->catalog->tr('settings.pref.filters')) . '</label>'
             . '</form>'
             . '</article>';
     }

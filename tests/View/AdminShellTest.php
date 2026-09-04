@@ -19,6 +19,7 @@ use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\SectionCatalogue;
 use Milpa\Admin\Section\SectionRender;
+use Milpa\Admin\Tests\Fixtures\AllowAllMiddleware;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
 use Milpa\Admin\Tests\Fixtures\RecordingDispatcher;
@@ -130,7 +131,8 @@ final class AdminShellTest extends TestCase
         self::assertStringContainsString('data-gate="fallback"', $fallback->renderEmpty(SectionCatalogue::discover([])), 'the empty state wears the chips too');
 
         self::assertStringContainsString('data-gate="open">gate: open</span>', self::shell(settings: AdminSettings::fromConfig(new Config(['admin' => ['middleware' => []]])))->render($catalogue, $active));
-        self::assertStringContainsString('data-gate="custom">gate: custom</span>', self::shell(settings: new AdminSettings(middleware: [\stdClass::class]))->render($catalogue, $active));
+        self::assertStringContainsString('data-gate="custom">gate: custom</span>', self::shell(settings: new AdminSettings(middleware: [AllowAllMiddleware::class]))->render($catalogue, $active));
+        self::assertStringContainsString('mui-badge--warning" data-gate="fallback">gate: fallback</span>', self::shell(settings: new AdminSettings(middleware: [\stdClass::class]))->render($catalogue, $active), 'a class that exists but is not a middleware is not a gate');
     }
 
     public function testWithCatalogAnswersInAnotherLanguageAndLeavesTheOriginalAlone(): void
