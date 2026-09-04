@@ -105,3 +105,7 @@ vendor/bin/php-cs-fixer fix --dry-run --diff
 ## License
 
 Apache-2.0 — (c) Rodrigo Vicente - TeamX Agency. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+---
+
+Milpa is designed, built, and maintained by [Rodrigo Vicente - TeamX Agency](https://teamx.agency).
