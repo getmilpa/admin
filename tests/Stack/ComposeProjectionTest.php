@@ -46,8 +46,7 @@ final class ComposeProjectionTest extends TestCase
             . "volumes:\n"
             . "  hub-data: {}\n";
         self::assertSame($expected, $yaml);
-        self::assertStringNotContainsString(HubPlugin::SECRET, $yaml, 'the literal a secret carries is never inlined');
-        self::assertStringNotContainsString('also-secret', $yaml, 'nor the config value a secret points at');
+        self::assertStringNotContainsString('also-secret', $yaml, 'the config value a secret points at is never inlined');
     }
 
     public function testAConfigKeyTheAppLacksFallsBackToTheLiteralThenToTheVariable(): void
@@ -82,6 +81,8 @@ final class ComposeProjectionTest extends TestCase
             new EnvVar('KEEPS_ONE_NEWLINE', value: "a\nb\n"),
             new EnvVar('KEEPS_ALL_NEWLINES', value: "a\n\n"),
             new EnvVar('LEADING_SPACE', value: " indented\nline"),
+            new EnvVar('BLANK_THEN_INDENTED', value: "\n  indented"),
+            new EnvVar('LATER_INDENT', value: "first\n  second"),
         ]);
 
         $yaml = (new ComposeProjection())->yaml([$service], null);
@@ -93,6 +94,51 @@ final class ComposeProjectionTest extends TestCase
         self::assertStringContainsString("      KEEPS_ONE_NEWLINE: |\n        a\n        b\n", $yaml);
         self::assertStringContainsString("      KEEPS_ALL_NEWLINES: |+\n        a\n\n", $yaml);
         self::assertStringContainsString("      LEADING_SPACE: |2-\n         indented\n        line\n", $yaml);
+        self::assertStringContainsString(
+            "      BLANK_THEN_INDENTED: |2-\n\n" . str_repeat(' ', 10) . "indented\n",
+            $yaml,
+            'the indicator is decided by the first NON-EMPTY line: YAML would detect the indentation there and eat the two spaces',
+        );
+        self::assertStringContainsString(
+            "      LATER_INDENT: |-\n        first\n" . str_repeat(' ', 10) . "second\n",
+            $yaml,
+            'a plain first line needs no indicator; deeper lines keep their extra spaces as content',
+        );
+    }
+
+    public function testEnvKeysThatYamlCouldMisreadAreQuotedToo(): void
+    {
+        $service = new ServiceDeclaration(name: 'flags', image: 'x', env: [
+            new EnvVar('NO', value: 'x'),
+            new EnvVar('TRUE', value: "a\nb"),
+            new EnvVar('NULL', value: 'n'),
+            new EnvVar('PLAIN_KEY', value: 'z'),
+        ]);
+
+        $yaml = (new ComposeProjection())->yaml([$service], null);
+
+        self::assertStringContainsString("      'NO': x\n", $yaml, 'a key YAML reads as false is a string');
+        self::assertStringContainsString("      'TRUE': |-\n        a\n        b\n", $yaml, 'the block-scalar branch quotes the key too');
+        self::assertStringContainsString("      'NULL': 'n'\n", $yaml);
+        self::assertStringContainsString("      PLAIN_KEY: z\n", $yaml);
+    }
+
+    public function testADollarInAnInlinedValueIsEscapedForComposeAndThePlaceholderIsNot(): void
+    {
+        $service = new ServiceDeclaration(name: 'shop', image: 'x', env: [
+            new EnvVar('PRICE', value: 'costs $5'),
+            new EnvVar('APP_HOME', configKey: 'app.home'),
+            new EnvVar('OPERATOR'),
+            new EnvVar('MULTI', value: "line \$1\nline \$2"),
+        ]);
+        $config = new Config(['app' => ['home' => '${HOME}/app']]);
+
+        $yaml = (new ComposeProjection())->yaml([$service], $config);
+
+        self::assertStringContainsString("      PRICE: costs \$\$5\n", $yaml, 'compose interpolates $; doubled, the literal reads back as the app holds it');
+        self::assertStringContainsString("      APP_HOME: \$\${HOME}/app\n", $yaml, 'a config value that looks like a placeholder is a value');
+        self::assertStringContainsString("      OPERATOR: \${OPERATOR}\n", $yaml, 'the deliberate placeholder is the only $ compose gets to expand');
+        self::assertStringContainsString("      MULTI: |-\n        line \$\$1\n        line \$\$2\n", $yaml, 'block scalars escape too');
     }
 
     public function testScalarsThatYamlCouldMisreadAreSingleQuoted(): void
@@ -109,10 +155,20 @@ final class ComposeProjectionTest extends TestCase
             new EnvVar('PADDED', value: ' padded'),
             new EnvVar('DASH', value: '- dash'),
             new EnvVar('URL', value: 'http://x'),
+            new EnvVar('INF', value: '.inf'),
+            new EnvVar('PLUS_INF', value: '+.Inf'),
+            new EnvVar('NEG_NAN', value: '-.NaN'),
+            new EnvVar('TAB', value: "a\tb"),
+            new EnvVar('DOT_WORD', value: '.infinity'),
         ]);
 
         $yaml = (new ComposeProjection())->yaml([$service], null);
 
+        self::assertStringContainsString("      INF: '.inf'\n", $yaml, 'YAML reads .inf as a float');
+        self::assertStringContainsString("      PLUS_INF: '+.Inf'\n", $yaml, 'signed and any case');
+        self::assertStringContainsString("      NEG_NAN: '-.NaN'\n", $yaml);
+        self::assertStringContainsString("      TAB: 'a\tb'\n", $yaml, 'a tab inside a plain scalar is not read the same everywhere');
+        self::assertStringContainsString("      DOT_WORD: .infinity\n", $yaml, 'a word that merely starts with a dot is plain');
         self::assertStringContainsString("  'no':\n", $yaml, 'a service named like a YAML boolean is quoted');
         self::assertStringContainsString("    image: plain/image\n", $yaml);
         self::assertStringContainsString("      EMPTY: ''\n", $yaml);
@@ -178,6 +234,10 @@ final class ComposeProjectionTest extends TestCase
             'shared:/s',
             'shared:/t',
             ':odd',
+            '${PWD}/data:/data',
+            '$HOME/certs:/certs',
+            'C:\\data:/data',
+            'd:/data:/data',
         ]);
         $worker = new ServiceDeclaration(name: 'worker', image: 'app', volumes: ['app-cache:/cache', 'shared:/shared']);
 
@@ -188,6 +248,12 @@ final class ComposeProjectionTest extends TestCase
         self::assertStringNotContainsString("  conf: {}", $yaml);
         self::assertStringNotContainsString("  var: {}", $yaml);
         self::assertStringNotContainsString("  anonymous", $yaml);
+        self::assertStringNotContainsString('PWD}/data: {}', $yaml, 'a source compose interpolates is a path, not a volume name');
+        self::assertStringNotContainsString('HOME/certs: {}', $yaml);
+        self::assertStringNotContainsString("  C: {}", $yaml, 'a Windows drive is a bind mount');
+        self::assertStringNotContainsString("  d: {}", $yaml);
+        self::assertStringContainsString("      - '\${PWD}/data:/data'\n", $yaml, 'the mount itself is still projected');
+        self::assertStringContainsString("      - 'C:\\data:/data'\n", $yaml);
         self::assertStringNotContainsString("volumes:\n", (new ComposeProjection())->yaml([new ServiceDeclaration(name: 'x', image: 'x')], null));
     }
 }

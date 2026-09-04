@@ -20,10 +20,11 @@ use Milpa\Runtime\Stack\EnvVar;
 /**
  * One declared environment variable after the panel decided where its value comes from.
  *
- * The rule is the same for the card and for the compose file, so it lives once: a `secret` has no
- * value here, ever — not even when the plugin wrote one; a `configKey` the app's config holds
- * yields that value (`config`); a literal the plugin wrote yields it (`literal`); anything else is
- * `unset` — the operator supplies it. Whatever has no value is projected as `${NAME}`.
+ * The rule is the same for the card and for the compose file, so it lives once, in precedence
+ * order: a `secret` has no value here, ever — the contract refuses a secret that carries a literal,
+ * and this class masks one anyway as defense in depth; a `configKey` the app's config holds yields
+ * that value (`config`); a literal the plugin wrote yields it (`literal`); anything else is `unset`
+ * — the operator supplies it. Whatever has no value is projected as `${NAME}`.
  */
 final readonly class ResolvedEnv
 {
@@ -65,10 +66,16 @@ final readonly class ResolvedEnv
         return new self($var->name, self::UNSET, null, $var->configKey);
     }
 
-    /** The compose `environment:` value — the resolved string, or `${NAME}` when the operator supplies it. */
+    /**
+     * The compose `environment:` value — the resolved string, or `${NAME}` when the operator supplies it.
+     *
+     * Compose interpolates `$` in every value, so an inlined value escapes each `$` as `$$` and reads
+     * back as the bytes the app holds; only the deliberate `${NAME}` placeholder is left for compose
+     * to substitute.
+     */
     public function composeValue(): string
     {
-        return $this->value ?? '${' . $this->name . '}';
+        return $this->value === null ? '${' . $this->name . '}' : str_replace('$', '$$', $this->value);
     }
 
     private static function stringify(mixed $value): ?string

@@ -24,9 +24,11 @@ use Milpa\Runtime\Stack\ServiceDeclaration;
  * (`image`, `ports`, `environment`, `volumes`, `command`) written by hand so the output is the same
  * bytes for the same declarations. Secrets are never inlined — they come out as `${NAME}` and the
  * operator supplies them; a `configKey` the app holds is inlined, one it lacks becomes `${NAME}` too.
- * Every scalar that YAML could misread (ports like `3000:80`, `:80`, numbers, booleans, `#`) is
- * single-quoted; multi-line values are block scalars. Named volumes a service mounts are declared at
- * the top level, as compose requires for the file to be a project and not just a fragment.
+ * Every scalar that YAML could misread (ports like `3000:80`, `:80`, numbers, booleans, `.inf`, a
+ * tab, `#`) is single-quoted — env KEYS included, so `NO` and `TRUE` stay strings; multi-line values
+ * are block scalars whose indentation indicator is decided by the first non-empty line. Named volumes
+ * a service mounts are declared at the top level, as compose requires for the file to be a project
+ * and not just a fragment.
  */
 final class ComposeProjection
 {
@@ -65,8 +67,9 @@ final class ComposeProjection
 
     /**
      * The named volumes a service mounts — `name:target[:mode]` where the source is not a path — which
-     * compose requires declared at the top level. Bind mounts (`./`, `../`, `~`, `/`) and anonymous
-     * volumes (a bare container path) are not.
+     * compose requires declared at the top level. Bind mounts (`./`, `../`, `~`, `/`, a Windows drive
+     * like `C:`), sources compose interpolates (`${PWD}/data`) and anonymous volumes (a bare container
+     * path) are not.
      *
      * @return list<string>
      */
@@ -78,8 +81,11 @@ final class ComposeProjection
             if ($colon === false || $colon === 0) {
                 continue;
             }
+            if (preg_match('/^[A-Za-z]:/', $volume) === 1) {
+                continue;
+            }
             $source = substr($volume, 0, $colon);
-            if ($source[0] === '.' || $source[0] === '~' || $source[0] === '/') {
+            if (\in_array($source[0], ['.', '~', '/', '$'], true)) {
                 continue;
             }
             $names[] = $source;
@@ -132,12 +138,18 @@ final class ComposeProjection
     /**
      * A `key: value` mapping entry — one line, or a block scalar when the value spans lines.
      *
+     * The key goes through {@see self::scalar()} like any value: an env var named `NO` or `TRUE`
+     * is a string, not a boolean. A block scalar carries an explicit indentation indicator whenever
+     * its first NON-EMPTY line starts with whitespace — YAML detects the indentation from that line,
+     * not from the first one, so a value that opens with a blank line and then indented text would
+     * otherwise lose its leading spaces.
+     *
      * @return list<string>
      */
     private static function entry(string $indent, string $key, string $value): array
     {
         if (!str_contains($value, "\n")) {
-            return [$indent . $key . ': ' . self::scalar($value)];
+            return [$indent . self::scalar($key) . ': ' . self::scalar($value)];
         }
 
         $chomp = '-';
@@ -146,10 +158,18 @@ final class ComposeProjection
             $body = substr($body, 0, -1);
             $chomp = str_ends_with($body, "\n") ? '+' : '';
         }
-        $indicator = $body !== '' && ($body[0] === ' ' || $body[0] === "\t") ? '2' : '';
+        $bodyLines = explode("\n", $body);
+        $indicator = '';
+        foreach ($bodyLines as $line) {
+            if ($line === '') {
+                continue;
+            }
+            $indicator = $line[0] === ' ' || $line[0] === "\t" ? '2' : '';
+            break;
+        }
 
-        $lines = [$indent . $key . ': |' . $indicator . $chomp];
-        foreach (explode("\n", $body) as $line) {
+        $lines = [$indent . self::scalar($key) . ': |' . $indicator . $chomp];
+        foreach ($bodyLines as $line) {
             $lines[] = $line === '' ? '' : $indent . self::INDENT . $line;
         }
 
@@ -164,7 +184,7 @@ final class ComposeProjection
 
     private static function needsQuotes(string $value): bool
     {
-        if ($value === '' || trim($value) !== $value) {
+        if ($value === '' || trim($value) !== $value || str_contains($value, "\t")) {
             return true;
         }
         if (str_contains($value, ':') || str_contains($value, '#')) {
@@ -176,7 +196,10 @@ final class ComposeProjection
         if (preg_match('/^[-+.]?[0-9]/', $value) === 1) {
             return true;
         }
+        if (preg_match('/^[-+]?\.(?:inf|nan)$/i', $value) === 1) {
+            return true;
+        }
 
-        return preg_match('/^(?:true|false|yes|no|on|off|y|n|null|~|\.inf|-\.inf|\.nan)$/i', $value) === 1;
+        return preg_match('/^(?:true|false|yes|no|on|off|y|n|null|~)$/i', $value) === 1;
     }
 }

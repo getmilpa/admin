@@ -17,19 +17,18 @@ namespace Milpa\Admin\Tests\Fixtures;
 use Milpa\Attributes\PluginMetadata;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
-use Milpa\Runtime\Stack\EnvVar;
 use Milpa\Runtime\Stack\PortMapping;
 use Milpa\Runtime\Stack\ServiceDeclaration;
 use Milpa\Runtime\Stack\StackProviderInterface;
 
 /**
- * A foreign plugin that needs one backing service: a hub published on host port 3000, with a literal env,
- * one read from the app's config, and one secret that points at a config key the panel must never read out.
+ * A second plugin that declares a service named `hub` too — the collision the Stack section must keep
+ * whole and the compose route must refuse, since compose would key both under one name.
  */
-#[PluginMetadata(version: '0.1.0', author: 'Test', site: 'https://example.test', name: 'Hub', type: 'Web')]
-final class HubPlugin implements PluginInterface, StackProviderInterface
+#[PluginMetadata(version: '0.1.0', author: 'Test', site: 'https://example.test', name: 'RivalHub', type: 'Web')]
+final class RivalHubPlugin implements PluginInterface, StackProviderInterface
 {
-    public const HOST_PORT = 3000;
+    public const HOST_PORT = 3001;
 
     public function __construct(private readonly DIContainerInterface $container)
     {
@@ -45,15 +44,9 @@ final class HubPlugin implements PluginInterface, StackProviderInterface
         return [
             new ServiceDeclaration(
                 name: 'hub',
-                image: 'example/hub:1',
+                image: 'example/rival-hub:2',
                 ports: [new PortMapping(container: 80, host: self::HOST_PORT)],
-                env: [
-                    new EnvVar('SERVER_NAME', value: ':80'),
-                    new EnvVar('HUB_PUBLIC_URL', configKey: 'hub.public_url'),
-                    new EnvVar('HUB_JWT_KEY', configKey: 'hub.key', secret: true),
-                ],
-                volumes: ['hub-data:/data'],
-                summary: 'Pushes shell changes to the browser.',
+                summary: 'Another plugin that wants a hub of its own under the same name.',
             ),
         ];
     }

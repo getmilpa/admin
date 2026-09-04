@@ -92,7 +92,8 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
             null,
         );
         $renderer = new AdminHtmlRenderer($codec, $catalog, $settings);
-        $stack = new StackSource($this->container, new TcpProbe(), $this);
+        $projection = new ComposeProjection();
+        $stack = new StackSource($this->container, new TcpProbe(), $projection, fallbackProvider: null);
 
         $this->sections = [
             new AdminSection(
@@ -132,7 +133,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
             new AdminController($this->container, $this, $catalog, $shell, $page),
         );
         $this->container->registerService(AssetsController::class, new AssetsController());
-        $this->container->registerService(StackController::class, new StackController($stack, new ComposeProjection()));
+        $this->container->registerService(StackController::class, new StackController($stack, $projection, $catalog));
         if (!$this->container->has(LoopbackOnlyMiddleware::class)) {
             $this->container->registerService(LoopbackOnlyMiddleware::class, new LoopbackOnlyMiddleware($catalog));
         }

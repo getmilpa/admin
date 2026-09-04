@@ -18,6 +18,7 @@ use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
 use Milpa\Admin\Components\StackComponent;
+use Milpa\Admin\Data\StackSource;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Stack\ResolvedEnv;
 use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
@@ -223,7 +224,8 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     }
 
     /**
-     * One service card: heading with the state badge, the declaration, the env table, the compose fragment.
+     * One service card: heading with the state badge, the declaration, the env table, the compose fragment
+     * — and, when another plugin declared the same name, a danger badge and a notice naming the others.
      *
      * @param array<mixed> $row
      */
@@ -233,19 +235,25 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $badge = match ($state) {
             'up' => 'mui-badge mui-badge--success',
             'down' => 'mui-badge mui-badge--warning',
+            StackSource::CONFLICT => 'mui-badge mui-badge--danger',
             default => 'mui-badge',
         };
-        $stateKey = \in_array($state, ['up', 'down'], true) ? 'stack.state.' . $state : 'stack.state.unknown';
+        $stateKey = \in_array($state, ['up', 'down', StackSource::CONFLICT], true) ? 'stack.state.' . $state : 'stack.state.unknown';
         $probePort = $row['probePort'] ?? null;
         $probe = \is_int($probePort)
-            ? $this->catalog->tr('stack.probe', (string) $probePort)
+            ? $this->catalog->tr('stack.probe', (string) ($row['probeHost'] ?? ''), (string) $probePort)
             : $this->catalog->tr('stack.no_probe');
         $summary = (string) ($row['summary'] ?? '');
+        $name = (string) ($row['name'] ?? '');
 
         $out = ['<article class="mui-card admin-stack__service">'];
-        $out[] = '<h3 class="mui-h3">' . Html::escape((string) ($row['name'] ?? ''))
+        $out[] = '<h3 class="mui-h3">' . Html::escape($name)
             . ' <span class="' . $badge . '">' . Html::escape($this->catalog->tr($stateKey)) . '</span>'
             . ' <small class="admin-stack__probe">' . Html::escape($probe) . '</small></h3>';
+        if ($state === StackSource::CONFLICT) {
+            $others = \is_array($row['conflictsWith'] ?? null) ? array_values(array_filter($row['conflictsWith'], 'is_string')) : [];
+            $out[] = $this->notice($this->catalog->tr('stack.conflict', $name, $this->join($others)), 'danger');
+        }
         if ($summary !== '') {
             $out[] = '<p class="admin-stack__summary">' . Html::escape($summary) . '</p>';
         }
@@ -331,9 +339,24 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             . '</tbody></table></div>';
     }
 
-    private function notice(string $text): string
+    private function notice(string $text, string $tone = 'info'): string
     {
-        return '<p class="mui-alert mui-alert--info admin-notice">' . Html::escape($text) . '</p>';
+        return '<p class="mui-alert mui-alert--' . $tone . ' admin-notice">' . Html::escape($text) . '</p>';
+    }
+
+    /**
+     * «A, B and C» in the catalog's language.
+     *
+     * @param list<string> $items
+     */
+    private function join(array $items): string
+    {
+        if (\count($items) < 2) {
+            return implode('', $items);
+        }
+        $last = array_pop($items);
+
+        return implode(', ', $items) . ' ' . $this->catalog->tr('list.and') . ' ' . $last;
     }
 
     private function envelope(StateSnapshot $state): string

@@ -23,6 +23,7 @@ use Milpa\Admin\Tests\Fixtures\DuplicatePlugin;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
 use Milpa\Admin\Tests\Fixtures\HubPlugin;
+use Milpa\Admin\Tests\Fixtures\RivalHubPlugin;
 use Milpa\Container\DIContainer;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
@@ -85,10 +86,9 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('Declared by HubPlugin', $html);
         self::assertStringContainsString('<code>http://localhost:3000</code>', $html, 'the config value the plugin pointed at');
         self::assertStringContainsString('●●●', $html, 'the secret is masked');
-        self::assertStringNotContainsString(HubPlugin::SECRET, $html);
         self::assertStringNotContainsString('config-secret', $html);
         self::assertMatchesRegularExpression('~<span class="mui-badge[^"]*">(up|down)</span>~', $html, 'the real probe on 127.0.0.1:3000 said one or the other');
-        self::assertStringContainsString('probed on 127.0.0.1:3000', $html);
+        self::assertStringContainsString('probed on 127.0.0.1:3000', $html, 'the real probe reports the host it tried');
         self::assertStringNotContainsString('kernel is not in the container', $html);
 
         $compose = $container->get(StackController::class);
@@ -96,12 +96,36 @@ final class AdminPluginTest extends TestCase
         $response = $compose->compose(new ServerRequest('GET', '/milpa/admin/stack/compose.yml'));
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('text/yaml; charset=utf-8', $response->getHeaderLine('Content-Type'));
+        self::assertSame('attachment; filename="compose.yml"', $response->getHeaderLine('Content-Disposition'));
         $yaml = (string) $response->getBody();
         self::assertStringStartsWith("services:\n  hub:\n", $yaml);
         self::assertStringContainsString("HUB_PUBLIC_URL: 'http://localhost:3000'", $yaml);
         self::assertStringContainsString('HUB_JWT_KEY: ${HUB_JWT_KEY}', $yaml);
-        self::assertStringNotContainsString(HubPlugin::SECRET, $yaml);
         self::assertStringNotContainsString('config-secret', $yaml);
+    }
+
+    public function testTwoPluginsDeclaringTheSameServiceMakeTheComposeRouteA409AndTheSectionSaysWhy(): void
+    {
+        [$container] = self::boot([AdminPlugin::class, HubPlugin::class, RivalHubPlugin::class]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $html = (string) $controller->section(self::sectionRequest('stack'))->getBody();
+        self::assertSame(2, substr_count($html, '<span class="mui-badge mui-badge--danger">conflict</span>'), 'both rows are kept and both are the conflict');
+        self::assertStringContainsString('«hub» is also declared by RivalHubPlugin', $html);
+        self::assertStringContainsString('«hub» is also declared by HubPlugin', $html);
+        self::assertStringContainsString('<code>example/rival-hub:2</code>', $html, 'nothing was dropped');
+        self::assertStringNotContainsString('mui-badge--success', $html, 'a colliding service has no reachability state, only the conflict');
+
+        $compose = $container->get(StackController::class);
+        \assert($compose instanceof StackController);
+        $response = $compose->compose(new ServerRequest('GET', '/milpa/admin/stack/compose.yml'));
+        self::assertSame(409, $response->getStatusCode());
+        self::assertSame('text/plain; charset=utf-8', $response->getHeaderLine('Content-Type'));
+        self::assertFalse($response->hasHeader('Content-Disposition'));
+        $body = (string) $response->getBody();
+        self::assertStringContainsString('Service «hub» is declared by HubPlugin and RivalHubPlugin — rename one or disable a plugin; no compose.yml is served while ids collide.', $body);
+        self::assertStringNotContainsString('services:', $body);
     }
 
     public function testAForeignPluginGetsItsSectionsWithoutThePanelKnowingIt(): void

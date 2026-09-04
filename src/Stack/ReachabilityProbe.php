@@ -26,4 +26,7 @@ interface ReachabilityProbe
 {
     /** True when a TCP connection to the port on loopback succeeds within the probe's timeout. */
     public function reachable(int $port): bool;
+
+    /** The host the probe connects to — what the section reports next to the port it tried. */
+    public function host(): string;
 }

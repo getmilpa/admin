@@ -17,10 +17,13 @@ namespace Milpa\Admin\Tests\Fixtures;
 use Milpa\Admin\Stack\ReachabilityProbe;
 
 /**
- * A probe that answers from a list of open ports and records what it was asked.
+ * A probe that answers from a list of open ports, records what it was asked, and reports a host of its
+ * own — so a test can tell the host the section shows came from the probe, not from a constant.
  */
 final class FakeProbe implements ReachabilityProbe
 {
+    public const HOST = 'fake.loopback';
+
     /** @var list<int> */
     public array $probed = [];
 
@@ -34,5 +37,10 @@ final class FakeProbe implements ReachabilityProbe
         $this->probed[] = $port;
 
         return \in_array($port, $this->open, true);
+    }
+
+    public function host(): string
+    {
+        return self::HOST;
     }
 }
