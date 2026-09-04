@@ -377,7 +377,7 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('kernel is not in the container', $stack);
         self::assertStringContainsString('No plugin declared a service', $stack);
         $devtools = $controller->section(self::sectionRequest('devtools'))->getBody()->__toString();
-        self::assertStringContainsString('The kernel is not in the container: register it in public/index.php so the panel can find the app root the agent ledger lives under.', $devtools);
+        self::assertStringContainsString('No event store is registered in the container and the kernel is not there either: register the kernel in public/index.php so the panel can find the app root the agent ledger (var/agent-sessions.jsonl) lives under.', $devtools);
         self::assertStringContainsString('No log file is declared.', $devtools, 'the log block still reads: nothing declared');
         self::assertStringNotContainsString('Agent sessions', $devtools, 'no ledger to list');
     }
@@ -396,7 +396,7 @@ final class AdminPluginTest extends TestCase
             ['stream_id' => SessionStore::PREFIX . 's-wait', 'type' => 'session.started', 'payload' => ['goal' => 'second', 'mode' => 'ask', 'parentId' => null], 'seq' => 6, 'recorded_at' => '2026-09-04T10:01:00.000000Z'],
             ['stream_id' => SessionStore::PREFIX . 's-wait', 'type' => 'session.question_asked', 'payload' => ['id' => 'q1', 'question' => 'Which target?', 'options' => [], 'why' => null, 'expiresAt' => null, 'reason' => 'target_not_named'], 'seq' => 7, 'recorded_at' => '2026-09-04T10:01:01.000000Z'],
         ];
-        file_put_contents($root . '/var/agent-sessions.jsonl', implode("\n", array_map(static fn (array $row): string => json_encode($row, JSON_THROW_ON_ERROR), $rows)) . "\n");
+        file_put_contents($root . '/var/agent-sessions.jsonl', implode("\n", array_map(static fn (array $row): string => json_encode($row, JSON_THROW_ON_ERROR), $rows)) . "\n{a line the agent never finished\n");
         file_put_contents($root . '/var/app.log', "10:00 info operation completed\n10:01 warn probe timeout\n");
 
         try {
@@ -419,10 +419,13 @@ final class AdminPluginTest extends TestCase
             self::assertStringContainsString('data-state="waiting">waiting</span>', $html);
             self::assertStringContainsString('<code>18,204 / 3,911</code>', $html, 'the provider\'s own numbers');
             self::assertStringContainsString('<code>not reported</code>', $html, 'a session whose calls never carried usage — absent, not zero');
-            self::assertStringContainsString('title="Which target?">target_not_named</span>', $html, 'what the waiting session waits on');
+            self::assertStringContainsString('<span class="mui-badge mui-badge--accent">target_not_named</span> <small>Which target?</small>', $html, 'what the waiting session waits on, the question inline');
             self::assertStringContainsString('<td>' . substr('greet the house with a goal long enough to be cut short in the table of sessions', 0, 71) . '…</td>', $html, 'the goal is cut short in the table');
-            self::assertStringContainsString('<td><code>admitted_intent_skip</code></td><td>1</td><td><a href="/milpa/admin/s/devtools?session=s-run"><code>s-run</code></a></td>', $html);
-            self::assertStringContainsString('<td><code>framework_gap</code></td><td>0</td><td>—</td>', $html, 'the four real kinds, even at zero');
+            self::assertStringContainsString('<p class="admin-devtools__hint">Read from ' . $root . '/var/agent-sessions.jsonl · 1 line(s) of the ledger could not be read and were skipped</p>', $html, 'the page says which ledger it read, and that one line of it is not an event');
+            self::assertStringContainsString('<td><code>admitted_intent_skip</code><br><small>Ceremony was skipped because', $html);
+            self::assertStringContainsString('never as authority.</small></td><td>1</td><td><a href="/milpa/admin/s/devtools?session=s-run"><code>s-run</code></a></td>', $html);
+            self::assertStringContainsString('<td><code>framework_gap</code><br><small>The model declared a stalled leg', $html, 'the four real kinds, even at zero, each glossed');
+            self::assertStringContainsString('could not progress on its own.</small></td><td>0</td><td>—</td>', $html);
             self::assertStringContainsString('No evidence recorded yet', $html);
             self::assertStringContainsString('last 2 lines of ' . $root . '/var/app.log', $html);
             self::assertStringContainsString("<pre class=\"admin-log\"><code>10:00 info operation completed\n10:01 warn probe timeout</code></pre>", $html);
@@ -435,6 +438,7 @@ final class AdminPluginTest extends TestCase
             self::assertStringContainsString('<h2 class="mui-h2">Session s-run <span class="mui-badge mui-badge--success" data-state="running">running</span></h2>', $html, 'the query opened the timeline inside the section');
             self::assertStringContainsString('<a class="mui-btn mui-btn--ghost" href="/milpa/admin/s/devtools">Back to ledgers</a>', $html);
             self::assertStringContainsString('<dt>Tokens in</dt><dd>18,204</dd><dt>Tokens out</dt><dd>3,911</dd><dt>Debt signals</dt><dd>1</dd><dt>Events</dt><dd>5</dd>', $html);
+            self::assertStringContainsString('<h3 class="mui-h3">Timeline</h3>' . "\n" . '<p class="admin-devtools__hint">What SessionProjector paints of this stream, read from ' . $root . '/var/agent-sessions.jsonl, plus the audit facts', $html);
             self::assertStringContainsString('<td><time datetime="2026-09-04T10:00:00Z">2026-09-04T10:00:00Z</time></td><td>session opened <span class="mui-badge">auto</span></td>', $html);
             self::assertStringContainsString('<td>tool call</td><td>hola:greet</td>', $html);
             self::assertStringContainsString('<td>debt signal</td><td>admitted_intent_skip — operation=hola:greet</td>', $html);
@@ -451,8 +455,11 @@ final class AdminPluginTest extends TestCase
 
             $spanish = (string) $controller->section(self::sectionRequest('devtools', 'lang=es&session=s-run'))->getBody();
             self::assertStringContainsString('Sesión s-run', $spanish);
-            self::assertStringContainsString('Volver a los ledgers', $spanish);
+            self::assertStringContainsString('<a class="mui-btn mui-btn--ghost" href="/milpa/admin/s/devtools?lang=es">Volver a los ledgers</a>', $spanish, 'the way back keeps the language the request asked for');
             self::assertStringContainsString('<td>sesión abierta <span class="mui-badge">auto</span></td>', $spanish);
+            $spanishOverview = (string) $controller->section(self::sectionRequest('devtools', 'lang=es'))->getBody();
+            self::assertStringContainsString('<a href="/milpa/admin/s/devtools?session=s-run&amp;lang=es"><code>s-run</code></a>', $spanishOverview, 'and so does every drill-down link');
+            self::assertStringContainsString('Leído de ' . $root . '/var/agent-sessions.jsonl', $spanishOverview);
         } finally {
             foreach (['/var/agent-sessions.jsonl', '/var/app.log'] as $file) {
                 @unlink($root . $file);

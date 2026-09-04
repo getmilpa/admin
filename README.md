@@ -62,7 +62,11 @@ final class InventoryPlugin implements PluginInterface, AdminSectionProvider
 
 The panel discovers implementers by `instanceof` over the booted plugins, **at request time** (boot order does not
 matter), lists each section in the sidebar in the declared order, routes it at `/milpa/admin/s/<id>`, and renders
-it inside the shell. A duplicate id is a loud 500 naming both plugins — never a silent "last one wins".
+it inside the shell. A duplicate id is a loud 500 naming both plugins — never a silent "last one wins". One prop name
+is **reserved**: `query` — the shell hands every active section the request's query params under `props['query']`,
+so a section can read its own (`?session=<id>`, a filter) without the shell interpreting it; an `AdminSection` that
+declares `props['query']` itself is refused at construction (`InvalidArgumentException`) rather than silently
+overwritten on every request.
 
 Two lifecycle pairs let another plugin extend a section or the shell without touching either:
 `admin.section.before_render` / `after_render` (props, then HTML — both mutable) and
@@ -137,24 +141,39 @@ accepts `?lang=en|es` to render in another catalog language for that request (gr
 
 ## Dev tools: the ledgers the house already writes, read — nothing runs
 
-The **Dev tools** section reads what the agent already wrote and adds nothing of its own: the **sessions** in
-`var/agent-sessions.jsonl` — the ledger the `agent` operation writes, replayed through `milpa/agent`'s
-`SessionStore` — each with its state derived from the stream (`running · waiting · done · interrupted`), its
-goal and mode, the provider's own token count in/out (`not reported` when no call carried usage — absent is not
-zero) and what it waits on; the **debt signals** (`session.debt_signaled`) grouped by their four real kinds, the
-kinds listed even at zero; the **evidence** (`session.evidence_recorded`); and a **log** — the file the app
-declares under `admin.log` (absolute, or relative to the app root), tailed to its last 200 lines. With no
-declaration the section says so and invents no path; a missing or unreadable file is a notice that names it,
-and never blanks the other blocks. A session's id opens its **timeline** inside the section
-(`{route}/s/devtools?session=<id>`): what `SessionProjector` paints — turns, tool calls, todos, questions and
-answers, the goal changing, the end — plus the audit facts it leaves to audit surfaces: the opening, each debt
-signal with its context, trial runs, the closure verdict.
+The **Dev tools** section reads what the agent already wrote and adds nothing of its own. The **agent ledger** is
+resolved the way the `agent` operation resolves it: an `EventStoreInterface` registered in the container first,
+then a registered `SessionStore`, then the file `var/agent-sessions.jsonl` under the app root — and the page says
+which one it is reading (the class name or the path) under the sessions table and in the not-available notice.
+The ledger is read **once** per page: `replayAll()` when a store gives it, the section's own tolerant line reader
+when it is the file — the same one-JSON-object-per-line format `FileEventStore` writes, except that a line that
+does not decode is counted («N line(s) could not be read») and skipped, never a failure that blanks every block.
+From that one pass: the **sessions** — every stream that opened with `session.started` (a stream without one is
+counted, not listed), reduced with `SessionReducer`, newest first, the table capped at the newest 50 with «N
+older not listed» — each with its state derived from the stream (`running · waiting · done`, and `interrupted`
+when the end fact says so or follows a closed answer window), its goal and mode, the provider's own token count
+in/out (a call counts only when its usage carries an integer `prompt_tokens` or `completion_tokens`; `not
+reported` when none did — absent is not zero) and what it waits on, the pending question inline; the **debt
+signals** (`session.debt_signaled`) grouped by their four real kinds, each glossed in one line and listed even at
+zero; the **evidence** (`session.evidence_recorded`); and a **log** — the file the app declares under
+`admin.log`, absolute or relative to the app root and **confined to it** (`..` and symlinks resolved; outside is
+a notice, not a read), tailed to its last 200 lines within its last 1 MiB. With no declaration the section says
+so and invents no path; without a kernel no root is known, so a relative path is never resolved against the
+working directory and nothing is read; a missing or unreadable file is a notice that names it, and never blanks
+the other blocks. A session's id opens its **timeline** inside the section (`{route}/s/devtools?session=<id>`):
+`SessionProjector` goes first and paints what it paints — turns, tool calls, todos, questions and answers, the goal
+changing, the end — and only what it maps to null AND is in the section's bounded audit list is painted locally:
+the opening, each debt signal with its context, the closure verdict, trial runs / promotions / discards, executed
+operations (operation · executed_by/authorized_by · arguments digest) and paused/resumed sequences. The signed
+state envelope of the section carries only `{view, session}`: the ledgers are a projection re-read on every
+mount, never signed and sent to the browser. Every link inside the section carries `?lang=` when the request
+overrode the locale.
 
 The coupling to `milpa/agent` is soft: without the package the section degrades to a notice naming it, and the
 log block still reads. There is no form, no button and no command box anywhere in it — every mutation of the
 house is a governed operation, and this section only reads (greenhouse `decisions/0205`). One rule it
-introduced for every section: the request's query params reach the active section as `props['query']`, so
-a section can read its own query without the shell interpreting it.
+introduced for every section: the request's query params reach the active section as `props['query']`, which
+is why that prop name is reserved.
 
 ## Measured, not assumed
 

@@ -60,4 +60,14 @@ final class AdminSectionTest extends TestCase
 
         new AdminSection(id: 'x', title: 'x', component: 'echo-panel', definition: new EchoComponent());
     }
+
+    public function testRejectsTheReservedQueryPropTheShellFills(): void
+    {
+        self::assertSame(['query'], AdminSection::RESERVED_PROPS);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('declares the prop «query», which is reserved');
+
+        new AdminSection(id: 'x', title: 'x', component: 'metric-card', props: ['query' => ['session' => 'mine']]);
+    }
 }

@@ -28,10 +28,12 @@ use Milpa\Live\ValueObjects\StateSnapshot;
  * declared log's tail; or, when the section's query names a session, that session's timeline.
  *
  * The one prop it reads is `query` — the request's query params the shell hands every active section —
- * and the one key it looks at is `session`: set, the state carries the drill-down (`view: session`);
- * absent, the overview (`view: overview`). Read-only in both: it declares no action and refuses every
- * one, because every mutation of the house is a governed operation, never a button here
- * (greenhouse decisions/0205).
+ * and the one key it looks at is `session`: set, the mounted state carries the drill-down (`view:
+ * session`); absent, the overview (`view: overview`). The STATE THAT TRAVELS is only `{view, session}`
+ * ({@see self::envelope()}): the ledgers are a projection re-read on every mount, never signed and sent
+ * back to the browser — an envelope with a thousand rows would be a second copy of the ledger with a
+ * signature on it. Read-only in both views: it declares no action and refuses every one, because every
+ * mutation of the house is a governed operation, never a button here (greenhouse decisions/0205).
  */
 final class DevToolsComponent implements ComponentDefinitionInterface
 {
@@ -50,7 +52,7 @@ final class DevToolsComponent implements ComponentDefinitionInterface
     {
     }
 
-    /** The contract: the request's `query` as its one prop, a read-only state, no actions. */
+    /** The contract: the request's `query` as its one prop; the state that travels is `{view, session}`; no actions. */
     public static function contract(): ComponentContract
     {
         return new ComponentContract(
@@ -61,27 +63,23 @@ final class DevToolsComponent implements ComponentDefinitionInterface
                 'query' => ['type' => 'array'],
             ],
             stateSchema: [
-                'available' => ['type' => 'boolean'],
-                'why' => ['type' => 'string'],
                 'view' => ['type' => 'string'],
-                'sessions' => ['type' => 'array'],
-                'debt' => ['type' => 'array'],
-                'evidence' => ['type' => 'array'],
-                'log' => ['type' => 'array'],
-                'session' => ['type' => 'array'],
-                'events' => ['type' => 'array'],
+                'session' => ['type' => 'string'],
             ],
         );
     }
 
-    /** Mounts with the overview, or with one session's timeline when `query.session` names it. */
+    /**
+     * Mounts with the overview, or with one session's timeline when `query.session` names it. The
+     * mounted data carries the whole projection for the renderer; what travels is {@see self::envelope()}.
+     */
     public function mount(array $props, ComponentContext $context): StateSnapshot
     {
         $query = \is_array($props['query'] ?? null) ? $props['query'] : [];
         $id = $query[self::SESSION_PARAM] ?? null;
         $data = \is_string($id) && $id !== ''
-            ? ['view' => self::VIEW_SESSION, ...$this->source->timeline($id)]
-            : ['view' => self::VIEW_OVERVIEW, ...$this->source->snapshot()];
+            ? ['view' => self::VIEW_SESSION, 'session' => $id, ...$this->source->timeline($id)]
+            : ['view' => self::VIEW_OVERVIEW, 'session' => null, ...$this->source->snapshot()];
 
         return new StateSnapshot(
             componentId: $context->componentId,
@@ -99,5 +97,50 @@ final class DevToolsComponent implements ComponentDefinitionInterface
             state: $request->state,
             errors: ['action' => \sprintf('«%s» is read-only: it declares no actions — every mutation is a governed operation.', self::NAME)],
         );
+    }
+
+    /**
+     * The state that travels in the signed envelope: `{view, session}` and nothing else — the two facts a
+     * re-mount needs ({@see self::propsOf()}), never the rows, the log or the evidence.
+     */
+    public static function envelope(StateSnapshot $state): StateSnapshot
+    {
+        $session = $state->data['session'] ?? null;
+
+        return new StateSnapshot(
+            componentId: $state->componentId,
+            componentName: self::NAME,
+            version: $state->version,
+            data: [
+                'view' => ($state->data['view'] ?? null) === self::VIEW_SESSION && \is_string($session) && $session !== '' ? self::VIEW_SESSION : self::VIEW_OVERVIEW,
+                'session' => \is_string($session) && $session !== '' ? $session : null,
+            ],
+            meta: $state->meta,
+        );
+    }
+
+    /**
+     * Whether a state is the travelling envelope — `{view, session}` and nothing else — as opposed to a
+     * mounted state that carries the projection to paint.
+     */
+    public static function travels(StateSnapshot $state): bool
+    {
+        return array_diff_key($state->data, ['view' => true, 'session' => true]) === [];
+    }
+
+    /**
+     * The props that re-mount the page a carried envelope names — so a renderer handed the travelling
+     * `{view, session}` reads the ledgers again instead of painting an envelope that holds none.
+     *
+     * @return array<string, mixed>
+     */
+    public static function propsOf(StateSnapshot $carried): array
+    {
+        $session = $carried->data['session'] ?? null;
+
+        return [
+            'query' => \is_string($session) && $session !== '' ? [self::SESSION_PARAM => $session] : [],
+            'title' => (string) ($carried->meta['title'] ?? ''),
+        ];
     }
 }

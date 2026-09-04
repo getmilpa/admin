@@ -20,6 +20,7 @@ use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
 use Milpa\Admin\Components\SettingsComponent;
 use Milpa\Admin\Components\StackComponent;
+use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Data\DevToolsSource;
 use Milpa\Admin\Data\StackSource;
 use Milpa\Admin\I18n\Catalog;
@@ -41,10 +42,19 @@ use Milpa\Live\ValueObjects\StateSnapshot;
  * Every string a human reads comes from the {@see Catalog} — the one the request's {@see ComponentContext}
  * names by locale, else the one the renderer booted with; every value from the state is escaped; the
  * links it emits (the compose file, a session's timeline, the way back) are built from the declared
- * {@see AdminSettings}.
+ * {@see AdminSettings}, and carry `?lang=` when the request overrode the locale, so a drill-down keeps
+ * answering in the language it was opened in.
+ *
+ * The Dev tools envelope is the exception to «the state as mounted»: what travels is
+ * {@see DevToolsComponent::envelope()} — `{view, session}` — and a request that carries that envelope
+ * re-mounts through {@see DevToolsComponent::propsOf()} instead of painting an envelope that holds no
+ * ledger.
  */
 final class AdminHtmlRenderer implements ComponentRendererInterface
 {
+    /** The locale the request overrode the panel's with — carried as `?lang=` on every link this renderer emits; null when it did not. */
+    private ?string $lang = null;
+
     public function __construct(
         private readonly StateTransferCodecInterface $codec,
         private Catalog $catalog,
@@ -58,10 +68,17 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         return $target === RenderTarget::HTML;
     }
 
-    /** Mounts (unless the request carries state) and paints the component the contract names. */
+    /**
+     * Mounts (unless the request carries state) and paints the component the contract names. A Dev tools
+     * request that carries state carries the travelling `{view, session}` and is re-mounted from it.
+     */
     public function render(ComponentDefinitionInterface $component, RenderRequest $request): RenderResult
     {
-        $state = $request->state ?? $component->mount($request->props, $request->context);
+        $state = match (true) {
+            $request->state === null => $component->mount($request->props, $request->context),
+            $component instanceof DevToolsComponent && DevToolsComponent::travels($request->state) => $component->mount(DevToolsComponent::propsOf($request->state), $request->context),
+            default => $request->state,
+        };
         $name = $component::contract()->name;
         $painter = $this->forLocale($request->context->locale);
 
@@ -83,6 +100,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             )),
         };
 
+        $travels = $component instanceof DevToolsComponent ? DevToolsComponent::envelope($state) : $state;
         $html = \sprintf(
             '<section %s>%s</section>%s',
             Html::attrs([
@@ -91,13 +109,17 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
                 'data-milpa-component-id' => $state->componentId,
             ]),
             $body,
-            $this->envelope($state),
+            $this->envelope($travels),
         );
 
-        return new RenderResult(output: $html, state: $state, format: RenderTarget::HTML);
+        return new RenderResult(output: $html, state: $travels, format: RenderTarget::HTML);
     }
 
-    /** This renderer answering in the context's locale when the catalog carries it — itself otherwise. */
+    /**
+     * This renderer answering in the context's locale when the catalog carries it — itself otherwise. A
+     * locale that differs from the one the renderer booted with is the request's `?lang=` override, and
+     * the clone remembers it so every link it emits carries it on.
+     */
     private function forLocale(?string $locale): self
     {
         if ($locale === null || $locale === $this->catalog->locale() || !\in_array($locale, Catalog::locales(), true)) {
@@ -105,6 +127,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         }
         $painter = clone $this;
         $painter->catalog = new Catalog($locale);
+        $painter->lang = $locale;
 
         return $painter;
     }
@@ -502,10 +525,11 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     /**
      * The Dev tools section (greenhouse decisions/0205): the overview — the agent's sessions with their state
      * and real token cost, each id a link into its timeline; the debt signals by kind, the four real kinds
-     * listed even at zero; the evidence ledger; the declared log's tail — or, when the state carries a
-     * session, the drill-down: its header, the way back, and the timeline. Every block paints its own empty
-     * and error states, so one ledger failing leaves the others readable. Not one form, not one button:
-     * the section reads and never acts.
+     * listed even at zero, each with its one-line gloss; the evidence ledger; the declared log's tail — or,
+     * when the state carries a session, the drill-down: its header, the way back, and the timeline. Every
+     * block paints its own empty and error states, so one ledger failing leaves the others readable, and
+     * the page says which store or file the ledger was read from. Not one form, not one button: the
+     * section reads and never acts.
      */
     private function devtools(StateSnapshot $state): string
     {
@@ -529,7 +553,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         if ($unavailable !== null) {
             $out[] = $unavailable;
         } else {
-            $out[] = $this->devtoolsSessions(\is_array($data['sessions'] ?? null) ? $data['sessions'] : []);
+            $out[] = $this->devtoolsSessions(\is_array($data['sessions'] ?? null) ? $data['sessions'] : [], $this->source($data));
             $out[] = $this->devtoolsDebt(\is_array($data['debt'] ?? null) ? $data['debt'] : []);
             $out[] = $this->devtoolsEvidence(\is_array($data['evidence'] ?? null) ? $data['evidence'] : []);
         }
@@ -539,8 +563,9 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     }
 
     /**
-     * The notice when the agent ledger cannot be read — naming the package when it is not installed, the
-     * kernel when the app registered none — or null when it can.
+     * The notice when the agent ledger cannot be read — naming the package (and where the ledger would be
+     * read from) when it is not installed, the missing store and kernel when the app registered neither —
+     * or null when it can.
      *
      * @param array<string, mixed> $data
      */
@@ -550,24 +575,44 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             return null;
         }
 
-        return $this->notice($this->catalog->tr(($data['why'] ?? '') === DevToolsSource::WHY_KERNEL ? 'devtools.no_kernel' : 'devtools.no_agent'));
+        return $this->notice(($data['why'] ?? '') === DevToolsSource::WHY_KERNEL
+            ? $this->catalog->tr('devtools.no_kernel')
+            : $this->catalog->tr('devtools.no_agent', $this->source($data)));
     }
 
     /**
+     * Where the ledger is read from — the registered store's class or the file's path — or the none glyph.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function source(array $data): string
+    {
+        $source = $data['source'] ?? null;
+
+        return \is_string($source) && $source !== '' ? $source : $this->catalog->tr('none');
+    }
+
+    /**
+     * The sessions block: the table of the newest sessions, then the hint that says where the ledger was
+     * read from and what the read left out — lines that could not be read, streams without a start, older
+     * sessions past the cap.
+     *
      * @param array<string, mixed> $block
      */
-    private function devtoolsSessions(array $block): string
+    private function devtoolsSessions(array $block, string $source): string
     {
         $out = ['<h3 class="mui-h3">' . Html::escape($this->catalog->tr('devtools.sessions')) . '</h3>'];
         $error = $block['error'] ?? null;
         if (\is_string($error)) {
             $out[] = $this->notice($this->catalog->tr('devtools.sessions.error', $error), 'danger');
+            $out[] = $this->ledgerHint($source, $block);
 
             return implode("\n", $out);
         }
         $rows = \is_array($block['rows'] ?? null) ? array_values(array_filter($block['rows'], 'is_array')) : [];
         if ($rows === []) {
             $out[] = $this->notice($this->catalog->tr('devtools.sessions.empty'));
+            $out[] = $this->ledgerHint($source, $block);
 
             return implode("\n", $out);
         }
@@ -577,13 +622,34 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             $cells[] = $this->sessionRow($row);
         }
         $out[] = $this->table(['col.session', 'col.state', 'col.goal', 'col.mode', 'col.tokens', 'col.pending'], $cells);
+        $out[] = $this->ledgerHint($source, $block);
 
         return implode("\n", $out);
     }
 
     /**
+     * «Read from X · N line(s) could not be read · N stream(s) without a start · N older not listed» —
+     * only the parts that are true.
+     *
+     * @param array<string, mixed> $block
+     */
+    private function ledgerHint(string $source, array $block): string
+    {
+        $parts = [$this->catalog->tr('devtools.source', $source)];
+        foreach (['unreadable' => 'devtools.ledger.unreadable', 'unstarted' => 'devtools.sessions.unstarted', 'more' => 'devtools.sessions.more'] as $field => $key) {
+            $count = $block[$field] ?? 0;
+            if (\is_int($count) && $count > 0) {
+                $parts[] = $this->catalog->tr($key, (string) $count);
+            }
+        }
+
+        return '<p class="admin-devtools__hint">' . Html::escape(implode(' · ', $parts)) . '</p>';
+    }
+
+    /**
      * One session row: the id linking into its timeline, the state badge, the goal cut short, the mode,
-     * the provider's tokens in/out (or «not reported» — absent is not zero), and what it waits on.
+     * the provider's tokens in/out (or «not reported» — absent is not zero), and what it waits on — the
+     * reason as a badge, the question itself inline beside it.
      *
      * @param array<mixed> $row
      */
@@ -594,8 +660,10 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $pendingHtml = Html::escape($this->catalog->tr('none'));
         if ($pending !== null) {
             $reason = (string) ($pending['reason'] ?? '');
-            $pendingHtml = '<span class="mui-badge mui-badge--accent" title="' . Html::escape((string) ($pending['question'] ?? '')) . '">'
-                . Html::escape($reason !== '' ? $reason : $this->catalog->tr('devtools.pending')) . '</span>';
+            $question = (string) ($pending['question'] ?? '');
+            $pendingHtml = '<span class="mui-badge mui-badge--accent">'
+                . Html::escape($reason !== '' ? $reason : $this->catalog->tr('devtools.pending')) . '</span>'
+                . ($question !== '' ? ' <small>' . Html::escape(self::cut($question, 120)) . '</small>' : '');
         }
 
         return '<tr>'
@@ -635,8 +703,10 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             foreach ($sessions as $session) {
                 $links[] = '<a href="' . Html::escape($this->sessionUrl($session)) . '"><code>' . Html::escape($session) . '</code></a>';
             }
+            $name = (string) ($kind['kind'] ?? '');
+            $gloss = $this->catalog->has('devtools.debt.kind.' . $name) ? '<br><small>' . Html::escape($this->catalog->tr('devtools.debt.kind.' . $name)) . '</small>' : '';
             $cells[] = '<tr>'
-                . '<td><code>' . Html::escape((string) ($kind['kind'] ?? '')) . '</code></td>'
+                . '<td><code>' . Html::escape($name) . '</code>' . $gloss . '</td>'
                 . '<td>' . (int) ($kind['count'] ?? 0) . '</td>'
                 . '<td>' . ($links === [] ? Html::escape($this->catalog->tr('none')) : implode(' ', $links)) . '</td>'
                 . '</tr>';
@@ -684,8 +754,9 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     }
 
     /**
-     * The log block: what `admin.log` declared, or that it declared nothing; a missing or unreadable file
-     * as a notice that names the path; an empty file said so; else the tail in a `<pre>`.
+     * The log block: what `admin.log` declared, or that it declared nothing; a path outside the app root,
+     * a missing or an unreadable file as a notice that names the path — and, when no root is known, the
+     * notice that says so; an empty file said so; else the tail in a `<pre>`.
      *
      * @param array<string, mixed> $log
      */
@@ -700,7 +771,15 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $path = (string) ($log['path'] ?? '');
         $error = $log['error'] ?? null;
         if (\is_string($error)) {
-            $out[] = $this->notice($this->catalog->tr($error === 'missing' ? 'devtools.log.missing' : 'devtools.log.unreadable', $path), 'danger');
+            $key = match ($error) {
+                'missing' => 'devtools.log.missing',
+                DevToolsSource::LOG_OUTSIDE => 'devtools.log.outside',
+                default => 'devtools.log.unreadable',
+            };
+            $out[] = $this->notice($this->catalog->tr($key, $path), 'danger');
+            if (!\is_string($log['root'] ?? null)) {
+                $out[] = $this->notice($this->catalog->tr('devtools.log.no_root'), 'warning');
+            }
 
             return implode("\n", $out);
         }
@@ -721,18 +800,19 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     /**
      * The drill-down of one session: the header with its state, goal, mode, tokens, debt count and
      * instants; the way back to the ledgers; the timeline — time, event, detail — as the projector paints
-     * it. A session nobody recorded is a notice, not a blank page.
+     * it, under one line saying where the stream was read from. A session nobody recorded is a notice,
+     * not a blank page.
      *
      * @param array<string, mixed> $data
      */
     private function devtoolsSession(array $data): string
     {
-        $session = \is_array($data['session'] ?? null) ? $data['session'] : null;
+        $session = \is_array($data['row'] ?? null) ? $data['row'] : null;
         $id = (string) ($data['id'] ?? ($session['id'] ?? ''));
 
         $out = ['<h2 class="mui-h2">' . Html::escape($this->catalog->tr('devtools.session', $id))
             . ($session !== null ? ' ' . $this->stateBadge((string) ($session['state'] ?? '')) : '') . '</h2>'];
-        $out[] = '<p class="admin-devtools__actions"><a class="mui-btn mui-btn--ghost" href="' . Html::escape($this->settings->sectionUrl(DevToolsComponent::SECTION)) . '">'
+        $out[] = '<p class="admin-devtools__actions"><a class="mui-btn mui-btn--ghost" href="' . Html::escape($this->withLang($this->settings->sectionUrl(DevToolsComponent::SECTION))) . '">'
             . Html::escape($this->catalog->tr('devtools.back')) . '</a></p>';
 
         $unavailable = $this->devtoolsUnavailable($data);
@@ -749,12 +829,16 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         }
         if (($data['found'] ?? false) !== true || $session === null) {
             $out[] = $this->notice($this->catalog->tr('devtools.session.unknown', $id));
+            $out[] = $this->ledgerHint($this->source($data), $data);
 
             return implode("\n", $out);
         }
 
         $out[] = $this->sessionFacts($session);
         $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('devtools.timeline')) . '</h3>';
+        $unreadable = $data['unreadable'] ?? 0;
+        $out[] = '<p class="admin-devtools__hint">' . Html::escape($this->catalog->tr('devtools.timeline.hint', $this->source($data))
+            . (\is_int($unreadable) && $unreadable > 0 ? ' · ' . $this->catalog->tr('devtools.ledger.unreadable', (string) $unreadable) : '')) . '</p>';
         $events = \is_array($data['events'] ?? null) ? array_values(array_filter($data['events'], 'is_array')) : [];
         if ($events === []) {
             $out[] = $this->notice($this->catalog->tr('devtools.timeline.empty'));
@@ -876,10 +960,25 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         return '<time datetime="' . Html::escape($when) . '">' . Html::escape($when) . '</time>';
     }
 
-    /** The URL of one session's timeline inside the Dev tools section. */
+    /** The URL of one session's timeline inside the Dev tools section, carrying the request's `?lang=` when it had one. */
     private function sessionUrl(string $id): string
     {
-        return $this->settings->sectionUrl(DevToolsComponent::SECTION) . '?' . http_build_query([DevToolsComponent::SESSION_PARAM => $id]);
+        return $this->withLang($this->settings->sectionUrl(DevToolsComponent::SECTION), [DevToolsComponent::SESSION_PARAM => $id]);
+    }
+
+    /**
+     * A panel URL with its query — plus `lang` when the request overrode the locale, so the page it opens
+     * answers in the same language as the one it was opened from.
+     *
+     * @param array<string, string> $query
+     */
+    private function withLang(string $url, array $query = []): string
+    {
+        if ($this->lang !== null) {
+            $query[AdminController::LANG_PARAM] = $this->lang;
+        }
+
+        return $query === [] ? $url : $url . '?' . http_build_query($query);
     }
 
     /** The text cut to `$max` code points with an ellipsis — whole characters, no mbstring. */
