@@ -1,6 +1,17 @@
 # Changelog
 
 
+## [0.6.0](https://github.com/getmilpa/admin/compare/v0.5.2...v0.6.0) (2026-09-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* everything under Milpa\Admin from 0.5.x is gone (controllers, coa:admin, TUI, settings store, StorageRootSource, RouteTableSource consumers). The old line stays citable at v0.5.2.
+
+### Features
+
+* rebuild the panel for the framework — a section is a component a plugin declares ([#37](https://github.com/getmilpa/admin/issues/37)) ([c93e874](https://github.com/getmilpa/admin/commit/c93e8741a96acc2cbfcd0b7c00e1daa755bd49bb))
+
 ## [0.4.15](https://github.com/getmilpa/admin/releases/tag/v0.4.15) (2026-08-12)
 
 Accepts `milpa/console ^0.9`, where consent is decided for the **invocation** rather than for the operation in the abstract — an operation may declare that a given argument brings its ceiling down, and `console v0.9.0` is where that declaration is finally read.
