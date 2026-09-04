@@ -69,6 +69,12 @@ final class AdminPage
             . '.milpa-admin .admin-notice{margin:0}'
             . '.milpa-admin .admin-capabilities{display:grid;gap:.25rem;padding-left:1.25rem}'
             . '.milpa-admin .mui-table td,.milpa-admin .mui-table th{vertical-align:top}'
+            . '.milpa-admin .admin-stack__actions{margin:0}'
+            . '.milpa-admin .admin-stack__service{display:grid;gap:var(--space-3,.75rem)}'
+            . '.milpa-admin .admin-stack__probe{font-weight:normal;opacity:.7}'
+            . '.milpa-admin .admin-stack__facts{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;margin:0}'
+            . '.milpa-admin .admin-stack__facts dd,.milpa-admin .admin-stack__summary,.milpa-admin .admin-stack__declared{margin:0}'
+            . '.milpa-admin .admin-compose{margin:0;overflow-x:auto;white-space:pre}'
             . '.milpa-admin-error{padding:var(--space-6,2rem);display:grid;gap:1rem;max-width:60ch}';
     }
 
