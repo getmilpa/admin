@@ -63,7 +63,7 @@
         "provides": [
           "admin-panel"
         ],
-        "briefing": "This app serves an administration panel at /milpa/admin (loopback-only until the app declares its own gate). Every plugin that implements Milpa\\Admin\\Section\\AdminSectionProvider gets a section in it; the panel lists the booted plugins, every route they declared and every backing service they need (with a compose file at {route}/stack/compose.yml)."
+        "briefing": "This app serves an administration panel at /milpa/admin (loopback-only until the app declares its own gate). Every plugin that implements Milpa\\Admin\\Section\\AdminSectionProvider gets a section in it; the panel lists the booted plugins, every route they declared, what the app declared about the panel itself (Settings — every admin.* key with its source, and the gate in effect), and every backing service they need (with a compose file at {route}/stack/compose.yml)."
       }
     }
   },

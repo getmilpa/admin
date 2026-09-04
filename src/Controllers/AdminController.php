@@ -34,9 +34,14 @@ use Psr\Http\Message\ServerRequestInterface;
  * Every request discovers the sections again from the plugin instances the kernel holds, so what the
  * sidebar lists is what booted, not what was cached. Without a kernel in the container (the app's
  * `public/index.php` registers it) the panel still serves its own sections.
+ *
+ * The language is the app's (`admin.locale`) unless the request says `?lang=<locale>` with a locale the
+ * {@see Catalog} carries — the browser-side override the Settings section offers. Anything else is ignored.
  */
 final class AdminController
 {
+    public const LANG_PARAM = 'lang';
+
     /**
      * @param object $self the admin plugin instance — the one provider the panel can count on without a kernel
      */
@@ -52,7 +57,7 @@ final class AdminController
     /** `GET {route}` — the first section in sidebar order. */
     public function index(ServerRequestInterface $request): ResponseInterface
     {
-        return $this->show(null);
+        return $this->show(null, $this->catalogFor($request));
     }
 
     /** `GET {route}/s/{id}` — one section, 404 when no plugin declared it. */
@@ -61,33 +66,55 @@ final class AdminController
         $result = $request->getAttribute(RouteResult::ATTRIBUTE);
         $id = $result instanceof RouteResult ? (string) ($result->parameters['id'] ?? '') : '';
 
-        return $this->show($id);
+        return $this->show($id, $this->catalogFor($request));
     }
 
-    private function show(?string $id): ResponseInterface
+    /**
+     * The catalog this request reads in: the one `?lang=` names when the catalog carries that locale,
+     * else the panel's own.
+     */
+    public function catalogFor(ServerRequestInterface $request): Catalog
     {
+        $lang = self::query($request, self::LANG_PARAM);
+        if ($lang === null || $lang === $this->catalog->locale() || !\in_array($lang, Catalog::locales(), true)) {
+            return $this->catalog;
+        }
+
+        return new Catalog($lang);
+    }
+
+    private function show(?string $id, Catalog $catalog): ResponseInterface
+    {
+        $shell = $this->shell->withCatalog($catalog);
+        $page = $this->page->withCatalog($catalog);
+
         try {
             $catalogue = SectionCatalogue::discover($this->plugins());
         } catch (SectionConflictException $conflict) {
-            return $this->html(500, $this->page->error(500, $this->catalog->tr('section.conflict', $conflict->getMessage())));
+            return $this->html(500, $page->error(500, $catalog->tr('section.conflict', $conflict->getMessage())));
         }
 
         if ($catalogue->isEmpty()) {
-            return $this->html(200, $this->page->render($this->shell->renderEmpty($catalogue)));
+            return $this->html(200, $page->render($shell->renderEmpty($catalogue)));
         }
 
         $active = $id === null ? $catalogue->first() : $catalogue->find($id);
         if (!$active instanceof AdminSection) {
-            return $this->html(404, $this->page->error(404, $this->catalog->tr('section.unknown', (string) $id)));
+            $present = implode(', ', array_map(static fn (AdminSection $s): string => $s->id, $catalogue->sections()));
+
+            return $this->html(404, $page->error(
+                404,
+                $catalog->tr('section.unknown', (string) $id) . ' ' . $catalog->tr('section.present', $present),
+            ));
         }
 
         try {
-            $body = $this->shell->render($catalogue, $active);
+            $body = $shell->render($catalogue, $active);
         } catch (UnknownComponentException $unknown) {
-            return $this->html(500, $this->page->error(500, $this->catalog->tr('section.conflict', $unknown->getMessage())));
+            return $this->html(500, $page->error(500, $catalog->tr('section.conflict', $unknown->getMessage())));
         }
 
-        return $this->html(200, $this->page->render($body, $this->shell->title($active)));
+        return $this->html(200, $page->render($body, $shell->title($active)));
     }
 
     /**
@@ -108,6 +135,21 @@ final class AdminController
         $plugins[] = $this->self;
 
         return $plugins;
+    }
+
+    /**
+     * One query parameter as a string — from the parsed params when the host filled them, else from
+     * the URI's own query string, so `?lang=` works however the request was built.
+     */
+    private static function query(ServerRequestInterface $request, string $name): ?string
+    {
+        $params = $request->getQueryParams();
+        if (!isset($params[$name])) {
+            parse_str($request->getUri()->getQuery(), $params);
+        }
+        $value = $params[$name] ?? null;
+
+        return \is_string($value) && $value !== '' ? $value : null;
     }
 
     private function html(int $status, string $body): ResponseInterface

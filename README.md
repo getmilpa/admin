@@ -31,10 +31,11 @@ return [
 ];
 ```
 
-The panel opens with three sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
-**Routes** (every route the booted plugins declared, with handler and per-route middleware) and **Stack** (every
-backing service the booted plugins declared they need — image, ports, environment with secrets masked, the
-declaring plugin — and whether its port answers on loopback) — and one more per plugin that declares one.
+The panel opens with four sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
+**Routes** (every route the booted plugins declared, with handler and per-route middleware), **Settings** (what the
+app declared about the panel itself, key by key, with its source) and **Stack** (every backing service the booted
+plugins declared they need — image, ports, environment with secrets masked, the declaring plugin — and whether its
+port answers on loopback) — and one more per plugin that declares one.
 
 ## The one idea: a section is a component a plugin declares
 
@@ -106,12 +107,32 @@ Everything under the `admin` key of the app's config; every knob has a safe defa
 |---|---|---|
 | `admin.route` | `/milpa/admin` | the mount point |
 | `admin.locale` | `en` | the panel's own copy — `en` or `es` |
-| `admin.middleware` | `[LoopbackOnlyMiddleware::class]` | PSR-15 classes attached to **every** panel route, outermost first. The default answers only to loopback; declare your passkey/scope gate here. `[]` opens the panel on purpose. |
+| `admin.middleware` | `[LoopbackOnlyMiddleware::class]` | PSR-15 classes attached to **every** panel route, outermost first. The default answers only to loopback; declare your passkey/scope gate here. Only a literally empty list `[]` opens the panel. |
 | `admin.secret` | `live.secret`, else derived | the HMAC secret that signs component state |
 | `admin.title` | `Milpa Admin` | the brand in the sidebar and the document title |
 
 Assets (design tokens, bundle, the `milpa/live-web` client runtime and Alpine) are served by the panel itself under
 `{route}/assets/` — no build step, nothing copied into `public/`.
+
+## Settings: what was declared, with its source
+
+The **Settings** section reads the `admin` key back to you — `route · locale · middleware · secret · title`, each
+with a `default`, `config` or `rejected` badge — and never writes it: changing configuration is a governed
+operation, not a form. A value the app declared and the panel refused (a locale the catalog lacks, a route or title
+of the wrong type, a gate that is not a list) is `rejected`, with the effective value in the row and what was
+declared next to it — never painted `default`. The secret shows only where it came from (`declared (admin.secret)`,
+`declared (live.secret)`, `derived`), never the value. A fresh app with no `admin` key sees five defaults and the
+exact snippet to paste. Above the table, **Panel preferences** — theme (`dark · light · system`) and density, this
+browser only, applied instantly and never sent to the server; and a language override, sent as `?lang=` with each
+request and never stored on the server — live in `localStorage` under `milpa.admin.prefs`.
+
+The one rule the panel enforces rather than copies: **only a literally empty list opens the panel; any misdeclaration
+falls back to loopback-only and Settings says so.** A non-string entry, an associative map, a value that is not a
+list, an empty string, a class that does not exist, a class that is not a PSR-15 middleware — each makes every panel
+route carry `[LoopbackOnlyMiddleware::class]`, the strict gate, never an open one and never the half that loads, and
+the panel names what it received (a danger badge on the row, a notice in Settings, `gate: fallback` in the topbar).
+The topbar always shows the gate in effect (`loopback · custom · open · fallback`) and the locale. Any panel page
+accepts `?lang=en|es` to render in another catalog language for that request (greenhouse `decisions/0204`).
 
 ## Measured, not assumed
 
