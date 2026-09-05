@@ -33,8 +33,10 @@ use Milpa\Live\ValueObjects\ComponentContext;
  * group — ADMIN, APP, AGENT, then any other — each item with its glyph), a topbar (the active section's
  * title, and the chips: who signed in when a gate authenticated the request, the gate in effect, the locale)
  * and a main region carrying the section header (`admin-section-header`: the title and «declared by
- * <Plugin>», read from the catalogue) above the active section's component, all compiled by
- * `XhtmlComponentCompiler` over the {@see ComponentBook}.
+ * <Plugin>», read from the catalogue) above the active section's component, wrapped in the section body
+ * (`.admin-section__body` — the shell's, not the section's: the part of main that scrolls, and the box a
+ * section fills when it wants the remaining height), all compiled by `XhtmlComponentCompiler` over the
+ * {@see ComponentBook}.
  * Two lifecycle pairs make it extensible without touching it: `admin.section.before_render`/`after_render`
  * (the section's props, then its HTML) and `admin.shell.before_render`/`after_render` (the composition
  * and items, then the HTML).
@@ -100,7 +102,7 @@ final class AdminShell
             // A subscriber that swapped the primitive into the composition still gets the items.
             'dashboard-sidebar' => ['items' => $shell->items],
             'dashboard-topbar' => ['childrenHtml' => $this->chips($principal)],
-            'dashboard-main' => ['childrenHtml' => $headerHtml . "\n" . $sectionHtml],
+            'dashboard-main' => ['childrenHtml' => $headerHtml . "\n" . self::body($sectionHtml, self::COMPONENT_ID . '-header')],
         ];
         $shell->html = $book->compiler($defaults)->compile($shell->markup, $context)->output;
         $this->events?->dispatch(self::AFTER_RENDER, ['shell' => $shell]);
@@ -131,10 +133,26 @@ final class AdminShell
         $defaults = [
             SidebarComponent::NAME => ['items' => []],
             'dashboard-topbar' => ['childrenHtml' => $this->chips($principal)],
-            'dashboard-main' => ['childrenHtml' => $notice],
+            'dashboard-main' => ['childrenHtml' => self::body($notice)],
         ];
 
         return $book->compiler($defaults)->compile($markup, $this->context($principal))->output;
+    }
+
+    /**
+     * The section body: the shell's wrapper around whatever main carries under the header — the active
+     * section's HTML as its subscribers left it, or the empty state's notice. Main is a column; this is the
+     * part of it that scrolls (the page's stylesheet, {@see AdminPage}) — and a scroller the keyboard can
+     * reach, the way the design bundle's `.mui-table-wrap` is: `tabindex="0"` and a region named by the
+     * section header above it. The empty state has no header and nothing to scroll: a plain wrapper.
+     *
+     * @param string|null $labelledBy the id of the header that names the region, null for the empty state
+     */
+    private static function body(string $html, ?string $labelledBy = null): string
+    {
+        $region = $labelledBy === null ? '' : ' tabindex="0" role="region" aria-labelledby="' . self::attr($labelledBy) . '"';
+
+        return '<div class="admin-section__body"' . $region . '>' . $html . '</div>';
     }
 
     /** The title the panel shows for a section: a catalog key when it knows it, the literal otherwise. */
@@ -217,9 +235,10 @@ final class AdminShell
 
     /**
      * The topbar's end slot: who signed in (`signed in as <actor id>` — only when a gate authenticated
-     * the request; the panel invents no identity), the gate in effect (`gate: loopback | custom | passkey
-     * | open | fallback` — a fallback wears the warning badge, because a misdeclared gate is something to
-     * fix) and the locale answering.
+     * the request; the panel invents no identity — the whole of it in `title` too, because a passkey id is
+     * longer than the chip the stylesheet lets it have and the ellipsis must be hoverable), the gate in
+     * effect (`gate: loopback | custom | passkey | open | fallback` — a fallback wears the warning badge,
+     * because a misdeclared gate is something to fix) and the locale answering.
      */
     private function chips(?string $principal): string
     {
@@ -228,7 +247,7 @@ final class AdminShell
         $locale = $this->catalog->locale();
         $signedIn = $principal === null
             ? ''
-            : '<span class="mui-badge admin-chip admin-chip--principal" data-principal="' . self::attr($principal) . '">'
+            : '<span class="mui-badge admin-chip admin-chip--principal" title="' . self::attr($this->catalog->tr('topbar.signed_in', $principal)) . '" data-principal="' . self::attr($principal) . '">'
                 . self::attr($this->catalog->tr('topbar.signed_in', $principal))
                 . '</span>';
 

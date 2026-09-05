@@ -159,7 +159,14 @@ final class AdminHtmlRendererTest extends TestCase
         self::assertStringContainsString('admin-section--admin-stack', $html);
         self::assertStringContainsString('href="/milpa/admin/stack/compose.yml"', $html);
         self::assertStringContainsString('Download compose.yml', $html);
-        self::assertSame(3, substr_count($html, '<article class="mui-card admin-stack__service">'), 'one card per service, garbage skipped');
+        self::assertSame(3, substr_count($html, '<article class="mui-card admin-panel admin-stack__service">'), 'one panel per service, garbage skipped');
+        self::assertStringContainsString(
+            '<header class="mui-card__header admin-panel__header"><h3 class="mui-card__title admin-panel__title">hub <span class="mui-badge mui-badge--success">up</span> <small class="admin-stack__probe">probed on fake.loopback:3000</small></h3></header>' . "\n"
+            . '<div class="mui-card__body admin-panel__body">',
+            $html,
+            'a panel is the card composed as the design system composes it: its header, then its body',
+        );
+        self::assertSame(3, substr_count($html, '</div></article>'), 'every body closes before its panel');
         self::assertStringContainsString('<span class="mui-badge mui-badge--success">up</span>', $html);
         self::assertStringContainsString('<span class="mui-badge mui-badge--warning">down</span>', $html);
         self::assertStringContainsString('<span class="mui-badge">unknown</span>', $html);
@@ -254,9 +261,15 @@ final class AdminHtmlRendererTest extends TestCase
 
         self::assertStringContainsString('admin-section--admin-settings', $html);
         self::assertStringContainsString('What this app declared about its panel', $html);
-        self::assertStringContainsString('<h3 class="mui-h3">Panel preferences</h3>', $html);
+        self::assertStringContainsString(
+            '<article class="mui-card admin-panel admin-settings__prefs"><header class="mui-card__header admin-panel__header"><h3 class="mui-card__title admin-panel__title">Panel preferences</h3></header><div class="mui-card__body admin-panel__body">',
+            $html,
+            'the preferences are a panel: the card with its header and its body',
+        );
         self::assertStringContainsString('Theme and density are this browser only — applied instantly, never sent to the server.', $html);
         self::assertStringContainsString('<form class="admin-prefs" data-prefs="">', $html);
+        self::assertStringContainsString('<label class="mui-field admin-prefs__field" for="admin-pref-theme"><span class="mui-field__label">Theme</span><select', $html, 'each preference is a mui-field');
+        self::assertStringContainsString('</select><small class="mui-field__hint">', $html, 'the hint is the field\'s');
         self::assertStringContainsString('<select class="mui-input mui-input--sm" data-pref="theme" id="admin-pref-theme"><option value="dark">dark</option><option value="light">light</option><option value="system">system</option></select>', $html);
         self::assertStringContainsString('data-pref="density"', $html);
         self::assertStringContainsString('<option value="comfortable">comfortable</option><option value="compact">compact</option>', $html);
@@ -455,7 +468,7 @@ final class AdminHtmlRendererTest extends TestCase
 
         $spanish = self::renderer('es')->render($component, new RenderRequest(context: new ComponentContext(componentId: 'st5')))->output;
         self::assertStringContainsString('Lo que esta app declaró sobre su panel', $spanish);
-        self::assertStringContainsString('<h3 class="mui-h3">Preferencias del panel</h3>', $spanish);
+        self::assertStringContainsString('<h3 class="mui-card__title admin-panel__title">Preferencias del panel</h3>', $spanish);
         self::assertStringContainsString('<option value="dark">oscuro</option>', $spanish);
         self::assertStringContainsString('<option value="server">servidor (en)</option>', $spanish);
         self::assertStringContainsString('<h3 class="mui-h3">Configuración</h3>', $spanish);
