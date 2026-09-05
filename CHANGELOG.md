@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.10.0](https://github.com/getmilpa/admin/compare/v0.9.0...v0.10.0) (2026-09-05)
+
+
+### Features
+
+* the topbar says who is signed in, and a passkey gate is named as such ([#45](https://github.com/getmilpa/admin/issues/45)) ([b891e7b](https://github.com/getmilpa/admin/commit/b891e7bbe656f02e634749b0f864bfa88c50bdf2))
+
 ## [0.9.0](https://github.com/getmilpa/admin/compare/v0.8.0...v0.9.0) (2026-09-04)
 
 
