@@ -278,9 +278,10 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     }
 
     /**
-     * The «Panel preferences» card: theme and density (this browser only, applied in place) and the
-     * language override (sent as `?lang=` with each request, stored only in this browser) — plain
-     * controls tagged `data-pref`, no state of their own; the page's delegated script owns them.
+     * The «Panel preferences» panel (a `mui-card` with its header and body, {@see self::panelHeader()}):
+     * theme and density (this browser only, applied in place) and the language override (sent as `?lang=`
+     * with each request, stored only in this browser) — plain controls tagged `data-pref`, no state of
+     * their own; the page's delegated script owns them.
      */
     private function preferences(string $serverLocale): string
     {
@@ -289,8 +290,9 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             $languages[$code] = $code;
         }
 
-        return '<article class="mui-card admin-settings__prefs">'
-            . '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('settings.prefs')) . '</h3>'
+        return '<article class="mui-card admin-panel admin-settings__prefs">'
+            . self::panelHeader(Html::escape($this->catalog->tr('settings.prefs')))
+            . '<div class="mui-card__body admin-panel__body">'
             . '<p class="admin-settings__hint">' . Html::escape($this->catalog->tr('settings.prefs.hint')) . '</p>'
             . '<form class="admin-prefs" data-prefs="">'
             . $this->select('theme', 'settings.pref.theme', [
@@ -304,25 +306,40 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             ])
             . $this->select('lang', 'settings.pref.lang', $languages, $this->catalog->tr('settings.pref.lang.hint'))
             . '</form>'
+            . '</div>'
             . '</article>';
     }
 
     /**
+     * One preference: a `mui-field` — label, the select, the hint when there is one.
+     *
      * @param array<string, string> $options value → label
      */
     private function select(string $pref, string $labelKey, array $options, string $hint = ''): string
     {
-        $html = '<label class="admin-prefs__field" for="admin-pref-' . $pref . '"><span>' . Html::escape($this->catalog->tr($labelKey)) . '</span>'
+        $html = '<label class="mui-field admin-prefs__field" for="admin-pref-' . $pref . '"><span class="mui-field__label">' . Html::escape($this->catalog->tr($labelKey)) . '</span>'
             . '<select class="mui-input mui-input--sm" data-pref="' . $pref . '" id="admin-pref-' . $pref . '">';
         foreach ($options as $value => $label) {
             $html .= '<option value="' . Html::escape($value) . '">' . Html::escape($label) . '</option>';
         }
         $html .= '</select>';
         if ($hint !== '') {
-            $html .= '<small class="admin-settings__hint">' . Html::escape($hint) . '</small>';
+            $html .= '<small class="mui-field__hint">' . Html::escape($hint) . '</small>';
         }
 
         return $html . '</label>';
+    }
+
+    /**
+     * The header of a panel — a `mui-card__header` carrying the title as the card's own `mui-card__title`
+     * (`admin-panel__title` lets a badge or a probe sit beside it); the page's stylesheet separates it from
+     * the `mui-card__body` that follows.
+     *
+     * @param string $titleHtml the title, already escaped — text, or text with its badge and note
+     */
+    private static function panelHeader(string $titleHtml): string
+    {
+        return '<header class="mui-card__header admin-panel__header"><h3 class="mui-card__title admin-panel__title">' . $titleHtml . '</h3></header>';
     }
 
     private function plugins(StateSnapshot $state): string
@@ -463,8 +480,9 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     }
 
     /**
-     * One service card: heading with the state badge, the declaration, the env table, the compose fragment
-     * — and, when another plugin declared the same name, a danger badge and a notice naming the others.
+     * One service panel: the header with the name, the state badge and the probe; the body with the
+     * declaration, the env table, the compose fragment — and, when another plugin declared the same name,
+     * a danger badge and a notice naming the others.
      *
      * @param array<mixed> $row
      */
@@ -485,10 +503,11 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $summary = (string) ($row['summary'] ?? '');
         $name = (string) ($row['name'] ?? '');
 
-        $out = ['<article class="mui-card admin-stack__service">'];
-        $out[] = '<h3 class="mui-h3">' . Html::escape($name)
+        $out = ['<article class="mui-card admin-panel admin-stack__service">'];
+        $out[] = self::panelHeader(Html::escape($name)
             . ' <span class="' . $badge . '">' . Html::escape($this->catalog->tr($stateKey)) . '</span>'
-            . ' <small class="admin-stack__probe">' . Html::escape($probe) . '</small></h3>';
+            . ' <small class="admin-stack__probe">' . Html::escape($probe) . '</small>');
+        $out[] = '<div class="mui-card__body admin-panel__body">';
         if ($state === StackSource::CONFLICT) {
             $others = \is_array($row['conflictsWith'] ?? null) ? array_values(array_filter($row['conflictsWith'], 'is_string')) : [];
             $out[] = $this->notice($this->catalog->tr('stack.conflict', $name, $this->join($others)), 'danger');
@@ -521,7 +540,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $out[] = '<p class="admin-stack__declared">' . Html::escape($this->catalog->tr('stack.declared_by', (string) ($row['plugin'] ?? ''))) . '</p>';
         $out[] = '<h4 class="mui-h4">' . Html::escape($this->catalog->tr('stack.compose')) . '</h4>';
         $out[] = '<pre class="admin-compose"><code>' . Html::escape((string) ($row['compose'] ?? '')) . '</code></pre>';
-        $out[] = '</article>';
+        $out[] = '</div></article>';
 
         return implode("\n", $out);
     }

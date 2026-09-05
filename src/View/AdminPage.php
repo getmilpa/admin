@@ -21,13 +21,14 @@ use Milpa\Admin\I18n\Catalog;
  * Wraps the shell into a full HTML document: the design tokens and bundle, the client runtime and Alpine
  * (served by the panel itself, no build step), the declared locale as `lang`.
  *
- * Owns no surface markup — that is the components' — only the document around them, and the two scripts
- * that keep the viewer's panel preferences: one at the top of `<body>` that applies the stored theme
- * before anything paints, one at the end that stores what the Settings section's `[data-pref]` controls
- * say (`localStorage`, key {@see self::PREFS_KEY}) and applies it — theme on `<html data-theme>`, density
- * on `.mui-shell[data-density]`, the language override by navigating with `?lang=` and keeping it on every
- * in-panel link. Nothing of it is stored on the server; a delegated listener, no per-instance state
- * (greenhouse decisions/0204).
+ * Owns no surface markup — that is the components' — only the document around them: the panel's own
+ * stylesheet ({@see self::css()}: the document painted, a base layer for the raw HTML a section emits, the
+ * panel's classes) and the two scripts that keep the viewer's panel preferences: one at the top of `<body>`
+ * that applies the stored theme before anything paints, one at the end that stores what the Settings
+ * section's `[data-pref]` controls say (`localStorage`, key {@see self::PREFS_KEY}) and applies it — theme
+ * on `<html data-theme>`, density on `.mui-shell[data-density]`, the language override by navigating with
+ * `?lang=` and keeping it on every in-panel link. Nothing of it is stored on the server; a delegated
+ * listener, no per-instance state (greenhouse decisions/0204).
  */
 final class AdminPage
 {
@@ -59,9 +60,11 @@ final class AdminPage
             . '<meta charset="utf-8">' . "\n"
             . '<meta name="viewport" content="width=device-width, initial-scale=1">' . "\n"
             . '<title>' . self::e($documentTitle) . '</title>' . "\n"
+            // The panel's stylesheet goes BEFORE the design bundle: its `admin.base` layer is declared first,
+            // so it sits under every `milpa.*` layer the bundle declares — the bundle's pieces win over it.
+            . '<style>' . "\n" . self::css() . '</style>' . "\n"
             . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl('tokens.css')) . '">' . "\n"
             . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl('bundle.css')) . '">' . "\n"
-            . '<style>' . self::css() . '</style>' . "\n"
             . '</head>' . "\n"
             . '<body class="mui-body milpa-admin">' . "\n"
             . '<script data-admin-prefs="early">' . self::earlyThemeScript() . '</script>' . "\n"
@@ -82,35 +85,110 @@ final class AdminPage
         return $this->render($shell, (string) $status);
     }
 
+    /**
+     * The panel's stylesheet, in cascade order. The design bundle keeps everything it publishes in
+     * `@layer milpa.*` (its THEMING contract: unlayered CSS always wins over it; a layer declared before its
+     * own loses to every piece of it), and the panel uses both sides of that contract:
+     *
+     *   1. `@layer admin.base` — declared first, so it sits UNDER the whole bundle: the base look of the raw
+     *      HTML a section emits inside the shell (its `<p>`, `<dl>`, `<pre>`, `<code>`, `<a>`, headings, table
+     *      cells, form controls), all in the shell's own tokens. A `mui-*` piece that says otherwise wins by
+     *      layer — `.mui-btn` keeps its colour and no underline although it is an `<a>`; `.mui-card__title`
+     *      keeps its size although it is an `<h3>`. Nothing of the bundle is restyled here, and nothing the
+     *      bundle leaves unsaid on its pieces is filled in from here either: the heading scale tracks only
+     *      `h1` and `h2` (the bundle's own prose scale), so a `.mui-card__title` keeps its tracking; only a
+     *      classless `<a>` gets the rounded focus ring, so a `.mui-sidebar__brand` keeps its corners. Rhythm
+     *      comes from the containers (every panel body and section is a grid with a gap), not from margins on
+     *      the headings. A `<dl>` is a two-column grid in the table's rhythm: the label column pads on its end
+     *      so the row rules meet, and rows pad like a `.mui-table` cell.
+     *   2. The document — `html` and `body` painted with the page's tokens and no browser margin, so the
+     *      canvas never shows through, and the colour scheme following `<html data-theme>`.
+     *   3. The panel's own classes (`admin-*`) and the one layout decision over the shell: the panel is an
+     *      app, not a document — the shell is the viewport, main is a column whose section header keeps its
+     *      height and whose section body (`.admin-section__body`, the shell's wrapper around the active
+     *      section) takes the rest and is what scrolls (a keyboard scroller, like the bundle's `.mui-table-wrap`:
+     *      `tabindex="0"`, a named region, its focus ring drawn inside because main clips). A section that
+     *      wants to fill the remaining height can (it is a flex item that shrinks to it; `height: 100%`
+     *      resolves against it); a section taller than the viewport scrolls inside main, never the page.
+     *      «Never the page» also needs the topbar to yield: a grid item's minimum is its content, and a chip
+     *      carrying a passkey id is wider than a laptop — so the topbar's minimum is zero and it clips, and the
+     *      principal chip truncates with an ellipsis (its full text in `title`), so no width of the shell
+     *      widens the shell's column past the viewport.
+     *
+     * Colours and sizes come only from the tokens — no literal colour, no invented step.
+     */
     private static function css(): string
     {
-        return '.milpa-admin .admin-section{display:grid;gap:var(--space-4,1rem);padding:var(--space-4,1rem)}'
-            . '.milpa-admin .admin-section__header{padding:var(--space-4,1rem) var(--space-4,1rem) 0}'
-            . '.milpa-admin .admin-section__header .mui-page-header__text{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-3,.75rem)}'
-            . '.milpa-admin .admin-section__header .mui-page-header__title{margin:0}'
-            . '.milpa-admin .admin-section__declared{opacity:.7;font-size:.875rem}'
-            . '.milpa-admin .admin-notice{margin:0}'
-            . '.milpa-admin .admin-capabilities{display:grid;gap:.25rem;padding-left:1.25rem}'
-            . '.milpa-admin .mui-table td,.milpa-admin .mui-table th{vertical-align:top}'
-            . '.milpa-admin .admin-stack__actions{margin:0}'
-            . '.milpa-admin .admin-stack__service{display:grid;gap:var(--space-3,.75rem)}'
-            . '.milpa-admin .admin-stack__probe{font-weight:normal;opacity:.7}'
-            . '.milpa-admin .admin-stack__facts{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;margin:0}'
-            . '.milpa-admin .admin-stack__facts dd,.milpa-admin .admin-stack__summary,.milpa-admin .admin-stack__declared{margin:0}'
-            . '.milpa-admin .admin-compose,.milpa-admin .admin-snippet{margin:0;overflow-x:auto;white-space:pre}'
-            . '.milpa-admin .admin-settings__prefs{display:grid;gap:var(--space-3,.75rem)}'
-            . '.milpa-admin .admin-settings__hint{margin:0;opacity:.7}'
-            . '.milpa-admin .admin-prefs{display:grid;gap:var(--space-3,.75rem);grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));margin:0}'
-            . '.milpa-admin .admin-prefs__field{display:grid;gap:.25rem}'
-            . '.milpa-admin .admin-settings__secret{letter-spacing:.1em;margin-right:.5rem}'
-            . '.milpa-admin .admin-settings__declared{opacity:.7}'
-            . '.milpa-admin .admin-chip+.admin-chip{margin-left:.5rem}'
-            . '.milpa-admin .admin-devtools__hint,.milpa-admin .admin-devtools__actions{margin:0}'
-            . '.milpa-admin .admin-devtools__hint{opacity:.7}'
-            . '.milpa-admin .admin-devtools__facts{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;margin:0}'
-            . '.milpa-admin .admin-devtools__facts dd{margin:0}'
-            . '.milpa-admin .admin-log{margin:0;overflow:auto;white-space:pre;max-height:32rem}'
-            . '.milpa-admin-error{padding:var(--space-6,2rem);display:grid;gap:1rem;max-width:60ch}';
+        return <<<'CSS'
+            @layer admin.base;
+            @layer admin.base{
+            .milpa-admin{font-family:var(--font-body);font-size:var(--text-sm);line-height:var(--leading-normal);color:var(--text)}
+            .milpa-admin :is(h1,h2,h3,h4,h5,h6){margin:0;font-family:var(--font-heading);font-weight:var(--weight-medium);line-height:var(--leading-snug);color:var(--text)}
+            .milpa-admin h1{font-size:var(--text-2xl);letter-spacing:var(--tracking-tight)}
+            .milpa-admin h2{font-size:var(--text-xl);letter-spacing:var(--tracking-tight)}
+            .milpa-admin h3{font-size:var(--text-lg)}
+            .milpa-admin :is(h4,h5,h6){font-size:var(--text-base)}
+            .milpa-admin p{margin:0 0 var(--space-3)}
+            .milpa-admin p:last-child{margin-block-end:0}
+            .milpa-admin small{font-size:var(--text-xs);color:var(--text-muted)}
+            .milpa-admin em{color:var(--text-muted)}
+            .milpa-admin a{color:var(--accent-text);text-decoration:underline;text-decoration-color:var(--border-strong);text-decoration-thickness:1px;text-underline-offset:.15em;transition:text-decoration-color var(--dur-fast) var(--ease-standard)}
+            .milpa-admin a:not([class]){border-radius:var(--radius-xs)}
+            .milpa-admin a:visited{color:var(--accent-text)}
+            .milpa-admin a:hover{text-decoration-color:currentColor}
+            .milpa-admin a:focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:var(--focus-offset)}
+            .milpa-admin :is(code,kbd,samp,pre){font-family:var(--font-mono);font-size:var(--text-xs)}
+            .milpa-admin code{padding:.1em .35em;color:inherit;background:var(--surface-raised);border:var(--border-width) var(--border-style) var(--border-subtle);border-radius:var(--radius-xs);overflow-wrap:anywhere}
+            .milpa-admin a:has(>code){text-decoration:none}
+            .milpa-admin a>code{color:var(--accent-text);background:var(--accent-subtle);border-color:var(--accent-active)}
+            .milpa-admin a:hover>code{border-color:currentColor}
+            .milpa-admin pre{margin:0;padding:var(--space-4);overflow:auto;line-height:var(--leading-normal);color:var(--syntax-text);background:var(--syntax-bg);border:var(--border-width) var(--border-style) var(--border-subtle);border-radius:var(--radius-base);tab-size:2}
+            .milpa-admin pre code{padding:0;font-size:inherit;color:inherit;background:transparent;border:0}
+            .milpa-admin dl{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:baseline;margin:0}
+            .milpa-admin :is(dt,dd){margin:0;padding-block:var(--space-3);border-bottom:var(--border-width) var(--border-style) var(--border-subtle)}
+            .milpa-admin dt{padding-inline-end:var(--space-4);font-family:var(--font-mono);font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--text-muted)}
+            .milpa-admin dd{min-width:0;color:var(--text-secondary)}
+            .milpa-admin :is(dt,dd):last-of-type{border-bottom:0}
+            .milpa-admin table{border-collapse:collapse}
+            .milpa-admin :is(th,td){padding:var(--space-2) var(--space-3);text-align:start;vertical-align:top}
+            .milpa-admin :is(ul,ol){margin:0;padding-inline-start:var(--space-5)}
+            .milpa-admin hr{margin-block:var(--space-4);border:0;border-top:var(--border-width) var(--border-style) var(--border-subtle)}
+            .milpa-admin :is(button,input,select,textarea){font-family:inherit;font-size:inherit;color:inherit}
+            }
+            html,body{margin:0;background:var(--bg);color:var(--text)}
+            html{color-scheme:dark}
+            html[data-theme="light"]{color-scheme:light}
+            .milpa-admin{--admin-inset:clamp(var(--space-5),3vw,var(--space-8))}
+            .milpa-admin .mui-shell{height:100dvh}
+            .milpa-admin .mui-shell>.mui-topbar{min-width:0;overflow:hidden}
+            .milpa-admin .mui-shell>.mui-shell__main{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:0}
+            .milpa-admin .admin-section__header{flex:none;margin:0;padding:var(--space-6) var(--admin-inset) var(--space-4)}
+            .milpa-admin .admin-section__header .mui-page-header__text{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-3)}
+            .milpa-admin .admin-section__header .mui-page-header__title{margin:0}
+            .milpa-admin .admin-section__declared{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-muted)}
+            .milpa-admin .admin-section__body{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:auto;padding:0 var(--admin-inset) var(--admin-inset)}
+            .milpa-admin .admin-section__body:focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:calc(-1 * var(--focus-width))}
+            .milpa-admin .admin-section{display:grid;gap:var(--space-4);min-width:0;padding:0}
+            .milpa-admin :is(h1,h2,h3,h4)>.mui-badge{vertical-align:middle;margin-inline-start:var(--space-1)}
+            .milpa-admin .admin-notice{margin:0}
+            .milpa-admin .admin-capabilities{display:grid;gap:var(--space-1);padding-inline-start:var(--space-5)}
+            .milpa-admin .admin-panel__header{padding-block:var(--space-4);border-bottom:var(--border-width) var(--border-style) var(--border-subtle)}
+            .milpa-admin .admin-panel__title{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+            .milpa-admin .admin-panel__body{display:grid;gap:var(--space-4);padding:var(--space-5)}
+            .milpa-admin .admin-stack__actions,.milpa-admin .admin-stack__summary,.milpa-admin .admin-devtools__actions{margin:0}
+            .milpa-admin .admin-stack__probe{font-family:var(--font-mono);font-size:var(--text-xs);font-weight:var(--weight-regular);color:var(--text-muted)}
+            .milpa-admin .admin-stack__declared{margin:0;color:var(--text-muted)}
+            .milpa-admin .admin-compose,.milpa-admin .admin-snippet,.milpa-admin .admin-log{margin:0;white-space:pre}
+            .milpa-admin .admin-log{max-height:32rem}
+            .milpa-admin .admin-settings__hint,.milpa-admin .admin-devtools__hint{margin:0;color:var(--text-muted)}
+            .milpa-admin .admin-prefs{display:grid;gap:var(--space-3);grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));margin:0}
+            .milpa-admin .admin-settings__secret{letter-spacing:.1em;margin-inline-end:var(--space-2)}
+            .milpa-admin .admin-settings__declared{color:var(--text-muted)}
+            .milpa-admin .admin-chip+.admin-chip{margin-inline-start:var(--space-2)}
+            .milpa-admin .admin-chip--principal{display:inline-block;max-width:28ch;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+            .milpa-admin .milpa-admin-error{display:grid;gap:var(--space-4);max-width:60ch}
+
+            CSS;
     }
 
     /**

@@ -127,7 +127,8 @@ final class AdminPluginTest extends TestCase
         $stack = $controller->section(self::sectionRequest('stack'));
         self::assertSame(200, $stack->getStatusCode());
         $html = (string) $stack->getBody();
-        self::assertStringContainsString('<article class="mui-card admin-stack__service">', $html);
+        self::assertStringContainsString('<article class="mui-card admin-panel admin-stack__service">', $html);
+        self::assertStringContainsString('<div class="admin-section__body" tabindex="0" role="region" aria-labelledby="milpa-admin-header"><section class="admin-section admin-section--admin-stack"', $html, 'the section sits in the shell\'s body — the part of main that scrolls, reachable by keyboard, named by the header');
         self::assertStringContainsString('<code>example/hub:1</code>', $html);
         self::assertStringContainsString('<code>3000:80</code>', $html);
         self::assertStringContainsString('Declared by HubPlugin', $html);
@@ -304,14 +305,14 @@ final class AdminPluginTest extends TestCase
         self::assertSame(200, $response->getStatusCode(), 'the gate named in config is the one that ran, and it let this request through');
         $html = (string) $response->getBody();
         self::assertStringContainsString(
-            '<span class="mui-badge admin-chip admin-chip--principal" data-principal="' . PasskeyGateStub::PRINCIPAL . '">signed in as ' . PasskeyGateStub::PRINCIPAL . '</span><span class="mui-badge admin-chip admin-chip--gate" data-gate="passkey">gate: passkey</span>',
+            '<span class="mui-badge admin-chip admin-chip--principal" title="signed in as ' . PasskeyGateStub::PRINCIPAL . '" data-principal="' . PasskeyGateStub::PRINCIPAL . '">signed in as ' . PasskeyGateStub::PRINCIPAL . '</span><span class="mui-badge admin-chip admin-chip--gate" data-gate="passkey">gate: passkey</span>',
             $html,
             'the actor the gate left on the request, and the gate named as such',
         );
         self::assertStringNotContainsString('gate: custom', $html);
 
         $plain = (string) self::dispatch(['admin' => ['middleware' => [AllowAllMiddleware::class]]], '10.0.0.5')->getBody();
-        self::assertStringNotContainsString('admin-chip--principal', $plain, 'the control: a gate that authenticates nobody leaves nobody to show');
+        self::assertStringNotContainsString('data-principal="', $plain, 'the control: a gate that authenticates nobody leaves nobody to show (the chip\'s class is named by the stylesheet on every page; its data attribute only by the chip)');
         self::assertStringNotContainsString('signed in as', $plain);
 
         [$container] = self::boot([AdminPlugin::class], ['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]);
@@ -324,7 +325,7 @@ final class AdminPluginTest extends TestCase
         $settings = (string) $controller->section(self::sectionRequest('settings'))->getBody();
         self::assertStringContainsString('<td><code>middleware</code></td><td><code>PasskeyGateMiddleware</code> <span class="mui-badge mui-badge--success">passkey</span></td><td><span class="mui-badge mui-badge--accent">config</span></td>', $settings);
         self::assertStringContainsString('Behind a passkey: milpa/app-runtime&#039;s PasskeyPlugin', $settings);
-        self::assertStringNotContainsString('admin-chip--principal', $settings, 'no gate ran in this direct call: nobody is signed in, and the panel says nothing');
+        self::assertStringNotContainsString('data-principal="', $settings, 'no gate ran in this direct call: nobody is signed in, and the panel says nothing');
         $spanish = (string) $controller->section(self::sectionRequest('settings', 'lang=es'))->getBody();
         self::assertStringContainsString('data-gate="passkey">puerta: passkey</span>', $spanish);
         self::assertStringContainsString('Detrás de una passkey', $spanish);
@@ -344,7 +345,7 @@ final class AdminPluginTest extends TestCase
         self::assertSame(200, $signed->getStatusCode());
         $html = (string) $signed->getBody();
         self::assertStringContainsString(
-            '<span class="mui-badge admin-chip admin-chip--principal" data-principal="passkey:rod">signed in as passkey:rod</span><span class="mui-badge admin-chip admin-chip--gate" data-gate="passkey">gate: passkey</span>',
+            '<span class="mui-badge admin-chip admin-chip--principal" title="signed in as passkey:rod" data-principal="passkey:rod">signed in as passkey:rod</span><span class="mui-badge admin-chip admin-chip--gate" data-gate="passkey">gate: passkey</span>',
             $html,
             'the actor the gate left on the request, on a section page',
         );
@@ -353,7 +354,7 @@ final class AdminPluginTest extends TestCase
         $spanish = (string) $controller->section(self::sectionRequest('settings', 'lang=es')->withAttribute(RequestPrincipal::ATTRIBUTE, PasskeyGateStub::context('passkey:rod')))->getBody();
         self::assertStringContainsString('data-principal="passkey:rod">sesión iniciada como passkey:rod</span>', $spanish, 'in the language the request asked for');
 
-        self::assertStringNotContainsString('admin-chip--principal', (string) $controller->section(self::sectionRequest('settings'))->getBody(), 'the control: the same route with no attribute shows nobody');
+        self::assertStringNotContainsString('data-principal="', (string) $controller->section(self::sectionRequest('settings'))->getBody(), 'the control: the same route with no attribute shows nobody');
     }
 
     /**
