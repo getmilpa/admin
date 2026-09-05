@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.11.0](https://github.com/getmilpa/admin/compare/v0.10.1...v0.11.0) (2026-09-05)
+
+
+### Features
+
+* **host:** a section receives the principal, the host paints "declared by", the sidebar groups sections ([#49](https://github.com/getmilpa/admin/issues/49)) ([c5b40be](https://github.com/getmilpa/admin/commit/c5b40be0e1ba56ea129f7195dadeaf5cb931f0f3))
+
 ## [0.10.1](https://github.com/getmilpa/admin/compare/v0.10.0...v0.10.1) (2026-09-05)
 
 
