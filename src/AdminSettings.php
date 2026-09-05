@@ -54,6 +54,13 @@ final readonly class AdminSettings
     public const GATE_CUSTOM = 'custom';
     public const GATE_OPEN = 'open';
     public const GATE_FALLBACK = 'fallback';
+    public const GATE_PASSKEY = 'passkey';
+
+    /**
+     * The gate `milpa/app-runtime`'s PasskeyPlugin registers in the container — named here as a string,
+     * so the panel names it without depending on it (greenhouse decisions/0206).
+     */
+    public const PASSKEY_GATE = 'Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware';
 
     /** How an empty string is described wherever a declared value is shown — never as nothing. */
     public const EMPTY = '(empty)';
@@ -285,7 +292,8 @@ final readonly class AdminSettings
     }
 
     /**
-     * What kind of gate the panel is behind, as the topbar chip says it.
+     * What kind of gate the panel is behind. The topbar chip says {@see self::gateLabel()}, which is this
+     * except for the one custom stack it knows by name.
      *
      * @return string `loopback` (the strict default, declared or not) | `custom` (the app's own stack) | `open` (a literally empty list, on purpose) | `fallback` (a misdeclared stack fell to loopback-only)
      */
@@ -300,6 +308,24 @@ final readonly class AdminSettings
             [LoopbackOnlyMiddleware::class] => self::GATE_LOOPBACK,
             default => self::GATE_CUSTOM,
         };
+    }
+
+    /**
+     * The gate as the panel names it — {@see self::gateKind()}, except that a stack that is exactly
+     * app-runtime's passkey gate (that one class, loadable, alone) is named `passkey`, not `custom`.
+     * A presentation rule over the kind, nothing more: the kind stays `custom` and the routes carry the
+     * class as declared; a passkey gate that cannot be loaded is a `fallback` like any other.
+     *
+     * @return string `loopback` | `custom` | `passkey` | `open` | `fallback`
+     */
+    public function gateLabel(): string
+    {
+        $effective = $this->effectiveMiddleware();
+        if (\count($effective) === 1 && strcasecmp(ltrim($effective[0], '\\'), self::PASSKEY_GATE) === 0) {
+            return self::GATE_PASSKEY;
+        }
+
+        return $this->gateKind();
     }
 
     /**

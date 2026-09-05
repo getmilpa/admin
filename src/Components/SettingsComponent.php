@@ -53,6 +53,7 @@ final class SettingsComponent implements ComponentDefinitionInterface
                 'unresolved' => ['type' => 'array'],
                 'malformed' => ['type' => 'boolean'],
                 'snippet' => ['type' => 'string'],
+                'passkeySnippet' => ['type' => 'string'],
             ],
         );
     }

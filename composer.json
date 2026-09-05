@@ -43,7 +43,7 @@
   },
   "suggest": {
     "milpa/agent": "The Dev tools section reads the agent ledger (the event store registered in the container, else var/agent-sessions.jsonl): sessions, their timeline, debt signals and evidence.",
-    "milpa/app-runtime": "The Plugins section also lists the capabilities this app has and can grow (Capabilities::answer())."
+    "milpa/app-runtime": "The Plugins section also lists the capabilities this app has and can grow (Capabilities::answer()); its PasskeyPlugin provides the passkey gate (Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware) the panel names in admin.middleware."
   },
   "autoload": {
     "psr-4": {

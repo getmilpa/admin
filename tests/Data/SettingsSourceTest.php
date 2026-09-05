@@ -93,6 +93,29 @@ final class SettingsSourceTest extends TestCase
         self::assertSame('custom', $custom['gate']);
         self::assertSame('AllowAllMiddleware', $custom['rows'][2]['value']);
         self::assertSame([], $custom['unresolved']);
+
+        $passkey = (new SettingsSource(AdminSettings::fromConfig(new Config(['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]))))->snapshot();
+        self::assertSame('passkey', $passkey['gate'], 'the gate is what the panel names it: app-runtime\'s gate, alone, is «passkey»');
+        self::assertSame('PasskeyGateMiddleware', $passkey['rows'][2]['value']);
+        self::assertSame('config', $passkey['rows'][2]['source']);
+        self::assertSame([], $passkey['unresolved']);
+    }
+
+    public function testTheSnippetOffersThePasskeyGateAsTheAlternativeLine(): void
+    {
+        $snapshot = (new SettingsSource(AdminSettings::fromConfig(null)))->snapshot();
+
+        self::assertSame(
+            "'admin' => ['route' => '/milpa/admin', 'locale' => 'en', 'middleware' => [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class]],",
+            $snapshot['passkeySnippet'],
+            'the whole admin key, fully qualified, so it replaces the default line pasted as-is — the instruction around it is the renderer\'s, in the catalog\'s language',
+        );
+        self::assertSame(SettingsSource::passkeySnippet(), $snapshot['passkeySnippet']);
+        self::assertSame(
+            str_replace('\\Milpa\\Admin\\Http\\LoopbackOnlyMiddleware', '\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware', $snapshot['snippet']),
+            $snapshot['passkeySnippet'],
+            'the same key as the default snippet, one class apart — never a fragment',
+        );
     }
 
     public function testARejectedKeyShowsTheEffectiveValueWhatWasDeclaredAndTheRejectedSource(): void
