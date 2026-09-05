@@ -160,7 +160,11 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
         );
         $this->container->registerService(AssetsController::class, new AssetsController());
         $this->container->registerService(StackController::class, new StackController($stack, $projection, $catalog));
-        if (!$this->container->has(LoopbackOnlyMiddleware::class)) {
+        // "If absent" must ask the PSR-11 registry, not DIContainer::has(): the latter answers true for
+        // any auto-wirable class, so this guard never registered the gate and every LAN request was
+        // refused by an auto-wired instance carrying the DEFAULT catalog — the declared locale never
+        // reached the refusal (greenhouse evidence/0522, found while the Desktop copied the pattern).
+        if (!$this->container->getContainer()->has(LoopbackOnlyMiddleware::class)) {
             $this->container->registerService(LoopbackOnlyMiddleware::class, new LoopbackOnlyMiddleware($catalog));
         }
     }

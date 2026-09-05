@@ -46,6 +46,33 @@ use Psr\Http\Message\ResponseInterface;
  */
 final class AdminPluginTest extends TestCase
 {
+    /**
+     * The refusal speaks the declared locale. `boot()` used to guard its registration with
+     * `DIContainer::has()`, which is true for any auto-wirable class: the gate was never registered, the
+     * resolver auto-wired one with the DEFAULT catalog, and a LAN request to an `es` panel was refused
+     * in English (greenhouse evidence/0522). Measured through the container, as the resolver would.
+     */
+    public function testTheRegisteredLoopbackGateRefusesInTheDeclaredLocale(): void
+    {
+        [$container] = self::boot([AdminPlugin::class], ['admin' => ['locale' => 'es']]);
+
+        self::assertTrue($container->getContainer()->has(LoopbackOnlyMiddleware::class));
+        $gate = $container->get(LoopbackOnlyMiddleware::class);
+        self::assertInstanceOf(LoopbackOnlyMiddleware::class, $gate);
+
+        $lan = (new \Nyholm\Psr7\ServerRequest('GET', '/milpa/admin', [], null, '1.1', ['REMOTE_ADDR' => '192.168.1.47']))
+            ->withHeader('Accept', 'text/html');
+        $refused = $gate->process($lan, new class () implements \Psr\Http\Server\RequestHandlerInterface {
+            public function handle(\Psr\Http\Message\ServerRequestInterface $request): \Psr\Http\Message\ResponseInterface
+            {
+                return new \Nyholm\Psr7\Response(200);
+            }
+        });
+
+        self::assertSame(403, $refused->getStatusCode());
+        self::assertStringContainsString('sólo responde a loopback', (string) $refused->getBody(), 'the declared locale reached the refusal');
+    }
+
     public function testRoutesCarryTheDeclaredMiddlewareAndTheMountPoint(): void
     {
         $container = new DIContainer();
@@ -65,7 +92,9 @@ final class AdminPluginTest extends TestCase
         self::assertTrue($container->has(AdminController::class));
         self::assertTrue($container->has(AssetsController::class));
         self::assertTrue($container->has(StackController::class));
-        self::assertTrue($container->has(LoopbackOnlyMiddleware::class));
+        // The PSR-11 registry, not DIContainer::has() — which is true for any auto-wirable class and so
+        // proved nothing here while the gate was never registered (greenhouse evidence/0522).
+        self::assertTrue($container->getContainer()->has(LoopbackOnlyMiddleware::class), 'the gate is REGISTERED, not merely auto-wirable');
         self::assertSame(['plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
         self::assertSame([10, 20, 25, 30, 40], array_map(static fn ($s): int => $s->order, $plugin->adminSections()));
         self::assertSame('nav.devtools', $plugin->adminSections()[4]->title);
