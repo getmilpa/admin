@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Components;
 
+use Milpa\Admin\Rendering\ShellHtmlRenderer;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Live\Adapters\Alpine\AlpineRuntimeAdapter;
@@ -28,6 +29,7 @@ use Milpa\Live\Components\Dashboard\DashboardSidebarComponent;
 use Milpa\Live\Components\Dashboard\DashboardTopbarComponent;
 use Milpa\Live\Components\Dashboard\DataTableComponent;
 use Milpa\Live\Components\Dashboard\MetricCardComponent;
+use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
 use Milpa\Live\Contracts\Component\ComponentRegistryInterface;
 use Milpa\Live\Contracts\Rendering\ComponentRendererInterface;
 use Milpa\Live\Contracts\Transport\StateTransferCodecInterface;
@@ -36,12 +38,20 @@ use Milpa\Live\Rendering\XhtmlComponentCompiler;
 use Milpa\Live\Runtime\InMemoryComponentRegistry;
 
 /**
- * The components the panel can compose with: the dashboard primitives of `milpa/live`, plus every
- * custom component the sections bring.
+ * The components the panel can compose with: the dashboard primitives of `milpa/live`, the shell's own
+ * two (`admin-sidebar`, `admin-section-header` — painted by {@see ShellHtmlRenderer}), plus every custom
+ * component the sections bring.
  *
  * Built fresh per request — the registry of `milpa/live` is a plain map with no discovery, and the
  * sections are discovered per request too, so the book follows them. A section that names a component
  * nobody registered fails here, with the list of what exists.
+ *
+ * The names the book registers itself — the primitives and the shell's own two — are the host's: a section
+ * may NAME one (a `metric-card` section is the normal case) but never bring its own definition under it.
+ * The registry overwrites silently, so a guest that did would repaint every section naming that primitive,
+ * or the shell's header — the attribution line with it — for every page; the book refuses instead
+ * ({@see ReservedComponentException}), which is what lets the header say a section never names its own
+ * declarer.
  */
 final class ComponentBook
 {
@@ -65,6 +75,13 @@ final class ComponentBook
     /** @var array<string, ComponentRendererInterface> */
     private array $renderers = [];
 
+    /**
+     * The names the book registered itself — the host's, which a section may name but never redefine.
+     *
+     * @var list<string>
+     */
+    private readonly array $reserved;
+
     public function __construct(StateTransferCodecInterface $codec, ?MilpaEventDispatcherInterface $events = null)
     {
         $this->registry = new InMemoryComponentRegistry();
@@ -74,18 +91,39 @@ final class ComponentBook
             $this->registry->register($name, new $class($events));
             $this->renderers[$name] = $dashboard;
         }
+
+        $shell = new ShellHtmlRenderer($codec);
+        $this->register(SidebarComponent::NAME, new SidebarComponent(), $shell);
+        $this->register(SectionHeaderComponent::NAME, new SectionHeaderComponent(), $shell);
+        $this->reserved = array_keys($this->renderers);
+    }
+
+    /** Registers one component under a name, with the renderer that paints it — the book's one way in. */
+    public function register(string $name, ComponentDefinitionInterface $definition, ComponentRendererInterface $renderer): void
+    {
+        $this->registry->register($name, $definition);
+        $this->renderers[$name] = $renderer;
     }
 
     /**
      * Makes a section renderable: registers the component it brings, or checks that the one it names exists.
      *
-     * @throws UnknownComponentException when the section names a component nothing registered
+     * @throws UnknownComponentException  when the section names a component nothing registered
+     * @throws ReservedComponentException when the section brings its own definition under a name the book
+     *                                    registered itself — a primitive, or one of the shell's own
      */
     public function adopt(AdminSection $section): void
     {
         if ($section->definition !== null && $section->renderer !== null) {
-            $this->registry->register($section->component, $section->definition);
-            $this->renderers[$section->component] = $section->renderer;
+            if (\in_array($section->component, $this->reserved, true)) {
+                throw new ReservedComponentException(\sprintf(
+                    'Admin section «%s» brings its own definition under «%s», a component the panel registers itself. A section may name a registered component; it may not redefine one — pick a name of your own. The panel\'s are: %s.',
+                    $section->id,
+                    $section->component,
+                    implode(', ', $this->reserved),
+                ));
+            }
+            $this->register($section->component, $section->definition, $section->renderer);
 
             return;
         }
@@ -107,7 +145,7 @@ final class ComponentBook
     }
 
     /**
-     * The names the book can render, primitives first, in registration order.
+     * The names the book can render — the primitives, then the shell's own, then the sections' — in registration order.
      *
      * @return list<string>
      */

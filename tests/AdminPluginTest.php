@@ -23,10 +23,14 @@ use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 use Milpa\Admin\Http\RequestPrincipal;
 use Milpa\Admin\Tests\Fixtures\AllowAllMiddleware;
 use Milpa\Admin\Tests\Fixtures\DuplicatePlugin;
+use Milpa\Admin\Tests\Fixtures\EchoComponent;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
+use Milpa\Admin\Tests\Fixtures\GuestPlugin;
+use Milpa\Admin\Tests\Fixtures\HijackerPlugin;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
 use Milpa\Admin\Tests\Fixtures\HubPlugin;
 use Milpa\Admin\Tests\Fixtures\PasskeyGateStub;
+use Milpa\Admin\Tests\Fixtures\ReadsSidebar;
 use Milpa\Admin\Tests\Fixtures\RivalHubPlugin;
 use Milpa\Agent\SessionStore;
 use Milpa\Container\DIContainer;
@@ -46,6 +50,8 @@ use Psr\Http\Message\ResponseInterface;
  */
 final class AdminPluginTest extends TestCase
 {
+    use ReadsSidebar;
+
     /**
      * The refusal speaks the declared locale. `boot()` used to guard its registration with
      * `DIContainer::has()`, which is true for any auto-wirable class: the gate was never registered, the
@@ -182,10 +188,19 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('href="/milpa/admin/s/plugins"', $html);
         self::assertStringContainsString('href="/milpa/admin/s/routes"', $html);
         self::assertStringContainsString('id="milpa-admin-section-hola"', $html, 'order 5 puts the foreign section first');
+        $nav = self::sidebar($html);
+        self::assertSame(['ADMIN', 'APP'], self::headings($nav), 'the panel\'s own under ADMIN, the foreign plugin\'s under APP');
+        self::assertSame(['/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
+        self::assertSame(['/milpa/admin/s/hola', '/milpa/admin/s/echo'], self::itemsUnder($nav, 'app'));
+        self::assertStringContainsString('href="/milpa/admin/s/hola" aria-current="page"><span class="mui-sidebar__item-icon" aria-hidden="true">✦</span>', $nav, 'the glyph the plugin declared is painted');
+        self::assertStringContainsString('<h1 class="mui-page-header__title">Hola</h1><span class="admin-section__declared" data-declared-by="Milpa\\Admin\\Tests\\Fixtures\\HolaPlugin">declared by HolaPlugin</span>', $html, 'the host attributes the section');
 
         $echo = $controller->section(self::sectionRequest('echo'));
         self::assertSame(200, $echo->getStatusCode());
         self::assertStringContainsString(EchoRenderer::MARKER, (string) $echo->getBody(), 'a foreign custom component renders');
+        self::assertStringContainsString('<h1 class="mui-page-header__title">Echo</h1><span class="admin-section__declared" data-declared-by="Milpa\\Admin\\Tests\\Fixtures\\HolaPlugin">declared by HolaPlugin</span>', (string) $echo->getBody(), 'the Echo section header says declared by HolaPlugin');
+        self::assertStringContainsString('<h1 class="mui-page-header__title">Plugins</h1><span class="admin-section__declared" data-declared-by="Milpa\\Admin\\AdminPlugin">declared by AdminPlugin</span>', (string) $controller->section(self::sectionRequest('plugins'))->getBody(), 'the Plugins section says declared by AdminPlugin — the panel\'s own are attributed like any other');
+        self::assertStringContainsString('<h1 class="mui-page-header__title">Rutas</h1><span class="admin-section__declared" data-declared-by="Milpa\\Admin\\AdminPlugin">declarada por AdminPlugin</span>', (string) $controller->section(self::sectionRequest('routes', 'lang=es'))->getBody());
 
         $routes = $controller->section(self::sectionRequest('routes'));
         $body = (string) $routes->getBody();
@@ -339,6 +354,104 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('data-principal="passkey:rod">sesión iniciada como passkey:rod</span>', $spanish, 'in the language the request asked for');
 
         self::assertStringNotContainsString('admin-chip--principal', (string) $controller->section(self::sectionRequest('settings'))->getBody(), 'the control: the same route with no attribute shows nobody');
+    }
+
+    /**
+     * greenhouse decisions/0210, sharpened by the first real guest (the Desktop's Agent section): the principal
+     * the gate left on the request reaches the SECTION's ComponentContext — the same actor the topbar shows — so a
+     * guest that decides its state by the context (signed-out vs live) agrees with the topbar. Measured on the
+     * foreign component's own mount, through the controller and through the kernel's whole stack; the control is
+     * the same route with no attribute: null, never a placeholder.
+     */
+    public function testThePrincipalTheGateLeftOnTheRequestReachesAForeignSectionsContext(): void
+    {
+        [$container] = self::boot([AdminPlugin::class, HolaPlugin::class], ['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+        EchoComponent::$lastContext = null;
+
+        $signed = $controller->section(self::sectionRequest('echo')->withAttribute(RequestPrincipal::ATTRIBUTE, PasskeyGateStub::context('passkey:rod')));
+        self::assertSame(200, $signed->getStatusCode());
+        self::assertStringContainsString('data-principal="passkey:rod">signed in as passkey:rod</span>', (string) $signed->getBody(), 'the topbar says who');
+        $context = EchoComponent::$lastContext;
+        self::assertNotNull($context, 'the foreign component mounted');
+        self::assertSame('passkey:rod', $context->principal, 'and the section is told the same');
+        self::assertSame('milpa-admin-section-echo', $context->componentId);
+        self::assertSame('en', $context->locale);
+        self::assertSame('/milpa/admin', $context->route);
+
+        $controller->section(self::sectionRequest('echo', 'lang=es'));
+        $context = EchoComponent::$lastContext;
+        self::assertNotNull($context);
+        self::assertNull($context->principal, 'the control: no attribute on the request, nobody in the context');
+        self::assertSame('es', $context->locale, 'the request\'s language reaches the context too');
+
+        [, $kernel] = self::boot([AdminPlugin::class, HolaPlugin::class], ['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]);
+        EchoComponent::$lastContext = null;
+        $response = (new RequestHandler($kernel, new Psr17Factory()))->handle(new ServerRequest('GET', '/milpa/admin/s/echo', [], null, '1.1', ['REMOTE_ADDR' => '10.0.0.5']));
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame(PasskeyGateStub::PRINCIPAL, EchoComponent::$lastContext?->principal, 'what the gate left on the request, through routing and the middleware stack');
+    }
+
+    /**
+     * greenhouse decisions/0210: a guest shaped like the Desktop's Agent section lists under the AGENT group, after
+     * the panel's own (ADMIN) and the app's (APP), with its glyph; its header is attributed to its plugin; and at
+     * order 60 it is never the page the panel opens on.
+     */
+    public function testAGuestListsUnderTheAgentGroupAndItsHeaderNamesItsPlugin(): void
+    {
+        [$container] = self::boot([AdminPlugin::class, HolaPlugin::class, GuestPlugin::class]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
+        $nav = self::sidebar($index);
+        self::assertSame(['ADMIN', 'APP', 'AGENT', 'LAB'], self::headings($nav), 'admin, app, agent, then a group the catalog does not know — named anyway');
+        self::assertSame(['/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
+        self::assertSame(['/milpa/admin/s/hola', '/milpa/admin/s/echo'], self::itemsUnder($nav, 'app'));
+        self::assertSame(['/milpa/admin/s/agent'], self::itemsUnder($nav, 'agent'));
+        self::assertSame(['/milpa/admin/s/lab'], self::itemsUnder($nav, 'lab'));
+        self::assertStringContainsString('<a class="mui-sidebar__item" href="/milpa/admin/s/agent"><span class="mui-sidebar__item-icon" aria-hidden="true">◈</span><span class="mui-sidebar__item-label">Agent</span></a>', $nav);
+        self::assertStringContainsString('id="milpa-admin-section-hola"', $index, 'the panel opens on the first by (order, id) across groups — hola at 5; a guest at 60 is never the front page');
+
+        $agent = $controller->section(self::sectionRequest('agent'));
+        self::assertSame(200, $agent->getStatusCode());
+        $html = (string) $agent->getBody();
+        self::assertStringContainsString('<h1 class="mui-page-header__title">Agent</h1><span class="admin-section__declared" data-declared-by="Milpa\\Admin\\Tests\\Fixtures\\GuestPlugin">declared by GuestPlugin</span>', $html);
+        self::assertStringContainsString('<span class="mui-kbd">Agent</span>', $html, 'the topbar names the section too');
+        self::assertStringContainsString('<title>Agent · Milpa Admin</title>', $html);
+        self::assertStringContainsString('href="/milpa/admin/s/agent" aria-current="page"', $html);
+
+        $spanish = (string) $controller->section(self::sectionRequest('agent', 'lang=es'))->getBody();
+        self::assertStringContainsString('>declarada por GuestPlugin</span>', $spanish);
+        self::assertSame(['ADMIN', 'APP', 'AGENTE', 'LAB'], self::headings(self::sidebar($spanish)));
+    }
+
+    /**
+     * Measured before the fix, through this same kernel: a guest bringing its own definition under
+     * `admin-section-header` rendered `/milpa/admin/s/plugins` with the guest's renderer where the header goes —
+     * `declared by AdminPlugin` gone, the guest's marker present, 200. Now the panel refuses the section and says so.
+     */
+    public function testAGuestThatRedefinesTheHostsHeaderIsRefusedAndNothingOfItPaints(): void
+    {
+        [$container] = self::boot([AdminPlugin::class, HolaPlugin::class, HijackerPlugin::class]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $plugins = $controller->section(self::sectionRequest('plugins'));
+        self::assertSame(500, $plugins->getStatusCode(), 'the panel does not compose while a section claims a host name');
+        $body = (string) $plugins->getBody();
+        self::assertStringContainsString('The panel cannot compose its sections: Admin section «hijack» brings its own definition under «admin-section-header», a component the panel registers itself.', $body);
+        self::assertStringNotContainsString(EchoRenderer::MARKER, $body, 'the guest\'s renderer painted nothing');
+        self::assertStringNotContainsString('<span class="admin-section__declared"', $body, 'no page composed: not even a forged attribution (the class name itself is in the page\'s CSS)');
+
+        self::assertSame(500, $controller->index(new ServerRequest('GET', '/milpa/admin'))->getStatusCode(), 'every page, not only the hijacker\'s');
+        self::assertStringContainsString('El panel no puede componer sus secciones: Admin section «hijack»', (string) $controller->section(self::sectionRequest('hola', 'lang=es'))->getBody());
+
+        [$container] = self::boot([AdminPlugin::class, HolaPlugin::class]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+        self::assertStringContainsString('declared by AdminPlugin</span>', (string) $controller->section(self::sectionRequest('plugins'))->getBody(), 'the control: without the hijacker, the host paints the attribution');
     }
 
     public function testARejectedLocaleRunsTheDefaultEverywhereAndSettingsSaysWhatWasDeclared(): void

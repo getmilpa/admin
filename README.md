@@ -61,16 +61,80 @@ final class InventoryPlugin implements PluginInterface, AdminSectionProvider
 ```
 
 The panel discovers implementers by `instanceof` over the booted plugins, **at request time** (boot order does not
-matter), lists each section in the sidebar in the declared order, routes it at `/milpa/admin/s/<id>`, and renders
-it inside the shell. A duplicate id is a loud 500 naming both plugins — never a silent "last one wins". One prop name
-is **reserved**: `query` — the shell hands every active section the request's query params under `props['query']`,
-so a section can read its own (`?session=<id>`, a filter) without the shell interpreting it; an `AdminSection` that
-declares `props['query']` itself is refused at construction (`InvalidArgumentException`) rather than silently
-overwritten on every request.
+matter), lists each section in the sidebar under its group, routes it at `/milpa/admin/s/<id>`, and renders it
+inside the shell under a header that says who declared it. A duplicate id is a loud 500 naming both plugins — never
+a silent "last one wins". One prop name is **reserved**: `query` — the shell hands every active section the request's
+query params under `props['query']`, so a section can read its own (`?session=<id>`, a filter) without the shell
+interpreting it; an `AdminSection` that declares `props['query']` itself is refused at construction
+(`InvalidArgumentException`) rather than silently overwritten on every request. The component **names** the panel
+registers itself are reserved the same way — the dashboard primitives, `admin-sidebar`, `admin-section-header`: a
+section may *name* one (`component: 'metric-card'`), but a section that brings its own `definition` under one is
+refused (`ReservedComponentException`, a 500 that names the section and the name it tried to take) rather than
+silently repainting every section that names it, the host's header included.
 
 Two lifecycle pairs let another plugin extend a section or the shell without touching either:
 `admin.section.before_render` / `after_render` (props, then HTML — both mutable) and
-`admin.shell.before_render` / `after_render` (the composition and sidebar items, then HTML).
+`admin.shell.before_render` / `after_render` (the composition and sidebar items, then HTML). A sidebar item a
+subscriber adds names its `group` like a section does (`app` when it names none).
+
+## Hosting a guest: what a section receives
+
+A section is a guest of the panel, and the panel is the host — it tells the guest what it knows and paints what
+the guest cannot know about itself (greenhouse `decisions/0210`, sharpened by the first real guest, the Desktop's
+**Agent** section).
+
+**The context.** Every section's component mounts with a `ComponentContext` the shell fills — the same one every
+component of the page gets, under that component's own id:
+
+| field | value |
+|---|---|
+| `componentId` | `milpa-admin-section-<id>` |
+| `principal` | the actor the gate authenticated — the `id` of the `AuthContext` a gate left under the request attribute `milpa.auth` (`passkey:<credential>` behind app-runtime's passkey gate) — or **`null` when nobody is signed in**. It is exactly what the topbar's `signed in as …` chip shows, so a guest that decides its state by the principal (the Desktop's *signed-out* vs *live*) always agrees with the topbar |
+| `locale` | the language the page answers in — the app's `admin.locale`, or the request's `?lang=` when the catalog carries it |
+| `route` | the panel's mount point (`admin.route`, default `/milpa/admin`) — for a link back into the panel |
+
+The props are the section's own `props` plus `query` (the request's query params). A guest reads the context and
+its props; it never reads the request, and it never reads a cookie — the panel does not either.
+
+**The header.** Above every section — the panel's own included — the host paints the section header: the title
+(a catalog key translated, or the literal) and the attribution, read from the catalogue's record of which plugin's
+`adminSections()` returned it, never from the section:
+
+```html
+<header class="mui-page-header admin-section__header" id="milpa-admin-header" …>
+  <div class="mui-page-header__text">
+    <h1 class="mui-page-header__title">Agent</h1>
+    <span class="admin-section__declared" data-declared-by="Milpa\DesktopApp\DesktopAppPlugin">declared by DesktopAppPlugin</span>
+  </div>
+</header>
+```
+
+The short class name is shown (`declared by DesktopAppPlugin` · `declarada por DesktopAppPlugin`), the full class
+travels in `data-declared-by`. A guest brings the region; the host brings the header, the sidebar and the topbar.
+
+**The sidebar.** Sections list under their `group`, one heading per distinct value, in the house order — **`admin`**
+(the panel's own: Plugins, Routes, Settings, Stack, Dev tools) → **`app`** (the default — a plugin's sections) →
+**`agent`** (the agent's own surfaces: the Desktop's Agent section) → any other group name, alphabetically —
+case-insensitively and in its own alphabet (`año` sorts among the a's, `Zeta` after `beta`). The headings come from
+the catalog (`ADMIN / APP / AGENT` · `ADMIN / APP / AGENTE`); a group the catalog does not know is headed by its own
+name uppercased in its own alphabet (`año` → `AÑO`). The glyph a section declares as `icon` is painted before its
+label.
+
+**The order.** Within a group, sections sort by `order` (lower first; ties break by `id`, alphabetically). The panel
+**opens** on the first section in that same (`order`, `id`) order across every group, so the convention matters: the
+panel's own take **10..40** (Plugins 10, Routes 20, Settings 25, Stack 30, Dev tools 40); a guest picks an order
+**after those** — greenhouse `decisions/0210` names 60 for the Desktop's Agent section — unless it means to be the
+page the panel opens on. A guest at order 10 named `agent` would tie with Plugins, win the tie by id, and become the
+front page.
+
+```php
+new AdminSection(
+    id: 'agent', title: 'Agent', component: 'desktop-agent',
+    definition: new AgentGuestComponent(), renderer: new AgentGuestRenderer(),
+    props: ['embed' => '/desktop?embed=1', 'open' => '/desktop', 'gate' => $gateLabel],
+    order: 60, group: AdminSection::GROUP_AGENT, icon: '◈',
+);
+```
 
 ## Stack: a plugin declares the services it needs
 
@@ -232,6 +296,11 @@ sections listed and rendered; an unknown section is 404; a non-loopback origin i
 that host's login, three shells. It never dispatched on a fresh framework app (greenhouse `evidence/0513`). From
 `0.6.0` the package is the framework's own panel, rebuilt on the same mould as the Desktop (`milpa/desktop-app`):
 PSR-7 in and out, Milpa Components all the way down, declared not scanned. The old line stays citable at its tag.
+
+## Upgrading
+
+See [UPGRADING.md](UPGRADING.md) — every change is additive; the notes say what a guest and a shell subscriber gain,
+and what to check if you extended the shell.
 
 ## Develop
 

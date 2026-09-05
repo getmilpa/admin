@@ -17,11 +17,15 @@ namespace Milpa\Admin\Tests\View;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\AdminSection;
+use Milpa\Admin\Section\AdminSectionProvider;
 use Milpa\Admin\Section\SectionCatalogue;
 use Milpa\Admin\Section\SectionRender;
 use Milpa\Admin\Tests\Fixtures\AllowAllMiddleware;
+use Milpa\Admin\Tests\Fixtures\EchoComponent;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
+use Milpa\Admin\Tests\Fixtures\GuestPlugin;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
+use Milpa\Admin\Tests\Fixtures\ReadsSidebar;
 use Milpa\Admin\Tests\Fixtures\RecordingDispatcher;
 use Milpa\Admin\View\AdminShell;
 use Milpa\Admin\View\ShellRender;
@@ -34,6 +38,8 @@ use PHPUnit\Framework\TestCase;
 
 final class AdminShellTest extends TestCase
 {
+    use ReadsSidebar;
+
     public function testComposesTheShellAroundAForeignPrimitiveSection(): void
     {
         $catalogue = SectionCatalogue::discover([new HolaPlugin(new DIContainer())]);
@@ -84,6 +90,7 @@ final class AdminShellTest extends TestCase
             $subject = $payload['shell'];
             \assert($subject instanceof ShellRender);
             $subject->items[] = ['key' => 'extra', 'label' => 'Extra', 'href' => '/extra', 'icon' => ''];
+            $subject->items[] = ['key' => 'watch', 'label' => 'Watch', 'href' => '/watch', 'icon' => '◉', 'group' => AdminSection::GROUP_AGENT];
         });
         $events->subscribe(AdminShell::AFTER_RENDER, static function (string $name, array $payload): void {
             $subject = $payload['shell'];
@@ -100,6 +107,10 @@ final class AdminShellTest extends TestCase
         self::assertStringNotContainsString('>42<', $html);
         self::assertStringContainsString('data-injected="section"', $html, 'after_render changed the section html');
         self::assertStringContainsString('href="/extra"', $html, 'shell before_render added a nav item');
+        $nav = self::sidebar($html);
+        self::assertSame(['/milpa/admin/s/hola', '/milpa/admin/s/echo', '/extra'], self::itemsUnder($nav, 'app'), 'an added item without a group is the app\'s, after the sections');
+        self::assertSame(['/watch'], self::itemsUnder($nav, 'agent'), 'an added item names its group and lists under it');
+        self::assertStringContainsString('href="/watch"><span class="mui-sidebar__item-icon" aria-hidden="true">◉</span>', $nav);
         self::assertStringContainsString('<!-- shell:after -->', $html);
         self::assertSame(
             [AdminShell::SECTION_BEFORE_RENDER, AdminShell::SECTION_AFTER_RENDER, AdminShell::BEFORE_RENDER, AdminShell::AFTER_RENDER],
@@ -135,6 +146,143 @@ final class AdminShellTest extends TestCase
 
         self::assertStringContainsString('class="mui-shell"', $html);
         self::assertStringContainsString('No plugin declared an admin section yet', $html);
+        $nav = self::sidebar($html);
+        self::assertStringContainsString('<a class="mui-sidebar__brand" href="/milpa/admin"><span class="mui-sidebar__wordmark">Milpa Admin</span></a>', $nav, 'the brand links home');
+        self::assertSame([], self::headings($nav), 'no section: no group, not even an empty one');
+        self::assertStringNotContainsString('admin-section__header', $html, 'no section: no header');
+    }
+
+    /**
+     * greenhouse decisions/0210: the sidebar lists one group per distinct `group` value — admin, app, agent, then
+     * any other alphabetically — each with its heading from the catalog (an unknown group: its name uppercased),
+     * the items under it in the catalogue's order, the glyph a section declared painted.
+     */
+    public function testTheSidebarListsEverySectionUnderItsGroupInTheHouseOrder(): void
+    {
+        $catalogue = SectionCatalogue::discover([
+            new GuestPlugin(new DIContainer()),
+            new HolaPlugin(new DIContainer()),
+            self::provider([
+                new AdminSection('routes', 'nav.routes', 'metric-card', order: 20, group: AdminSection::GROUP_ADMIN),
+                new AdminSection('plugins', 'nav.plugins', 'metric-card', order: 10, group: AdminSection::GROUP_ADMIN),
+            ]),
+            self::provider([
+                new AdminSection('zeta', 'Zeta', 'metric-card', order: 1, group: 'zeta'),
+                new AdminSection('beta', 'Beta', 'metric-card', order: 1, group: 'beta'),
+            ]),
+        ]);
+        $active = $catalogue->find('agent');
+        self::assertNotNull($active);
+
+        $html = self::shell()->render($catalogue, $active);
+        $nav = self::sidebar($html);
+
+        self::assertSame(['ADMIN', 'APP', 'AGENT', 'BETA', 'LAB', 'ZETA'], self::headings($nav), 'the house order, then the alphabet');
+        self::assertSame(['/milpa/admin/s/plugins', '/milpa/admin/s/routes'], self::itemsUnder($nav, 'admin'), 'by order within the group');
+        self::assertSame(['/milpa/admin/s/hola', '/milpa/admin/s/echo'], self::itemsUnder($nav, 'app'));
+        self::assertSame(['/milpa/admin/s/agent'], self::itemsUnder($nav, 'agent'));
+        self::assertSame(['/milpa/admin/s/beta'], self::itemsUnder($nav, 'beta'));
+        self::assertSame(['/milpa/admin/s/lab'], self::itemsUnder($nav, 'lab'));
+        self::assertSame(['/milpa/admin/s/zeta'], self::itemsUnder($nav, 'zeta'));
+        self::assertStringContainsString(
+            '<div class="mui-sidebar__section" role="group" aria-labelledby="milpa-admin-sidebar-group-2" data-group="agent"><span class="mui-sidebar__section-label" id="milpa-admin-sidebar-group-2">AGENT</span>'
+            . '<a class="mui-sidebar__item" href="/milpa/admin/s/agent" aria-current="page"><span class="mui-sidebar__item-icon" aria-hidden="true">◈</span><span class="mui-sidebar__item-label">Agent</span></a></div>',
+            $nav,
+            'the guest under AGENT, its glyph painted, the active item marked — the primitive\'s item markup kept',
+        );
+        self::assertStringContainsString('aria-hidden="true">✦</span><span class="mui-sidebar__item-label">Hola</span>', $nav, 'a glyph the primitive used to drop');
+        self::assertStringContainsString('<span class="mui-sidebar__item-label">Routes</span>', $nav, 'a catalog key is translated');
+        self::assertStringNotContainsString('cultivo', $html, 'the primitive\'s literal heading is gone');
+        self::assertStringContainsString('<a class="mui-sidebar__brand" href="/milpa/admin"><span class="mui-sidebar__wordmark">Milpa Admin</span></a>', $nav);
+        self::assertStringContainsString('aria-controls="milpa-admin-sidebar"', $html, 'the topbar toggle still points at the sidebar');
+
+        $es = self::sidebar(self::shell(catalog: new Catalog('es'))->render($catalogue, $active));
+        self::assertSame(['ADMIN', 'APP', 'AGENTE', 'BETA', 'LAB', 'ZETA'], self::headings($es));
+        self::assertStringContainsString('aria-label="Secciones"', $es);
+        self::assertStringContainsString('<span class="mui-sidebar__item-label">Rutas</span>', $es);
+    }
+
+    /**
+     * greenhouse decisions/0210: the host paints the attribution — the header of EVERY section says «declared by
+     * <Plugin>», read from the catalogue; a section never names itself.
+     */
+    public function testTheHeaderAboveEverySectionSaysWhoDeclaredIt(): void
+    {
+        $catalogue = SectionCatalogue::discover([new HolaPlugin(new DIContainer())]);
+        $hola = $catalogue->find('hola');
+        self::assertNotNull($hola);
+
+        $html = self::shell()->render($catalogue, $hola);
+
+        self::assertStringContainsString(
+            '<header class="mui-page-header admin-section__header" id="milpa-admin-header" data-milpa-component-id="milpa-admin-header"><div class="mui-page-header__text">'
+            . '<h1 class="mui-page-header__title">Hola</h1>'
+            . '<span class="admin-section__declared" data-declared-by="Milpa\\Admin\\Tests\\Fixtures\\HolaPlugin">declared by HolaPlugin</span>'
+            . '</div></header>',
+            $html,
+            'the short name shown, the class in the data attribute',
+        );
+        self::assertStringContainsString('data-milpa-state="milpa-admin-header"', $html, 'the header is a component with its signed envelope');
+        $main = strpos($html, '<main ');
+        $header = strpos($html, 'admin-section__header');
+        $section = strpos($html, 'id="milpa-admin-section-hola"');
+        self::assertNotFalse($main);
+        self::assertNotFalse($header);
+        self::assertNotFalse($section);
+        self::assertTrue($main < $header && $header < $section, 'main opens, then the header, then the section');
+
+        self::assertStringContainsString('>declarada por HolaPlugin</span>', self::shell(catalog: new Catalog('es'))->render($catalogue, $hola));
+
+        $orphan = new AdminSection('orphan', 'nav.routes', 'metric-card');
+        $html = self::shell()->render($catalogue, $orphan);
+        self::assertStringContainsString('<h1 class="mui-page-header__title">Routes</h1></div></header>', $html, 'a catalog key is translated');
+        self::assertStringNotContainsString('admin-section__declared', $html, 'the panel attributes nothing it cannot read from the catalogue');
+    }
+
+    /**
+     * greenhouse decisions/0210, sharpened by the first real guest: the principal the topbar shows reaches the
+     * section's ComponentContext — so a guest that decides its state by the context agrees with the topbar. The
+     * control: nobody signed in is null, never a placeholder.
+     */
+    public function testThePrincipalTheTopbarShowsReachesEverySectionsContext(): void
+    {
+        $catalogue = SectionCatalogue::discover([new HolaPlugin(new DIContainer())]);
+        $echo = $catalogue->find('echo');
+        self::assertNotNull($echo);
+        EchoComponent::$lastContext = null;
+
+        $html = self::shell()->render($catalogue, $echo, ['session' => 's-1'], 'passkey:rod');
+
+        $context = EchoComponent::$lastContext;
+        self::assertNotNull($context, 'the foreign component mounted');
+        self::assertSame('passkey:rod', $context->principal, 'the same actor the topbar says');
+        self::assertSame('milpa-admin-section-echo', $context->componentId);
+        self::assertSame('en', $context->locale);
+        self::assertSame('/milpa/admin', $context->route);
+        self::assertStringContainsString('data-principal="passkey:rod">signed in as passkey:rod</span>', $html, 'and the topbar agrees');
+
+        self::shell(settings: AdminSettings::fromConfig(new Config(['admin' => ['route' => '/panel']])), catalog: new Catalog('es'))->render($catalogue, $echo);
+        $context = EchoComponent::$lastContext;
+        self::assertNotNull($context);
+        self::assertNull($context->principal, 'nobody signed in: null');
+        self::assertSame('es', $context->locale, 'the locale the page answers in');
+        self::assertSame('/panel', $context->route, 'the panel\'s mount point');
+    }
+
+    /** @param list<AdminSection> $sections */
+    private static function provider(array $sections): AdminSectionProvider
+    {
+        return new class ($sections) implements AdminSectionProvider {
+            /** @param list<AdminSection> $sections */
+            public function __construct(private readonly array $sections)
+            {
+            }
+
+            public function adminSections(): array
+            {
+                return $this->sections;
+            }
+        };
     }
 
     public function testTopbarChipsSayTheGateInEffectAndTheLocale(): void

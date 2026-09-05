@@ -16,6 +16,8 @@ namespace Milpa\Admin\View;
 
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\ComponentBook;
+use Milpa\Admin\Components\SectionHeaderComponent;
+use Milpa\Admin\Components\SidebarComponent;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\SectionCatalogue;
@@ -27,18 +29,21 @@ use Milpa\Live\ValueObjects\ComponentContext;
 /**
  * The panel's shell, composed — not hand-written — from Milpa Components.
  *
- * `<milpa:dashboard-shell>` holds a sidebar (one item per discovered section), a topbar (the active
- * section's title, and the chips: who signed in when a gate authenticated the request, the gate in
- * effect, the locale) and a main region carrying the active section's component, all compiled by
+ * `<milpa:dashboard-shell>` holds the panel's own sidebar (`admin-sidebar`: one group per distinct section
+ * group — ADMIN, APP, AGENT, then any other — each item with its glyph), a topbar (the active section's
+ * title, and the chips: who signed in when a gate authenticated the request, the gate in effect, the locale)
+ * and a main region carrying the section header (`admin-section-header`: the title and «declared by
+ * <Plugin>», read from the catalogue) above the active section's component, all compiled by
  * `XhtmlComponentCompiler` over the {@see ComponentBook}.
  * Two lifecycle pairs make it extensible without touching it: `admin.section.before_render`/`after_render`
  * (the section's props, then its HTML) and `admin.shell.before_render`/`after_render` (the composition
- * and items, then the HTML). The locale travels in the {@see ComponentContext}, so a section's renderer
- * answers in the same language the shell does.
+ * and items, then the HTML).
  *
- * One small rule for every section: the request's query params reach the active section as
- * `props['query']` — a section can read its own query (a drill-down, a filter) without the shell
- * knowing what it means (greenhouse decisions/0205).
+ * What every section receives (greenhouse decisions/0210): the {@see ComponentContext} it mounts with
+ * carries the `principal` the gate authenticated — the same actor id the topbar shows, null when nobody —
+ * the `locale` the page answers in and the panel's `route`, so a section decides its own state by what
+ * the host knows and agrees with the topbar; and the request's query params reach it as `props['query']`
+ * (decisions/0205) — a drill-down, a filter — without the shell knowing what they mean.
  */
 final class AdminShell
 {
@@ -66,10 +71,12 @@ final class AdminShell
     }
 
     /**
-     * Renders the shell with every discovered section in the sidebar and the active one in main.
+     * Renders the shell with every discovered section in the sidebar, under its group, and the active one in
+     * main under its header.
      *
      * @param array<string, mixed> $query     the request's query params, handed to the active section as `props['query']`
-     * @param string|null          $principal who the gate let in — the authenticated actor's id, never a session id — or null when nobody is signed in
+     * @param string|null          $principal who the gate let in — the authenticated actor's id, never a session id — or null when nobody is signed in;
+     *                                        handed to every component's `ComponentContext`, the active section's included
      */
     public function render(SectionCatalogue $catalogue, AdminSection $active, array $query = [], ?string $principal = null): string
     {
@@ -78,24 +85,22 @@ final class AdminShell
             $book->adopt($section);
         }
 
-        $context = new ComponentContext(
-            componentId: self::COMPONENT_ID,
-            locale: $this->catalog->locale(),
-            route: $this->settings->route,
-        );
-
+        $context = $this->context($principal);
         $sectionHtml = $this->renderSection($book, $active, $context, $query);
+        $headerHtml = $this->renderHeader($book, $active, $catalogue->declaredBy($active->id), $context);
 
         $shell = new ShellRender(
             markup: $this->composition($active),
-            items: $this->navItems($catalogue, $active),
+            items: $this->navItems($catalogue),
         );
         $this->events?->dispatch(self::BEFORE_RENDER, ['shell' => $shell]);
 
         $defaults = [
+            SidebarComponent::NAME => ['items' => $shell->items],
+            // A subscriber that swapped the primitive into the composition still gets the items.
             'dashboard-sidebar' => ['items' => $shell->items],
             'dashboard-topbar' => ['childrenHtml' => $this->chips($principal)],
-            'dashboard-main' => ['childrenHtml' => $sectionHtml],
+            'dashboard-main' => ['childrenHtml' => $headerHtml . "\n" . $sectionHtml],
         ];
         $shell->html = $book->compiler($defaults)->compile($shell->markup, $context)->output;
         $this->events?->dispatch(self::AFTER_RENDER, ['shell' => $shell]);
@@ -111,30 +116,45 @@ final class AdminShell
     public function renderEmpty(SectionCatalogue $catalogue, ?string $principal = null): string
     {
         $book = new ComponentBook($this->codec, $this->events);
-        $context = new ComponentContext(componentId: self::COMPONENT_ID, locale: $this->catalog->locale(), route: $this->settings->route);
         $markup = \sprintf(
             '<milpa:dashboard-shell id="%1$s" main-id="%1$s-main">'
-            . '<milpa:dashboard-sidebar id="%1$s-sidebar" brand="%2$s"/>'
+            . '<milpa:%3$s id="%1$s-sidebar" brand="%2$s" home="%4$s"/>'
             . '<milpa:dashboard-topbar id="%1$s-topbar" title="%2$s" controls="%1$s-sidebar"/>'
             . '<milpa:dashboard-main id="%1$s-main"/>'
             . '</milpa:dashboard-shell>',
             self::COMPONENT_ID,
             self::attr($this->settings->title),
+            SidebarComponent::NAME,
+            self::attr($this->settings->route),
         );
         $notice = '<p class="mui-alert mui-alert--info admin-notice">' . htmlspecialchars($this->catalog->tr('section.none'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
         $defaults = [
-            'dashboard-sidebar' => ['items' => []],
+            SidebarComponent::NAME => ['items' => []],
             'dashboard-topbar' => ['childrenHtml' => $this->chips($principal)],
             'dashboard-main' => ['childrenHtml' => $notice],
         ];
 
-        return $book->compiler($defaults)->compile($markup, $context)->output;
+        return $book->compiler($defaults)->compile($markup, $this->context($principal))->output;
     }
 
     /** The title the panel shows for a section: a catalog key when it knows it, the literal otherwise. */
     public function title(AdminSection $section): string
     {
         return $this->catalog->has($section->title) ? $this->catalog->tr($section->title) : $section->title;
+    }
+
+    /**
+     * The context every component of this page mounts with — the compiler copies it to each node under
+     * that node's own component id: the principal the gate authenticated, the locale, the panel's route.
+     */
+    private function context(?string $principal): ComponentContext
+    {
+        return new ComponentContext(
+            componentId: self::COMPONENT_ID,
+            principal: $principal,
+            locale: $this->catalog->locale(),
+            route: $this->settings->route,
+        );
     }
 
     /**
@@ -163,11 +183,26 @@ final class AdminShell
         return $subject->html;
     }
 
+    /**
+     * The host's header above the section: its title, and the plugin the catalogue says declared it — the
+     * section never names itself. The declaring class travels as a prop, never through the markup, so a
+     * name nobody can cite (an anonymous class) breaks nothing.
+     */
+    private function renderHeader(ComponentBook $book, AdminSection $active, ?string $declaredBy, ComponentContext $context): string
+    {
+        $markup = \sprintf('<milpa:%s id="%s-header"/>', SectionHeaderComponent::NAME, self::COMPONENT_ID);
+
+        return $book
+            ->compiler([SectionHeaderComponent::NAME => ['title' => $this->title($active), 'declaredBy' => (string) $declaredBy]])
+            ->compileFragment($markup, $context)
+            ->output;
+    }
+
     private function composition(AdminSection $active): string
     {
         return \sprintf(
             '<milpa:dashboard-shell id="%1$s" title="%2$s" main-id="%1$s-main">'
-            . '<milpa:dashboard-sidebar id="%1$s-sidebar" brand="%3$s" active="%4$s"/>'
+            . '<milpa:%5$s id="%1$s-sidebar" brand="%3$s" home="%6$s" active="%4$s"/>'
             . '<milpa:dashboard-topbar id="%1$s-topbar" title="%2$s" controls="%1$s-sidebar"/>'
             . '<milpa:dashboard-main id="%1$s-main"/>'
             . '</milpa:dashboard-shell>',
@@ -175,6 +210,8 @@ final class AdminShell
             self::attr($this->title($active)),
             self::attr($this->settings->title),
             self::attr($active->id),
+            SidebarComponent::NAME,
+            self::attr($this->settings->route),
         );
     }
 
@@ -205,9 +242,12 @@ final class AdminShell
     }
 
     /**
-     * @return list<array{key: string, label: string, href: string, icon: string}>
+     * One flat item per section, in the catalogue's order (`order`, then `id`), each naming its group — the
+     * sidebar groups them when it mounts, so an item a subscriber adds names its group the same way.
+     *
+     * @return list<array{key: string, label: string, href: string, icon: string, group: string}>
      */
-    private function navItems(SectionCatalogue $catalogue, AdminSection $active): array
+    private function navItems(SectionCatalogue $catalogue): array
     {
         $items = [];
         foreach ($catalogue->sections() as $section) {
@@ -216,6 +256,7 @@ final class AdminShell
                 'label' => $this->title($section),
                 'href' => $this->settings->sectionUrl($section->id),
                 'icon' => $section->icon,
+                'group' => $section->group,
             ];
         }
 

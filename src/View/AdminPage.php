@@ -85,6 +85,10 @@ final class AdminPage
     private static function css(): string
     {
         return '.milpa-admin .admin-section{display:grid;gap:var(--space-4,1rem);padding:var(--space-4,1rem)}'
+            . '.milpa-admin .admin-section__header{padding:var(--space-4,1rem) var(--space-4,1rem) 0}'
+            . '.milpa-admin .admin-section__header .mui-page-header__text{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-3,.75rem)}'
+            . '.milpa-admin .admin-section__header .mui-page-header__title{margin:0}'
+            . '.milpa-admin .admin-section__declared{opacity:.7;font-size:.875rem}'
             . '.milpa-admin .admin-notice{margin:0}'
             . '.milpa-admin .admin-capabilities{display:grid;gap:.25rem;padding-left:1.25rem}'
             . '.milpa-admin .mui-table td,.milpa-admin .mui-table th{vertical-align:top}'
@@ -126,8 +130,9 @@ final class AdminPage
      * apply in place; the language override navigates with `?lang=` (the server renders the locale) and
      * stays sticky — every anchor under the shell root whose `href` starts with the panel's route carries
      * it (section links, the brand, the compose file), and a page that arrived without it is sent back
-     * with it. The brand anchor the sidebar component paints as `#` is pointed at the panel's root first,
-     * so it is a panel link like the others.
+     * with it. A brand anchor painted as `#` (the `dashboard-sidebar` primitive's, should a subscriber compose
+     * with it — the panel's own sidebar links the brand to the route) is pointed at the panel's root first, so it
+     * is a panel link like the others.
      */
     private function prefsScript(): string
     {

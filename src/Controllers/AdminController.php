@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Controllers;
 
+use Milpa\Admin\Components\ReservedComponentException;
 use Milpa\Admin\Components\UnknownComponentException;
 use Milpa\Admin\Http\RequestPrincipal;
 use Milpa\Admin\I18n\Catalog;
@@ -120,8 +121,8 @@ final class AdminController
 
         try {
             $body = $shell->render($catalogue, $active, $query, $principal);
-        } catch (UnknownComponentException $unknown) {
-            return $this->html(500, $page->error(500, $catalog->tr('section.conflict', $unknown->getMessage())));
+        } catch (UnknownComponentException|ReservedComponentException $refused) {
+            return $this->html(500, $page->error(500, $catalog->tr('section.conflict', $refused->getMessage())));
         }
 
         return $this->html(200, $page->render($body, $shell->title($active)));
