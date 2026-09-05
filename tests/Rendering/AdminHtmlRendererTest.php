@@ -294,7 +294,7 @@ final class AdminHtmlRendererTest extends TestCase
 
         self::assertStringContainsString('<p class="mui-alert mui-alert--info admin-notice">Running entirely on defaults: config/app.php has no admin key. Add one to change the route, the locale or the gate:</p>', $html);
         self::assertStringContainsString('<pre class="admin-snippet"><code>', $html);
-        self::assertStringContainsString("\\Milpa\\Admin\\Http\\LoopbackOnlyMiddleware::class]],\n// or, with milpa/app-runtime&#039;s PasskeyPlugin: &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class],</code></pre>", $html, 'the passkey gate is the second line of the snippet, offered as the alternative');
+        self::assertStringContainsString("\\Milpa\\Admin\\Http\\LoopbackOnlyMiddleware::class]],\n// or, behind milpa/app-runtime&#039;s PasskeyPlugin (app-runtime &gt;= 0.117), replace the middleware entry — the same key with the passkey gate:\n&#039;admin&#039; =&gt; [&#039;route&#039; =&gt; &#039;/milpa/admin&#039;, &#039;locale&#039; =&gt; &#039;en&#039;, &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class]],</code></pre>", $html, 'the alternative is an instruction and then the whole key on its own line — code, not a comment');
         self::assertStringNotContainsString('Behind a passkey', $html, 'the notice is for a panel that IS behind one');
         self::assertSame(5, substr_count($html, '<span class="mui-badge">default</span>'), 'the five values, every one a default');
         self::assertStringNotContainsString('mui-badge--accent', $html);
@@ -311,7 +311,7 @@ final class AdminHtmlRendererTest extends TestCase
         )->output;
 
         self::assertStringContainsString('<tr><td><code>middleware</code></td><td><code>PasskeyGateMiddleware</code> <span class="mui-badge mui-badge--success">passkey</span></td><td><span class="mui-badge mui-badge--accent">config</span></td></tr>', $html, 'the row names it');
-        self::assertStringContainsString('<p class="mui-alert mui-alert--info admin-notice">Behind a passkey: milpa/app-runtime&#039;s PasskeyPlugin mints the session at /webauthn/signin and its gate checks the scope. The panel names the gate and shows who it let in — it reads no cookie itself.</p>', $html);
+        self::assertStringContainsString('<p class="mui-alert mui-alert--info admin-notice">Behind a passkey: milpa/app-runtime&#039;s PasskeyPlugin mints the session when you sign in at /webauthn/signin (the page posts to /webauthn/authenticate) and its gate checks the scope. The panel names the gate and shows who it let in — it reads no cookie itself.</p>', $html);
         self::assertStringNotContainsString('mui-badge--danger', $html, 'a gate the panel knows by name is nothing to fix');
         self::assertStringNotContainsString('admin-snippet', $html, 'the app declared: no snippet');
         self::assertSame('passkey', self::envelopeOf($html)->data['gate'], 'the state carries the name too');
@@ -321,10 +321,10 @@ final class AdminHtmlRendererTest extends TestCase
             new RenderRequest(context: new ComponentContext(componentId: 'st21')),
         )->output;
         self::assertStringContainsString('<code>PasskeyGateMiddleware</code> <span class="mui-badge mui-badge--success">passkey</span>', $spanish);
-        self::assertStringContainsString('Detrás de una passkey: el PasskeyPlugin de milpa/app-runtime acuña la sesión en /webauthn/signin', $spanish);
+        self::assertStringContainsString('Detrás de una passkey: el PasskeyPlugin de milpa/app-runtime acuña la sesión cuando inicias sesión en /webauthn/signin (la página envía a /webauthn/authenticate)', $spanish);
 
         $snippet = self::renderer('es')->render(self::settings([]), new RenderRequest(context: new ComponentContext(componentId: 'st22')))->output;
-        self::assertStringContainsString("\n// o, con el PasskeyPlugin de milpa/app-runtime: &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class],</code></pre>", $snippet, 'the snippet\'s comment speaks the catalog\'s language');
+        self::assertStringContainsString("\n// o, detrás del PasskeyPlugin de milpa/app-runtime (app-runtime &gt;= 0.117), sustituye la entrada de middleware — la misma llave con la puerta passkey:\n&#039;admin&#039; =&gt; [&#039;route&#039; =&gt; &#039;/milpa/admin&#039;, &#039;locale&#039; =&gt; &#039;en&#039;, &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class]],</code></pre>", $snippet, 'the snippet\'s instruction speaks the catalog\'s language; the code line is the same in both');
 
         $custom = self::renderer()->render(
             self::settings(['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE, LoopbackOnlyMiddleware::class]]]),

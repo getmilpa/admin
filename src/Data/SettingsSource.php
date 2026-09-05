@@ -29,7 +29,8 @@ use Milpa\Admin\Http\LoopbackOnlyMiddleware;
  * entry that is not a name, `(empty)` for an empty string — and every defect is listed in `unresolved`,
  * so the renderer can say the panel fell back to the strict gate (greenhouse decisions/0204). The `gate`
  * is what the panel NAMES it ({@see AdminSettings::gateLabel()}): app-runtime's passkey gate, alone, is
- * `passkey`; and the empty state offers that gate as the alternative line of its snippet (decisions/0206).
+ * `passkey`; and the empty state offers that gate as the alternative of its snippet — the same `admin`
+ * key whole, with the passkey gate as its middleware, so it pastes as-is (decisions/0206).
  */
 final class SettingsSource
 {
@@ -39,8 +40,8 @@ final class SettingsSource
 
     /**
      * The five rows, the gate as the panel names it, whether the app declared anything, whether the gate
-     * was malformed, and the snippet to paste when the app declared nothing — plus the passkey line it
-     * offers as the alternative.
+     * was malformed, and the snippet to paste when the app declared nothing — plus the same key with the
+     * passkey gate, the alternative it offers whole.
      *
      * @return array{declared: bool, gate: string, locale: string, rows: list<array{key: string, value: string, source: string, declared: string|null}>, unresolved: list<string>, malformed: bool, snippet: string, passkeySnippet: string}
      */
@@ -81,20 +82,29 @@ final class SettingsSource
         ];
     }
 
-    /** The `middleware` line that puts the panel behind app-runtime's passkey gate — the alternative the empty state offers. */
+    /**
+     * The `admin` key that puts the panel behind app-runtime's passkey gate — the alternative the empty
+     * state offers: the whole line, not a fragment, so it replaces {@see self::snippet()} pasted as-is.
+     */
     public static function passkeySnippet(): string
     {
-        return \sprintf("'middleware' => [\\%s::class],", AdminSettings::PASSKEY_GATE);
+        return self::adminKey(AdminSettings::PASSKEY_GATE);
     }
 
     /** The `admin` key a fresh app pastes into `config/app.php` — the defaults, spelled out. */
     public static function snippet(): string
     {
+        return self::adminKey(LoopbackOnlyMiddleware::class);
+    }
+
+    /** The `admin` key with the default route and locale and the given class as its one middleware. */
+    private static function adminKey(string $middleware): string
+    {
         return \sprintf(
             "'admin' => ['route' => '%s', 'locale' => '%s', 'middleware' => [\\%s::class]],",
             AdminSettings::DEFAULT_ROUTE,
             AdminSettings::DEFAULT_LOCALE,
-            LoopbackOnlyMiddleware::class,
+            $middleware,
         );
     }
 

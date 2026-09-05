@@ -27,6 +27,10 @@ use Psr\Http\Message\ServerRequestInterface;
  * non-empty string id — each is «nobody», and the topbar shows no chip. What comes back is the ACTOR's
  * id (`passkey:…`), never a session id: the session is the gate's, and the panel never sees it
  * (greenhouse decisions/0206).
+ *
+ * The reader never calls what it cannot: a member answered by a method is read only when that method
+ * is public and needs no argument, and a call that throws reads as nobody — a foreign context is read,
+ * never trusted to behave.
  */
 final class RequestPrincipal
 {
@@ -37,7 +41,7 @@ final class RequestPrincipal
     public static function of(ServerRequestInterface $request): ?string
     {
         $context = $request->getAttribute(self::ATTRIBUTE);
-        if (!\is_object($context) || !method_exists($context, 'isAuthenticated') || $context->isAuthenticated() !== true) {
+        if (!\is_object($context) || self::call($context, 'isAuthenticated') !== true) {
             return null;
         }
         $actor = self::member($context, 'actor');
@@ -49,14 +53,34 @@ final class RequestPrincipal
         return \is_string($id) && $id !== '' ? $id : null;
     }
 
-    /** One member of a foreign object: its public property of that name, else its public method of that name called, else null. */
+    /** One member of a foreign object: its public property of that name, else its method of that name {@see self::call()}ed, else null. */
     private static function member(object $subject, string $name): mixed
     {
         $public = get_object_vars($subject);
-        if (\array_key_exists($name, $public)) {
-            return $public[$name];
+
+        return \array_key_exists($name, $public) ? $public[$name] : self::call($subject, $name);
+    }
+
+    /**
+     * A method of a foreign object called — only when it exists, is public and requires no argument: a
+     * protected one, or one that needs a parameter, is not a member the panel can read, so it is never
+     * called. Null when it cannot be called, and null when the call throws.
+     */
+    private static function call(object $subject, string $name): mixed
+    {
+        if (!method_exists($subject, $name)) {
+            return null;
         }
 
-        return method_exists($subject, $name) ? $subject->{$name}() : null;
+        try {
+            $method = new \ReflectionMethod($subject, $name);
+            if (!$method->isPublic() || $method->getNumberOfRequiredParameters() > 0) {
+                return null;
+            }
+
+            return $method->invoke($subject);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

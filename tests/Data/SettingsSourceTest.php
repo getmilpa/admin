@@ -106,11 +106,16 @@ final class SettingsSourceTest extends TestCase
         $snapshot = (new SettingsSource(AdminSettings::fromConfig(null)))->snapshot();
 
         self::assertSame(
-            "'middleware' => [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class],",
+            "'admin' => ['route' => '/milpa/admin', 'locale' => 'en', 'middleware' => [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class]],",
             $snapshot['passkeySnippet'],
-            'fully qualified, so it works pasted as-is — the words around it are the renderer\'s, in the catalog\'s language',
+            'the whole admin key, fully qualified, so it replaces the default line pasted as-is — the instruction around it is the renderer\'s, in the catalog\'s language',
         );
         self::assertSame(SettingsSource::passkeySnippet(), $snapshot['passkeySnippet']);
+        self::assertSame(
+            str_replace('\\Milpa\\Admin\\Http\\LoopbackOnlyMiddleware', '\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware', $snapshot['snippet']),
+            $snapshot['passkeySnippet'],
+            'the same key as the default snippet, one class apart — never a fragment',
+        );
     }
 
     public function testARejectedKeyShowsTheEffectiveValueWhatWasDeclaredAndTheRejectedSource(): void

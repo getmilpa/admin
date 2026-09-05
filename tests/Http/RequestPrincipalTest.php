@@ -115,6 +115,91 @@ final class RequestPrincipalTest extends TestCase
         self::assertNull(RequestPrincipal::of(self::with($scalarActor)), 'an actor that is not an object has no id to read');
     }
 
+    /**
+     * The reader never calls a method it cannot: a member answered by a method is read only when the method
+     * is public and needs no argument, and a call that throws is nobody — never a 500 in front of the panel.
+     */
+    public function testAMethodTheReaderCannotCallIsNobody(): void
+    {
+        $needsAnArgument = new class () {
+            public function isAuthenticated(): bool
+            {
+                return true;
+            }
+
+            public function actor(string $which): object
+            {
+                return new class () {
+                    public string $id = 'passkey:rod';
+                };
+            }
+        };
+        self::assertNull(RequestPrincipal::of(self::with($needsAnArgument)), 'actor() requires an argument the panel does not have: never called, nobody');
+
+        $throws = new class () {
+            public function isAuthenticated(): bool
+            {
+                return true;
+            }
+
+            public function actor(): object
+            {
+                throw new \RuntimeException('the store is gone');
+            }
+        };
+        self::assertNull(RequestPrincipal::of(self::with($throws)), 'a call that throws reads as nobody, and the panel keeps serving');
+
+        $hidden = new class () {
+            public function isAuthenticated(): bool
+            {
+                return true;
+            }
+
+            public function actor(): object
+            {
+                return new class () {
+                    protected function id(): string
+                    {
+                        return 'passkey:rod';
+                    }
+                };
+            }
+        };
+        self::assertNull(RequestPrincipal::of(self::with($hidden)), 'a protected id() is not a member the panel can read');
+
+        $guardedVerdict = new class () {
+            public object $actor;
+
+            public function __construct()
+            {
+                $this->actor = new class () {
+                    public string $id = 'passkey:rod';
+                };
+            }
+
+            public function isAuthenticated(string $strictly): bool
+            {
+                return true;
+            }
+        };
+        self::assertNull(RequestPrincipal::of(self::with($guardedVerdict)), 'the verdict itself is read the same way: an isAuthenticated() that needs an argument is never called');
+
+        $optional = new class () {
+            public function isAuthenticated(): bool
+            {
+                return true;
+            }
+
+            public function actor(?string $which = null): object
+            {
+                return new class () {
+                    public string $id = 'passkey:rod';
+                };
+            }
+        };
+        self::assertSame('passkey:rod', RequestPrincipal::of(self::with($optional)), 'the control: an optional parameter is no required argument — the method is called and the actor read');
+    }
+
     private static function with(mixed $context): ServerRequest
     {
         return (new ServerRequest('GET', '/milpa/admin'))->withAttribute(RequestPrincipal::ATTRIBUTE, $context);

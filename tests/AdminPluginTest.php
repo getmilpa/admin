@@ -20,6 +20,7 @@ use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
 use Milpa\Admin\Controllers\StackController;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
+use Milpa\Admin\Http\RequestPrincipal;
 use Milpa\Admin\Tests\Fixtures\AllowAllMiddleware;
 use Milpa\Admin\Tests\Fixtures\DuplicatePlugin;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
@@ -285,6 +286,32 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('Detrás de una passkey', $spanish);
     }
 
+    /**
+     * The chip is not the index page's alone: a SECTION route reads the same attribute, so the actor a gate
+     * left on the request is shown wherever the panel answers — and the same route with no attribute shows nobody.
+     */
+    public function testASectionRouteShowsTheActorTheGateLeftOnTheRequest(): void
+    {
+        [$container] = self::boot([AdminPlugin::class], ['admin' => ['middleware' => [AdminSettings::PASSKEY_GATE]]]);
+        $controller = $container->get(AdminController::class);
+        \assert($controller instanceof AdminController);
+
+        $signed = $controller->section(self::sectionRequest('settings')->withAttribute(RequestPrincipal::ATTRIBUTE, PasskeyGateStub::context('passkey:rod')));
+        self::assertSame(200, $signed->getStatusCode());
+        $html = (string) $signed->getBody();
+        self::assertStringContainsString(
+            '<span class="mui-badge admin-chip admin-chip--principal" data-principal="passkey:rod">signed in as passkey:rod</span><span class="mui-badge admin-chip admin-chip--gate" data-gate="passkey">gate: passkey</span>',
+            $html,
+            'the actor the gate left on the request, on a section page',
+        );
+        self::assertStringContainsString('admin-section--admin-settings', $html, 'and the section itself rendered');
+
+        $spanish = (string) $controller->section(self::sectionRequest('settings', 'lang=es')->withAttribute(RequestPrincipal::ATTRIBUTE, PasskeyGateStub::context('passkey:rod')))->getBody();
+        self::assertStringContainsString('data-principal="passkey:rod">sesión iniciada como passkey:rod</span>', $spanish, 'in the language the request asked for');
+
+        self::assertStringNotContainsString('admin-chip--principal', (string) $controller->section(self::sectionRequest('settings'))->getBody(), 'the control: the same route with no attribute shows nobody');
+    }
+
     public function testARejectedLocaleRunsTheDefaultEverywhereAndSettingsSaysWhatWasDeclared(): void
     {
         [$container] = self::boot([AdminPlugin::class], ['admin' => ['locale' => 'fr']]);
@@ -346,7 +373,7 @@ final class AdminPluginTest extends TestCase
 
         self::assertStringContainsString('Running entirely on defaults: config/app.php has no admin key', $html, 'every one of the five is a default, so the wording is earned');
         self::assertStringContainsString('<pre class="admin-snippet"><code>', $html);
-        self::assertStringContainsString("LoopbackOnlyMiddleware::class]],\n// or, with milpa/app-runtime&#039;s PasskeyPlugin: &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class],</code></pre>", $html, 'and the passkey gate as the alternative');
+        self::assertStringContainsString("LoopbackOnlyMiddleware::class]],\n// or, behind milpa/app-runtime&#039;s PasskeyPlugin (app-runtime &gt;= 0.117), replace the middleware entry — the same key with the passkey gate:\n&#039;admin&#039; =&gt; [&#039;route&#039; =&gt; &#039;/milpa/admin&#039;, &#039;locale&#039; =&gt; &#039;en&#039;, &#039;middleware&#039; =&gt; [\\Milpa\\AppRuntime\\Web\\PasskeyGateMiddleware::class]],</code></pre>", $html, 'and the passkey gate as the alternative: the instruction, then the whole key on its own line');
         self::assertSame(5, substr_count($html, '<span class="mui-badge">default</span>'));
         self::assertStringContainsString('●●●</span>derived</td>', $html);
         self::assertStringContainsString('data-gate="loopback">gate: loopback</span>', $html);

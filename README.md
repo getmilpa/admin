@@ -141,19 +141,46 @@ panel page accepts `?lang=en|es` to render in another catalog language for that 
 
 ## Behind a passkey
 
-The panel does not authenticate anyone — it **names its gate**. `milpa/app-runtime`'s `PasskeyPlugin` owns the
-ceremony (register a key at `/webauthn/enroll`, enroll the id with `identity:enroll --scopes=milpa.admin`, sign in
-at `/webauthn/signin`) and registers the one middleware the panel needs:
+The panel does not authenticate anyone — it **names its gate**. The gate is `PasskeyGateMiddleware`, which
+`milpa/app-runtime`'s `PasskeyPlugin` registers under its own class name; it **requires `milpa/app-runtime >= 0.117`**,
+and the ceremony it fronts — registration, sign-in, the session it mints, the store it checks — is that package's:
+its README section [`## Passkey gate`](https://github.com/getmilpa/app-runtime#passkey-gate) is the reference. The
+operator sequence, from a fresh app to a panel that opens only for your key:
 
-```php
-'admin' => ['middleware' => [\Milpa\AppRuntime\Web\PasskeyGateMiddleware::class]],
-```
+1. **Declare the plugin and the relying party** — `Milpa\AppRuntime\Web\PasskeyPlugin::class` in `config/plugins.php`,
+   and `'passkey' => ['rpId' => 'localhost']` in `config/app.php` (the host the browser is on; WebAuthn needs
+   `https://` or `localhost`). Without `rpId` the plugin mounts nothing.
+2. **Register the key** — open `GET /webauthn/enroll`, press *Register with passkey*, touch the key; the page prints
+   the **credential id**. Registering grants nothing yet.
+3. **Root it in `config/identity.php`** — the file the running app reads and never writes. On a first run, a house
+   that opted in with `['bootstrap' => true]` and holds no `rooted` list yet may root your signing key once, with the
+   scope `identity:enroll` needs over `http`/`mcp` (sealed after the first; on the CLI `--sign` alone authorizes):
+   ```bash
+   php bin/coa identity:bootstrap --scopes=identity:enroll --sign
+   ```
+   Then declare the credential id as rooted — `identity:enroll` refuses a fingerprint this list does not hold:
+   ```php
+   <?php return ['rooted' => ['<credential id>']];
+   ```
+4. **Enroll the credential with the panel's scope** — a governed, signed operation:
+   ```bash
+   php bin/coa identity:enroll --fingerprint=<credential id> --scopes=milpa.admin --sign
+   ```
+5. **Name the gate** in `config/app.php`:
+   ```php
+   'admin' => ['middleware' => [\Milpa\AppRuntime\Web\PasskeyGateMiddleware::class]],
+   ```
+6. **Sign in** — `GET /milpa/admin` answers `302` to `/webauthn/signin?next=/milpa/admin`; *Continue with a passkey*,
+   touch, and the page posts to `/webauthn/authenticate`, which mints the session, sets the cookie and sends the
+   browser back to the panel, `200`.
 
-That gate reads the session cookie against its own store, redirects a browser without a valid session to the sign-in
-page (a JSON client gets 401), answers 403 to a session that lacks the scope, and leaves the authenticated
-`AuthContext` on the request under the attribute `milpa.auth`. The panel reads only that attribute — no cookie, no
-session id — and the topbar says `signed in as <actor id>`; when that class is the whole stack, Settings and the
-gate chip name it `passkey` instead of `custom`, and the empty state's snippet offers the line above as the
+From step 5 on, **identity replaces loopback-only**: a request from the LAN is no longer refused for its address — it
+gets `302` to sign-in (a JSON client `401`) until it carries a live session, `403` when the session lacks the scope,
+and the panel when it has it; loopback gets the same treatment. The gate reads the session cookie against its own
+store and leaves the authenticated `AuthContext` on the request under the attribute `milpa.auth`. The panel reads
+only that attribute — no cookie, no session id — and the topbar says `signed in as <actor id>` on every panel page,
+the index and each section alike; when that class is the whole stack, Settings and the gate chip name it `passkey`
+instead of `custom`, and the empty state's snippet offers the same `admin` key with the passkey gate as the
 alternative to loopback-only. `milpa/admin` takes no dependency on `milpa/auth` or `milpa/app-runtime` for any of it
 (greenhouse `decisions/0206`).
 

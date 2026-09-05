@@ -136,7 +136,8 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
      * The Settings section: the viewer's panel preferences (browser-local, `[data-pref]` controls the page's
      * delegated script stores and applies), then the read-only configuration table — key, value, source —
      * with the empty state's snippet when the app declared nothing (worded «entirely on defaults» only when
-     * every source IS a default; the snippet's second line is the passkey gate as the alternative), the
+     * every source IS a default; under the default line, the instruction and the same key whole with the
+     * passkey gate as the alternative), the
      * notice that names the passkey gate when that is the gate in effect, and the danger notice when the
      * declared gate cannot be carried: one that names each defective entry, or one that names what was
      * received when it was not a list at all.
@@ -181,8 +182,10 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     }
 
     /**
-     * The snippet's second line — the passkey gate as the alternative, a comment in the catalog's language
-     * over the code the source gives — or nothing when the state carries no such line.
+     * The snippet's alternative — the instruction, a comment in the catalog's language («replace the
+     * middleware entry with»), then the code the source gives on its own line: the whole `admin` key with
+     * the passkey gate, pasteable as-is, never a fragment inside a comment — or nothing when the state
+     * carries no such line.
      *
      * @param array<string, mixed> $data
      */
@@ -193,7 +196,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             return '';
         }
 
-        return "\n// " . Html::escape($this->catalog->tr('settings.snippet.passkey', $line));
+        return "\n// " . Html::escape($this->catalog->tr('settings.snippet.passkey')) . "\n" . Html::escape($line);
     }
 
     /**
