@@ -19,13 +19,17 @@ namespace Milpa\Admin\View;
  *
  * `admin.shell.before_render` hands out the XHTML composition and the sidebar items before the
  * compiler runs; `admin.shell.after_render` hands out the HTML before the page wraps it.
+ *
+ * The items are flat: each carries the sidebar `group` it lists under (the section's, or `app` for an
+ * item a subscriber adds without one) and the sidebar groups them when it mounts — so a subscriber adds
+ * an item and names its group, and never rebuilds the groups.
  */
 final class ShellRender
 {
     /**
-     * @param string                                                              $markup the `<milpa:…>` composition — mutable before render
-     * @param list<array{key: string, label: string, href: string, icon: string}> $items  the sidebar items — mutable before render
-     * @param string                                                              $html   the rendered shell — mutable after render
+     * @param string                                                                              $markup the `<milpa:…>` composition — mutable before render
+     * @param list<array{key: string, label: string, href: string, icon: string, group?: string}> $items  the sidebar items, in sidebar order — mutable before render
+     * @param string                                                                              $html   the rendered shell — mutable after render
      */
     public function __construct(
         public string $markup,

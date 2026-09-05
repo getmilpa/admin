@@ -22,11 +22,16 @@ use Milpa\Live\ValueObjects\InteractionResult;
 use Milpa\Live\ValueObjects\StateSnapshot;
 
 /**
- * A custom component a foreign plugin brings: its state is whatever `text` prop it mounted with.
+ * A custom component a foreign plugin brings: its state is whatever `text` prop it mounted with — and it
+ * remembers the {@see ComponentContext} the host handed its last `mount()`, so a test can see what a
+ * guest receives (the principal, the locale, the route) without the guest painting it.
  */
 final class EchoComponent implements ComponentDefinitionInterface
 {
     public const NAME = 'echo-panel';
+
+    /** The context the last `mount()` received, whichever instance mounted — what the host handed a foreign section. */
+    public static ?ComponentContext $lastContext = null;
 
     public static function contract(): ComponentContract
     {
@@ -35,6 +40,8 @@ final class EchoComponent implements ComponentDefinitionInterface
 
     public function mount(array $props, ComponentContext $context): StateSnapshot
     {
+        self::$lastContext = $context;
+
         return new StateSnapshot($context->componentId, self::NAME, '1', ['text' => (string) ($props['text'] ?? '')]);
     }
 

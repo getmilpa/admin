@@ -27,7 +27,9 @@ final class AdminSectionTest extends TestCase
 
         self::assertFalse($section->isCustom());
         self::assertSame('app', $section->group);
+        self::assertSame(AdminSection::GROUP_APP, $section->group, 'the default group is the app\'s');
         self::assertSame(0, $section->order);
+        self::assertSame(['admin', 'app', 'agent'], [AdminSection::GROUP_ADMIN, AdminSection::GROUP_APP, AdminSection::GROUP_AGENT], 'the three groups with a fixed place in the sidebar');
     }
 
     public function testACustomSectionCarriesDefinitionAndRenderer(): void
