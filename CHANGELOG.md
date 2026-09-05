@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.11.1](https://github.com/getmilpa/admin/compare/v0.11.0...v0.11.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **design:** paint the canvas, a base layer under the bundle, panels with a header and a body, a section that fills the main ([#51](https://github.com/getmilpa/admin/issues/51)) ([635ad10](https://github.com/getmilpa/admin/commit/635ad10a5964c5fbc5e87bff4741b53a9a44e507))
+
 ## [0.11.0](https://github.com/getmilpa/admin/compare/v0.10.1...v0.11.0) (2026-09-05)
 
 
