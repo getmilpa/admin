@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.12.0](https://github.com/getmilpa/admin/compare/v0.11.1...v0.12.0) (2026-09-06)
+
+
+### Features
+
+* **host:** a section may declare a whole view — the panel mounts it, emits one runtime and contains its failures ([#53](https://github.com/getmilpa/admin/issues/53)) ([e8824c7](https://github.com/getmilpa/admin/commit/e8824c7fffd33b94f095fdfd362a54aba7c95290))
+
 ## [0.11.1](https://github.com/getmilpa/admin/compare/v0.11.0...v0.11.1) (2026-09-05)
 
 
