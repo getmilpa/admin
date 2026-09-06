@@ -25,8 +25,8 @@
     "ext-mbstring": "*",
     "milpa/core": ">=0.10 <1.0",
     "milpa/http": ">=0.2 <1.0",
-    "milpa/live": ">=0.17 <1.0",
-    "milpa/live-web": ">=0.13 <1.0",
+    "milpa/live": ">=0.18 <1.0",
+    "milpa/live-web": ">=0.14 <1.0",
     "milpa/plugin": ">=0.13 <1.0",
     "milpa/runtime": ">=0.10 <1.0",
     "nyholm/psr7": "^1.8",
@@ -66,7 +66,7 @@
         "provides": [
           "admin-panel"
         ],
-        "briefing": "This app serves an administration panel at /milpa/admin (loopback-only until the app declares its own gate). Every plugin that implements Milpa\\Admin\\Section\\AdminSectionProvider gets a section in it; the panel lists the booted plugins, every route they declared, what the app declared about the panel itself (Settings — every admin.* key with its source, and the gate in effect), every backing service they need (with a compose file at {route}/stack/compose.yml), and — read-only, nothing runs — the ledgers the agent writes (Dev tools: sessions with state and real token cost, one session's timeline at ?session=<id>, debt signals by kind, evidence, and the log the app declares under admin.log)."
+        "briefing": "This app serves an administration panel at /milpa/admin (loopback-only until the app declares its own gate). Every plugin that implements Milpa\\Admin\\Section\\AdminSectionProvider gets a section in it \u2014 one component, or a whole declared view (a tree of its own components, their renderers and their client files) the panel mounts inline with ONE runtime for the page and one live endpoint at POST /milpa/admin/live behind the same gate; the panel lists the booted plugins, every route they declared, what the app declared about the panel itself (Settings — every admin.* key with its source, and the gate in effect), every backing service they need (with a compose file at {route}/stack/compose.yml), and — read-only, nothing runs — the ledgers the agent writes (Dev tools: sessions with state and real token cost, one session's timeline at ?session=<id>, debt signals by kind, evidence, and the log the app declares under admin.log)."
       }
     }
   },

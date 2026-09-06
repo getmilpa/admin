@@ -20,10 +20,12 @@ use Milpa\Admin\Components\SectionHeaderComponent;
 use Milpa\Admin\Components\SidebarComponent;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\AdminSection;
+use Milpa\Admin\Section\DeclaredView;
 use Milpa\Admin\Section\SectionCatalogue;
 use Milpa\Admin\Section\SectionRender;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Live\Contracts\Transport\StateTransferCodecInterface;
+use Milpa\Live\ValueObjects\ClientAssets;
 use Milpa\Live\ValueObjects\ComponentContext;
 
 /**
@@ -46,6 +48,17 @@ use Milpa\Live\ValueObjects\ComponentContext;
  * the `locale` the page answers in and the panel's `route`, so a section decides its own state by what
  * the host knows and agrees with the topbar; and the request's query params reach it as `props['query']`
  * (decisions/0205) — a drill-down, a filter — without the shell knowing what they mean.
+ *
+ * A section may also declare a whole {@see DeclaredView} instead of one component (greenhouse
+ * decisions/0211): then the shell compiles the guest's tree in the same place, ROOT BY ROOT, so a
+ * component that throws while mounting paints its failure inside its own region and the panel around it
+ * stands ({@see ViewMarkup}); it collects what every rendered renderer DECLARED, so the document emits
+ * each stylesheet and module once through `LiveBoot`; and it merges the view's signal seeds with the
+ * panel's own ({@see LiveSeeds}). Host facts a guest needs but no contract carries travel in
+ * `ComponentContext::$meta`: {@see self::META_GATE}, {@see self::META_SECTION}, {@see self::META_QUERY}.
+ *
+ * {@see self::compose()} returns all three (HTML, assets, seeds); {@see self::render()} is the same call
+ * when only the HTML is wanted.
  */
 final class AdminShell
 {
@@ -54,6 +67,24 @@ final class AdminShell
     public const AFTER_RENDER = 'admin.shell.after_render';
     public const SECTION_BEFORE_RENDER = 'admin.section.before_render';
     public const SECTION_AFTER_RENDER = 'admin.section.after_render';
+
+    /** `ComponentContext::$meta`: the gate in effect, as the topbar chip names it (`loopback`|`custom`|`passkey`|`open`|`fallback`). */
+    public const META_GATE = 'gate';
+
+    /** `ComponentContext::$meta`: the id of the section the panel is showing. */
+    public const META_SECTION = 'section';
+
+    /** `ComponentContext::$meta`: the request's query params — how a declared view reads what `props['query']` gives the narrow shape. */
+    public const META_QUERY = 'query';
+
+    /** The signal the panel seeds with the active section's id — the host's own contribution to the page seeds. */
+    public const SIGNAL_SECTION = 'admin.section';
+
+    /** The signal the panel seeds with the gate in effect. */
+    public const SIGNAL_GATE = 'admin.gate';
+
+    /** The signal the panel seeds with the locale the page answers in. */
+    public const SIGNAL_LOCALE = 'admin.locale';
 
     public function __construct(
         private readonly AdminSettings $settings,
@@ -82,14 +113,27 @@ final class AdminShell
      */
     public function render(SectionCatalogue $catalogue, AdminSection $active, array $query = [], ?string $principal = null): string
     {
-        $book = new ComponentBook($this->codec, $this->events);
-        foreach ($catalogue->sections() as $section) {
-            $book->adopt($section);
-        }
+        return $this->compose($catalogue, $active, $query, $principal)->html;
+    }
 
-        $context = $this->context($principal);
-        $sectionHtml = $this->renderSection($book, $active, $context, $query);
-        $headerHtml = $this->renderHeader($book, $active, $catalogue->declaredBy($active->id), $context);
+    /**
+     * The whole composed page: the shell's HTML, the client files every rendered component declared, and
+     * the seeds the panel and the active section's view agreed on — what {@see AdminPage} needs to emit
+     * ONE runtime for the page (greenhouse decisions/0211).
+     *
+     * @param array<string, mixed> $query     the request's query params, handed to the active section as `props['query']` and to every node as `meta['query']`
+     * @param string|null          $principal who the gate let in — the authenticated actor's id, never a session id — or null when nobody is signed in
+     */
+    public function compose(SectionCatalogue $catalogue, AdminSection $active, array $query = [], ?string $principal = null): ShellOutput
+    {
+        $book = ComponentBook::forSections($catalogue, $this->codec, $this->events);
+
+        $context = $this->context($principal, $active->id, $query);
+        $assets = ClientAssets::empty();
+        $sectionHtml = $active->view instanceof DeclaredView
+            ? $this->renderView($book, $active, $active->view, $context, $assets)
+            : $this->renderSection($book, $active, $context, $query, $assets);
+        $headerHtml = $this->renderHeader($book, $active, $catalogue->declaredBy($active->id), $context, $assets);
 
         $shell = new ShellRender(
             markup: $this->composition($active),
@@ -104,10 +148,12 @@ final class AdminShell
             'dashboard-topbar' => ['childrenHtml' => $this->chips($principal)],
             'dashboard-main' => ['childrenHtml' => $headerHtml . "\n" . self::body($sectionHtml, self::COMPONENT_ID . '-header')],
         ];
-        $shell->html = $book->compiler($defaults)->compile($shell->markup, $context)->output;
+        $compiled = $book->compiler($defaults)->compile($shell->markup, $context);
+        $assets = $assets->merge($compiled->clientAssets());
+        $shell->html = $compiled->output;
         $this->events?->dispatch(self::AFTER_RENDER, ['shell' => $shell]);
 
-        return $shell->html;
+        return new ShellOutput($shell->html, $assets, $this->seeds($active));
     }
 
     /**
@@ -116,6 +162,17 @@ final class AdminShell
      * @param string|null $principal who the gate let in, or null when nobody is signed in
      */
     public function renderEmpty(SectionCatalogue $catalogue, ?string $principal = null): string
+    {
+        return $this->composeEmpty($catalogue, $principal)->html;
+    }
+
+    /**
+     * The empty state, composed like any other page — its assets (the primitives declare none today) and
+     * the panel's own seeds, so a panel with no section still emits exactly one runtime.
+     *
+     * @param string|null $principal who the gate let in, or null when nobody is signed in
+     */
+    public function composeEmpty(SectionCatalogue $catalogue, ?string $principal = null): ShellOutput
     {
         $book = new ComponentBook($this->codec, $this->events);
         $markup = \sprintf(
@@ -136,7 +193,9 @@ final class AdminShell
             'dashboard-main' => ['childrenHtml' => self::body($notice)],
         ];
 
-        return $book->compiler($defaults)->compile($markup, $this->context($principal))->output;
+        $compiled = $book->compiler($defaults)->compile($markup, $this->context($principal, '', []));
+
+        return new ShellOutput($compiled->output, $compiled->clientAssets(), $this->hostSeeds(''));
     }
 
     /**
@@ -163,25 +222,35 @@ final class AdminShell
 
     /**
      * The context every component of this page mounts with — the compiler copies it to each node under
-     * that node's own component id: the principal the gate authenticated, the locale, the panel's route.
+     * that node's own component id: the principal the gate authenticated, the locale, the panel's route,
+     * and in `meta` the host facts a guest may need without widening any contract (greenhouse
+     * decisions/0211) — the gate in effect, the active section's id, the request's query.
+     *
+     * @param array<string, mixed> $query
      */
-    private function context(?string $principal): ComponentContext
+    private function context(?string $principal, string $section, array $query): ComponentContext
     {
         return new ComponentContext(
             componentId: self::COMPONENT_ID,
             principal: $principal,
             locale: $this->catalog->locale(),
             route: $this->settings->route,
+            meta: [
+                self::META_GATE => $this->settings->gateLabel(),
+                self::META_SECTION => $section,
+                self::META_QUERY => $query,
+            ],
         );
     }
 
     /**
      * The active section's HTML, its declared props plus the request's query under `query` — the one prop
-     * every section gets from the shell, open to `admin.section.before_render` like the rest.
+     * every section gets from the shell, open to `admin.section.before_render` like the rest. Contained
+     * like a view's node: a component that throws while mounting paints its failure and the panel stands.
      *
      * @param array<string, mixed> $query
      */
-    private function renderSection(ComponentBook $book, AdminSection $active, ComponentContext $context, array $query): string
+    private function renderSection(ComponentBook $book, AdminSection $active, ComponentContext $context, array $query, ClientAssets &$assets): string
     {
         $subject = new SectionRender($active, [...$active->props, 'query' => $query]);
         $this->events?->dispatch(self::SECTION_BEFORE_RENDER, ['section' => $subject]);
@@ -192,13 +261,104 @@ final class AdminShell
             self::COMPONENT_ID,
             self::attr($active->id),
         );
-        $subject->html = $book
-            ->compiler([$active->component => $subject->props])
-            ->compileFragment($markup, $context)
-            ->output;
+        $subject->html = $this->paint($book, $markup, $active->component, [$active->component => $subject->props], $context, $assets);
         $this->events?->dispatch(self::SECTION_AFTER_RENDER, ['section' => $subject]);
 
         return $subject->html;
+    }
+
+    /**
+     * The tree a section declared, compiled here — one region of the panel, no frame, no second document
+     * (greenhouse decisions/0211, retiring the iframe of 0210).
+     *
+     * Each ROOT of the view is compiled on its own ({@see ViewMarkup}) so a component that throws costs
+     * its own region and nothing more; every declaring renderer's files are collected into `$assets` for
+     * the document to emit once; and the view's props reach the compiler as defaults, still open to
+     * `admin.section.before_render` — with a view, {@see SectionRender::$props} is the view's own
+     * component-name → props map, not one component's props.
+     */
+    private function renderView(ComponentBook $book, AdminSection $active, DeclaredView $view, ComponentContext $context, ClientAssets &$assets): string
+    {
+        $subject = new SectionRender($active, $view->props);
+        $this->events?->dispatch(self::SECTION_BEFORE_RENDER, ['section' => $subject]);
+
+        /** @var array<string, array<string, mixed>> $defaults */
+        $defaults = $subject->props;
+        $html = [];
+        try {
+            $roots = ViewMarkup::roots($view->markup);
+        } catch (\Throwable $broken) {
+            return $this->failure($active->id, $broken);
+        }
+        foreach ($roots as $root) {
+            $html[] = $this->paint($book, $root->markup, $root->name, $defaults, $context, $assets);
+        }
+        $subject->html = implode("\n", $html);
+        $this->events?->dispatch(self::SECTION_AFTER_RENDER, ['section' => $subject]);
+
+        return $subject->html;
+    }
+
+    /**
+     * One node compiled, its failure contained: a component that throws while mounting or rendering paints
+     * a small region naming it, and the page around it stands — never a 500 for the whole panel
+     * (greenhouse decisions/0211). Whatever the node declared reaches `$assets` all the same.
+     *
+     * @param array<string, array<string, mixed>> $defaults
+     */
+    private function paint(ComponentBook $book, string $markup, string $component, array $defaults, ComponentContext $context, ClientAssets &$assets): string
+    {
+        try {
+            $compiled = $book->compiler($defaults)->compileFragment($markup, $context);
+        } catch (\Throwable $broken) {
+            return $this->failure($component, $broken);
+        }
+        $assets = $assets->merge($compiled->clientAssets());
+
+        return $compiled->output;
+    }
+
+    /**
+     * The region a node that could not be rendered leaves behind: what failed, and why, in the panel's own
+     * language and its own skin. The reason is the exception's message — the panel is behind a gate and a
+     * developer reading it is the point; it is escaped like any other value, never markup.
+     */
+    private function failure(string $component, \Throwable $broken): string
+    {
+        return '<div class="mui-alert mui-alert--warning admin-section__failure" role="alert" data-failed-component="' . self::attr($component) . '">'
+            . '<strong>' . self::attr($this->catalog->tr('view.failed', $component)) . '</strong> '
+            . '<span class="admin-section__failure-why">' . self::attr($this->catalog->tr('view.failed.why', $broken->getMessage())) . '</span>'
+            . '</div>';
+    }
+
+    /**
+     * The page's seeds: the panel's own, merged with the active section's view — the only view the page
+     * mounts. A key both declare with different values is a {@see \Milpa\Admin\Section\SeedConflictException}
+     * naming both, never a silent last-one-wins.
+     */
+    private function seeds(AdminSection $active): LiveSeeds
+    {
+        $seeds = $this->hostSeeds($active->id);
+        if ($active->view === null || $active->view->seedsNothing()) {
+            return $seeds;
+        }
+
+        return $seeds->merge(LiveSeeds::of(
+            'section «' . $active->id . '»',
+            $active->view->signals,
+            $active->view->persist,
+            $active->view->computed,
+        ));
+    }
+
+    /** What the panel itself seeds on every page: which section is open, which gate let the reader in, which locale answers. */
+    private function hostSeeds(string $section): LiveSeeds
+    {
+        return LiveSeeds::of(ComponentBook::HOST_LAYER, [
+            self::SIGNAL_SECTION => $section,
+            self::SIGNAL_GATE => $this->settings->gateLabel(),
+            self::SIGNAL_LOCALE => $this->catalog->locale(),
+        ]);
     }
 
     /**
@@ -206,14 +366,15 @@ final class AdminShell
      * section never names itself. The declaring class travels as a prop, never through the markup, so a
      * name nobody can cite (an anonymous class) breaks nothing.
      */
-    private function renderHeader(ComponentBook $book, AdminSection $active, ?string $declaredBy, ComponentContext $context): string
+    private function renderHeader(ComponentBook $book, AdminSection $active, ?string $declaredBy, ComponentContext $context, ClientAssets &$assets): string
     {
         $markup = \sprintf('<milpa:%s id="%s-header"/>', SectionHeaderComponent::NAME, self::COMPONENT_ID);
-
-        return $book
+        $compiled = $book
             ->compiler([SectionHeaderComponent::NAME => ['title' => $this->title($active), 'declaredBy' => (string) $declaredBy]])
-            ->compileFragment($markup, $context)
-            ->output;
+            ->compileFragment($markup, $context);
+        $assets = $assets->merge($compiled->clientAssets());
+
+        return $compiled->output;
     }
 
     private function composition(AdminSection $active): string

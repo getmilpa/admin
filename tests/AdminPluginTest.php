@@ -18,6 +18,7 @@ use Milpa\Admin\AdminPlugin;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
+use Milpa\Admin\Controllers\LiveController;
 use Milpa\Admin\Controllers\StackController;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 use Milpa\Admin\Http\RequestPrincipal;
@@ -86,16 +87,20 @@ final class AdminPluginTest extends TestCase
         $plugin->boot();
 
         $routes = $plugin->routes();
+        // greenhouse decisions/0211: the live wire is a panel route like the others — same stack, same door.
         self::assertSame(
-            ['/milpa/admin', '/milpa/admin/s/{id}', '/milpa/admin/assets/{file}', '/milpa/admin/stack/compose.yml'],
+            ['/milpa/admin', '/milpa/admin/s/{id}', '/milpa/admin/live', '/milpa/admin/assets/{file}', '/milpa/admin/stack/compose.yml'],
             array_map(static fn (Route $r): string => $r->path, $routes),
         );
         foreach ($routes as $route) {
             self::assertSame([LoopbackOnlyMiddleware::class], $route->middleware);
             self::assertTrue($route->isBound());
         }
-        self::assertSame('milpa_admin_stack_compose', $routes[3]->name);
+        self::assertSame('milpa_admin_live', $routes[2]->name);
+        self::assertSame('POST', $routes[2]->methods[0]->value, 'the wire only answers POST');
+        self::assertSame('milpa_admin_stack_compose', $routes[4]->name);
         self::assertTrue($container->has(AdminController::class));
+        self::assertTrue($container->has(LiveController::class));
         self::assertTrue($container->has(AssetsController::class));
         self::assertTrue($container->has(StackController::class));
         // The PSR-11 registry, not DIContainer::has() — which is true for any auto-wirable class and so
@@ -112,7 +117,7 @@ final class AdminPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
         self::assertSame('/milpa/admin', (new AdminPlugin(new DIContainer()))->settings()->route, 'defaults before boot');
-        self::assertCount(4, (new AdminPlugin(new DIContainer()))->routes(), 'routes exist before boot too');
+        self::assertCount(5, (new AdminPlugin(new DIContainer()))->routes(), 'routes exist before boot too');
     }
 
     public function testAPluginThatDeclaresAServiceShowsUpInTheStackSectionAndInTheComposeFile(): void

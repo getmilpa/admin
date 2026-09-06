@@ -14,18 +14,24 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Controllers;
 
+use Milpa\Admin\AdminSettings;
+use Milpa\Admin\Components\RendererConflictException;
 use Milpa\Admin\Components\ReservedComponentException;
 use Milpa\Admin\Components\UnknownComponentException;
 use Milpa\Admin\Http\RequestPrincipal;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\AdminSection;
+use Milpa\Admin\Section\BootedPlugins;
+use Milpa\Admin\Section\SeedConflictException;
 use Milpa\Admin\Section\SectionCatalogue;
 use Milpa\Admin\Section\SectionConflictException;
 use Milpa\Admin\View\AdminPage;
 use Milpa\Admin\View\AdminShell;
 use Milpa\Http\Routing\RouteResult;
 use Milpa\Interfaces\Di\DIContainerInterface;
-use Milpa\Runtime\Kernel;
+use Milpa\Live\Contracts\Security\CsrfGuardInterface;
+use Milpa\Live\Http\LiveBoot;
+use Milpa\Live\Runtime\ComponentNameConflictException;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -44,6 +50,11 @@ use Psr\Http\Message\ServerRequestInterface;
  *
  * Who is signed in is whatever the gate in front of the route left on the request ({@see RequestPrincipal}):
  * the panel reads no cookie and mints no identity — it shows the actor the gate authenticated, or nobody.
+ *
+ * Every page it serves carries ONE live boot (greenhouse decisions/0211): a fresh page session and its
+ * CSRF token, bound to the panel's own wire ({@see AdminSettings::liveUrl()}), issued here and emitted by
+ * {@see AdminPage} through `LiveBoot::html()` together with whatever the compile declared. An error
+ * document gets none: there is no live component on it.
  */
 final class AdminController
 {
@@ -58,6 +69,8 @@ final class AdminController
         private readonly Catalog $catalog,
         private readonly AdminShell $shell,
         private readonly AdminPage $page,
+        private readonly CsrfGuardInterface $csrf,
+        private readonly AdminSettings $settings,
     ) {
     }
 
@@ -100,13 +113,17 @@ final class AdminController
         $page = $this->page->withCatalog($catalog);
 
         try {
-            $catalogue = SectionCatalogue::discover($this->plugins());
+            $catalogue = SectionCatalogue::discover(BootedPlugins::of($this->container, $this->self));
         } catch (SectionConflictException $conflict) {
             return $this->html(500, $page->error(500, $catalog->tr('section.conflict', $conflict->getMessage())));
         }
 
+        $boot = LiveBoot::issue($this->csrf, $this->settings->liveUrl());
+
         if ($catalogue->isEmpty()) {
-            return $this->html(200, $page->render($shell->renderEmpty($catalogue, $principal)));
+            $composed = $shell->composeEmpty($catalogue, $principal);
+
+            return $this->html(200, $page->render($composed->html, '', $boot, $composed->assets, $composed->seeds));
         }
 
         $active = $id === null ? $catalogue->first() : $catalogue->find($id);
@@ -120,32 +137,16 @@ final class AdminController
         }
 
         try {
-            $body = $shell->render($catalogue, $active, $query, $principal);
-        } catch (UnknownComponentException|ReservedComponentException $refused) {
+            $composed = $shell->compose($catalogue, $active, $query, $principal);
+        } catch (UnknownComponentException|ReservedComponentException|ComponentNameConflictException|RendererConflictException|SeedConflictException $refused) {
+            // A DECLARATION the panel cannot honour — a name nothing registered, a name two sections bind
+            // to different definitions or different renderers, a signal seeded twice with different values.
+            // Not the same thing as a component that throws while rendering, which paints its own region
+            // and leaves the panel standing.
             return $this->html(500, $page->error(500, $catalog->tr('section.conflict', $refused->getMessage())));
         }
 
-        return $this->html(200, $page->render($body, $shell->title($active)));
-    }
-
-    /**
-     * The booted plugin instances — from the kernel when the app registered it, else the panel alone.
-     *
-     * @return list<object>
-     */
-    private function plugins(): array
-    {
-        $kernel = $this->container->has(Kernel::class) ? $this->container->get(Kernel::class) : null;
-        $plugins = $kernel instanceof Kernel ? $kernel->plugins() : [];
-
-        foreach ($plugins as $plugin) {
-            if ($plugin === $this->self) {
-                return $plugins;
-            }
-        }
-        $plugins[] = $this->self;
-
-        return $plugins;
+        return $this->html(200, $page->render($composed->html, $shell->title($active), $boot, $composed->assets, $composed->seeds));
     }
 
     /**

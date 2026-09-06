@@ -362,6 +362,16 @@ final readonly class AdminSettings
         return $this->route . '/assets/' . $file;
     }
 
+    /**
+     * The URL of the panel's live wire — `POST {route}/live`, the one endpoint every component of the
+     * page takes its actions through, host's and guests' alike (greenhouse decisions/0211). It carries the
+     * same middleware stack as every other panel route: a wire outside the gate would be a hole.
+     */
+    public function liveUrl(): string
+    {
+        return $this->route . '/live';
+    }
+
     /** The URL of the compose file the Stack section projects — every declared service, `text/yaml`. */
     public function composeUrl(): string
     {

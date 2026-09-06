@@ -17,6 +17,9 @@ namespace Milpa\Admin\Tests\View;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\View\AdminPage;
+use Milpa\Admin\View\LiveSeeds;
+use Milpa\Live\Http\LiveBoot;
+use Milpa\Live\ValueObjects\ClientAssets;
 use PHPUnit\Framework\TestCase;
 
 final class AdminPageTest extends TestCase
@@ -33,8 +36,10 @@ final class AdminPageTest extends TestCase
         self::assertStringContainsString('href="/panel/assets/tokens.css"', $html);
         self::assertStringContainsString('href="/panel/assets/bundle.css"', $html);
         self::assertStringContainsString('<div id="shell"></div>', $html);
-        self::assertStringContainsString('src="/panel/assets/milpa-live.js" defer', $html);
-        self::assertStringContainsString('src="/panel/assets/alpine.min.js" defer', $html);
+        // greenhouse decisions/0211: the page hand-writes no runtime tag. Without a boot there is no live
+        // component on the document, so it carries no runtime at all — see the LiveBoot tests below.
+        self::assertStringNotContainsString('milpa-live.js', $html);
+        self::assertStringNotContainsString('alpine.min.js', $html);
         self::assertStringContainsString('ROOT="/panel"', $html, 'the script knows the panel\'s route, so it knows which links are the panel\'s');
         self::assertStringContainsString('<title>Casa</title>', $page->render('', ''));
 
@@ -136,6 +141,73 @@ final class AdminPageTest extends TestCase
         self::assertDoesNotMatchRegularExpression('~#[0-9a-f]{3,8}\b~i', $css, 'no literal colour: every colour is a token');
         self::assertStringNotContainsString('opacity:.7', $css, 'muted is a token, not a transparency');
         self::assertStringNotContainsString('rgb', $css);
+    }
+
+    /**
+     * greenhouse decisions/0211: `LiveBoot::html()` is the ONE emitter — the panel writes no runtime
+     * `<script>` tag. What a guest DECLARED (its stylesheet, its module) is emitted once, in the one order
+     * that works: styles, boot, local runtime, remote runtime, the guest's modules, Alpine LAST. The three
+     * seed tags are written here and only here.
+     */
+    public function testTheRuntimeIsEmittedOnceByLiveBootWithWhatTheCompileDeclared(): void
+    {
+        $page = new AdminPage(new AdminSettings(route: '/panel'), new Catalog());
+        $boot = new LiveBoot('/panel/live', 'live-abc', 'tok-1');
+        $assets = new ClientAssets(
+            scripts: ['/desktop/assets/c/conversation.js', '/desktop/assets/c/composer.js', '/desktop/assets/c/conversation.js'],
+            styles: ['/desktop/assets/c/conversation.css'],
+        );
+        $seeds = LiveSeeds::of('the panel', ['admin.section' => 'agent'])
+            ->merge(LiveSeeds::of('section «agent»', ['desktop.tab' => 'chat'], ['desktop.tab'], ['x' => ['template' => '{a}']]));
+
+        $html = $page->render('<div id="shell"></div>', 'Agent', $boot, $assets, $seeds);
+
+        self::assertSame(1, substr_count($html, 'src="/panel/assets/milpa-live.js" defer'), 'one local runtime');
+        self::assertSame(1, substr_count($html, 'src="/panel/assets/milpa-live-remote.js" defer'), 'the remote runtime the panel used to omit');
+        self::assertSame(1, substr_count($html, 'src="/panel/assets/alpine.min.js" defer'), 'one Alpine — it cannot be guarded, only emitted once');
+        self::assertSame(1, substr_count($html, '/desktop/assets/c/conversation.js'), 'a module declared twice is emitted once');
+        self::assertStringContainsString('<link rel="stylesheet" href="/desktop/assets/c/conversation.css">', $html);
+        self::assertStringContainsString('<script id="milpa-live-boot" type="application/json">{"endpoint":"/panel/live","sessionId":"live-abc","csrfToken":"tok-1"}</script>', $html);
+
+        $order = static function (string $needle) use ($html): int {
+            $at = strpos($html, $needle);
+            self::assertNotFalse($at, $needle);
+
+            return $at;
+        };
+        self::assertTrue(
+            $order('/desktop/assets/c/conversation.css') < $order('milpa-live-boot')
+            && $order('milpa-live-boot') < $order('assets/milpa-live.js')
+            && $order('assets/milpa-live.js') < $order('assets/milpa-live-remote.js')
+            && $order('assets/milpa-live-remote.js') < $order('/desktop/assets/c/conversation.js')
+            && $order('/desktop/assets/c/conversation.js') < $order('assets/alpine.min.js'),
+            'styles → boot → local → remote → plugin modules → Alpine last',
+        );
+        self::assertTrue($order('assets/bundle.css') < $order('/desktop/assets/c/conversation.css'), 'a guest\'s stylesheet comes after the panel\'s own, unlayered, so the component keeps the look it declared');
+        self::assertTrue($order('assets/alpine.min.js') < $order('<body'), 'the whole runtime lives in the head — every script deferred');
+
+        self::assertStringContainsString('<script id="milpa-live-signals" type="application/json">{"admin.section":"agent","desktop.tab":"chat"}</script>', $html, 'the host\'s seeds and the section\'s, merged, in one tag');
+        self::assertStringContainsString('<script id="milpa-live-persist" type="application/json">["desktop.tab"]</script>', $html);
+        self::assertStringContainsString('<script id="milpa-live-computed" type="application/json">{"x":{"template":"{a}"}}</script>', $html);
+        foreach (['milpa-live-signals', 'milpa-live-persist', 'milpa-live-computed', 'milpa-live-boot'] as $id) {
+            self::assertSame(1, substr_count($html, 'id="' . $id . '"'), $id . ' is emitted once');
+        }
+    }
+
+    /** With a boot but nothing seeded, the three tags are still there and empty — one truth, never a missing tag. */
+    public function testTheSeedTagsAreAlwaysThreeAndTheDataCannotCloseItsScript(): void
+    {
+        $page = new AdminPage(AdminSettings::fromConfig(null), new Catalog());
+        $seeds = LiveSeeds::of('section «x»', ['evil' => '</script><script>alert(1)</script>']);
+
+        $html = $page->render('', '', new LiveBoot('/milpa/admin/live', 's', 't'));
+        self::assertStringContainsString('<script id="milpa-live-signals" type="application/json">{}</script>', $html);
+        self::assertStringContainsString('<script id="milpa-live-persist" type="application/json">[]</script>', $html);
+        self::assertStringContainsString('<script id="milpa-live-computed" type="application/json">{}</script>', $html);
+
+        $hostile = $page->render('', '', new LiveBoot('/milpa/admin/live', 's', 't'), null, $seeds);
+        self::assertStringContainsString('<\/script>', $hostile, 'a seed value can never close its own tag');
+        self::assertStringNotContainsString('</script><script>alert(1)', $hostile);
     }
 
     public function testErrorDocumentEscapesAndLinksHome(): void
