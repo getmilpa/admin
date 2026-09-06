@@ -21,6 +21,7 @@ use Milpa\Admin\Components\SettingsComponent;
 use Milpa\Admin\Components\StackComponent;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Controllers\AssetsController;
+use Milpa\Admin\Controllers\LiveController;
 use Milpa\Admin\Controllers\StackController;
 use Milpa\Admin\Data\DevToolsSource;
 use Milpa\Admin\Data\PluginsSource;
@@ -43,6 +44,7 @@ use Milpa\Http\Routing\Route;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
+use Milpa\Live\Security\HmacCsrfGuard;
 use Milpa\Live\Security\HmacStateSigner;
 use Milpa\Live\Security\SignedXhtmlStateTransferCodec;
 use Milpa\Live\Transport\XhtmlStateTransferCodec;
@@ -153,10 +155,18 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
 
         $shell = new AdminShell($settings, $catalog, $codec, $events);
         $page = new AdminPage($settings, $catalog);
+        // One key per page, one wire (greenhouse decisions/0211): the CSRF guard signs with the SAME secret
+        // that signs the state envelopes, so the boot a page issues is the boot the panel's own endpoint
+        // verifies — and a guest's component reaches it without a key of its own.
+        $csrf = new HmacCsrfGuard($settings->signingSecret());
 
         $this->container->registerService(
             AdminController::class,
-            new AdminController($this->container, $this, $catalog, $shell, $page),
+            new AdminController($this->container, $this, $catalog, $shell, $page, $csrf, $settings),
+        );
+        $this->container->registerService(
+            LiveController::class,
+            new LiveController($this->container, $this, $codec, $csrf, $settings, $events),
         );
         $this->container->registerService(AssetsController::class, new AssetsController());
         $this->container->registerService(StackController::class, new StackController($stack, $projection, $catalog));
@@ -173,6 +183,10 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
      * The panel's routes, each carrying the EFFECTIVE middleware stack — the declared one when every
      * entry names a PSR-15 middleware class (an empty list included), loopback-only the moment the
      * declaration is anything else ({@see AdminSettings::effectiveMiddleware()}).
+     *
+     * The live wire (`POST {route}/live`) carries that same stack, deliberately: it is the door every
+     * component of the page — the panel's own and every guest's — takes its actions through, and a wire
+     * outside the gate would be a hole (greenhouse decisions/0211).
      *
      * @return list<Route>
      */
@@ -196,6 +210,13 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 name: 'milpa_admin_section',
                 middleware: $middleware,
                 handler: HandlerReference::method(AdminController::class, 'section'),
+            ),
+            new Route(
+                path: $settings->liveUrl(),
+                methods: HttpMethod::POST,
+                name: 'milpa_admin_live',
+                middleware: $middleware,
+                handler: HandlerReference::method(LiveController::class, 'live'),
             ),
             new Route(
                 path: $route . '/assets/{file}',

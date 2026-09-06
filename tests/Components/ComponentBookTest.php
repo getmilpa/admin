@@ -15,17 +15,25 @@ declare(strict_types=1);
 namespace Milpa\Admin\Tests\Components;
 
 use Milpa\Admin\Components\ComponentBook;
+use Milpa\Admin\Components\RendererConflictException;
 use Milpa\Admin\Components\ReservedComponentException;
 use Milpa\Admin\Components\SectionHeaderComponent;
 use Milpa\Admin\Components\SidebarComponent;
 use Milpa\Admin\Components\UnknownComponentException;
 use Milpa\Admin\Section\AdminSection;
+use Milpa\Admin\Section\DeclaredView;
+use Milpa\Admin\Tests\Fixtures\CounterComponent;
+use Milpa\Admin\Tests\Fixtures\CounterRenderer;
+use Milpa\Admin\Tests\Fixtures\StatefulComponent;
 use Milpa\Admin\Tests\Fixtures\EchoComponent;
 use Milpa\Admin\Tests\Fixtures\EchoRenderer;
+use Milpa\Live\Contracts\Transport\StateTransferCodecInterface;
+use Milpa\Live\Runtime\ComponentNameConflictException;
 use Milpa\Live\Security\HmacStateSigner;
 use Milpa\Live\Security\SignedXhtmlStateTransferCodec;
 use Milpa\Live\Transport\XhtmlStateTransferCodec;
 use Milpa\Live\ValueObjects\ComponentContext;
+use Milpa\Live\ValueObjects\RenderTarget;
 use PHPUnit\Framework\TestCase;
 
 final class ComponentBookTest extends TestCase
@@ -119,6 +127,102 @@ final class ComponentBookTest extends TestCase
         self::assertStringContainsString(EchoRenderer::MARKER, $book->compiler(['mine' => ['text' => 'x']])->compile('<milpa:mine id="m"/>', new ComponentContext(componentId: 'test'))->output);
     }
 
+    /**
+     * greenhouse decisions/0211: a section may declare a whole VIEW, and the book adopts the tree — every
+     * name registered under a layer of its own, so one endpoint serves them all.
+     */
+    public function testAdoptRegistersEveryComponentOfADeclaredView(): void
+    {
+        $book = self::book();
+        $book->adopt(AdminSection::ofView('lab', 'Lab', new DeclaredView(
+            markup: '<milpa:' . CounterComponent::NAME . ' id="a"/><milpa:echo-panel id="b"/>',
+            definitions: [CounterComponent::NAME => new CounterComponent(), EchoComponent::NAME => new EchoComponent()],
+            renderers: [CounterComponent::NAME => new CounterRenderer(self::codec()), EchoComponent::NAME => new EchoRenderer()],
+        )));
+
+        self::assertTrue($book->registry()->has(CounterComponent::NAME));
+        self::assertTrue($book->registry()->has(EchoComponent::NAME));
+        self::assertSame([CounterComponent::NAME, EchoComponent::NAME], \array_slice($book->names(), 13), 'both, after the host\'s thirteen');
+
+        $html = $book->compiler()->compileFragment('<milpa:' . CounterComponent::NAME . ' id="a" count="3"/>', new ComponentContext(componentId: 'test'))->output;
+        self::assertStringContainsString('data-count="3"', $html);
+    }
+
+    /** A view may not redefine one of the panel's own either — a layer of its own would not save it. */
+    public function testAdoptRefusesAViewThatRedefinesOneOfThePanelsOwn(): void
+    {
+        $book = self::book();
+
+        $this->expectException(ReservedComponentException::class);
+        $this->expectExceptionMessage('Admin section «hijack» brings its own definition under «metric-card»');
+        $book->adopt(AdminSection::ofView('hijack', 'Hijack', new DeclaredView(
+            markup: '<milpa:metric-card id="m"/>',
+            definitions: ['metric-card' => new EchoComponent()],
+            renderers: ['metric-card' => new EchoRenderer()],
+        )));
+    }
+
+    /**
+     * Two sections binding ONE name to DIFFERENT definitions is a conflict naming both — milpa/live 0.18's
+     * own rule (identity or a stateless class), reused rather than reinvented (greenhouse decisions/0211).
+     */
+    public function testTwoSectionsBindingOneNameToDifferentDefinitionsAreANamedConflict(): void
+    {
+        $book = self::book();
+        $book->adopt(new AdminSection('mine', 'Mine', 'stateful-panel', definition: new StatefulComponent('a'), renderer: new EchoRenderer()));
+
+        try {
+            $book->adopt(new AdminSection('theirs', 'Theirs', 'stateful-panel', definition: new StatefulComponent('b'), renderer: new EchoRenderer()));
+            self::fail('one name, two definitions');
+        } catch (ComponentNameConflictException $conflict) {
+            self::assertSame('stateful-panel', $conflict->component);
+            self::assertSame('section «mine»', $conflict->firstLayer);
+            self::assertSame('section «theirs»', $conflict->secondLayer);
+        }
+
+        self::assertTrue($book->registry()->has('stateful-panel'), 'the first section keeps its component: the refusal registered nothing new');
+        self::assertNotContains('lab-broken', $book->names());
+
+        $shared = new StatefulComponent('one');
+        $book->adopt(new AdminSection('a', 'A', 'shared-panel', definition: $shared, renderer: new EchoRenderer()));
+        $book->adopt(new AdminSection('b', 'B', 'shared-panel', definition: $shared, renderer: new EchoRenderer()));
+        self::assertTrue($book->registry()->has('shared-panel'), 'the same instance in two sections is one definition');
+    }
+
+    /**
+     * The collision the DEFINITION rule deliberately lets through: two sections agree on the component —
+     * the same instance, no conflict — and each brings its own RENDERER. The renderer registry resolves the
+     * last one registered, so without a rule of its own the first section's surface would be painted by the
+     * second's renderer, silently. The panel refuses instead, naming both (greenhouse decisions/0211).
+     */
+    public function testTwoSectionsSharingADefinitionButBringingDifferentRenderersAreANamedConflict(): void
+    {
+        $book = self::book();
+        $shared = new StatefulComponent('one');
+        $mine = new EchoRenderer();
+        $book->adopt(new AdminSection('mine', 'Mine', 'shared-panel', definition: $shared, renderer: $mine));
+
+        try {
+            $book->adopt(new AdminSection('theirs', 'Theirs', 'shared-panel', definition: $shared, renderer: new CounterRenderer(self::codec())));
+            self::fail('one name, two renderers');
+        } catch (RendererConflictException $conflict) {
+            self::assertSame('shared-panel', $conflict->component);
+            self::assertSame('section «mine»', $conflict->firstLayer);
+            self::assertSame('section «theirs»', $conflict->secondLayer);
+            self::assertStringContainsString('is painted by different renderers', $conflict->getMessage());
+        }
+
+        // The refusal left the book as it was: the first section still paints with ITS renderer.
+        self::assertSame($mine, $book->renderers()->resolveFor('shared-panel', RenderTarget::HTML));
+        self::assertNotContains('section «theirs»', $book->names());
+
+        // The positive control: the same renderer INSTANCE twice is agreement, and so are two instances of
+        // a stateless renderer class — the same rule milpa/live applies to definitions.
+        $book->adopt(new AdminSection('again', 'Again', 'shared-panel', definition: $shared, renderer: $mine));
+        $book->adopt(new AdminSection('stateless', 'Stateless', 'shared-panel', definition: $shared, renderer: new EchoRenderer()));
+        self::assertSame(1, substr_count(implode('|', $book->names()), 'shared-panel'));
+    }
+
     public function testAdoptAcceptsARegisteredNameAndRefusesAnUnknownOne(): void
     {
         $book = self::book();
@@ -131,6 +235,11 @@ final class ComponentBookTest extends TestCase
 
     private static function book(): ComponentBook
     {
-        return new ComponentBook(new SignedXhtmlStateTransferCodec(new XhtmlStateTransferCodec(), new HmacStateSigner('test-secret-0123456789'), null));
+        return new ComponentBook(self::codec());
+    }
+
+    private static function codec(): StateTransferCodecInterface
+    {
+        return new SignedXhtmlStateTransferCodec(new XhtmlStateTransferCodec(), new HmacStateSigner('test-secret-0123456789'), null);
     }
 }

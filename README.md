@@ -92,6 +92,9 @@ component of the page gets, under that component's own id:
 | `principal` | the actor the gate authenticated — the `id` of the `AuthContext` a gate left under the request attribute `milpa.auth` (`passkey:<credential>` behind app-runtime's passkey gate) — or **`null` when nobody is signed in**. It is exactly what the topbar's `signed in as …` chip shows, so a guest that decides its state by the principal (the Desktop's *signed-out* vs *live*) always agrees with the topbar |
 | `locale` | the language the page answers in — the app's `admin.locale`, or the request's `?lang=` when the catalog carries it |
 | `route` | the panel's mount point (`admin.route`, default `/milpa/admin`) — for a link back into the panel |
+| `meta['gate']` | the gate in effect, as the topbar chip names it: `loopback` \| `custom` \| `passkey` \| `open` \| `fallback` |
+| `meta['section']` | the id of the section the panel is showing |
+| `meta['query']` | the request's query params — how a **declared view** reads what `props['query']` gives the narrow shape |
 
 The props are the section's own `props` plus `query` (the request's query params). A guest reads the context and
 its props; it never reads the request, and it never reads a cookie — the panel does not either.
@@ -129,12 +132,139 @@ front page.
 
 ```php
 new AdminSection(
-    id: 'agent', title: 'Agent', component: 'desktop-agent',
-    definition: new AgentGuestComponent(), renderer: new AgentGuestRenderer(),
-    props: ['embed' => '/desktop?embed=1', 'open' => '/desktop', 'gate' => $gateLabel],
+    id: 'reports', title: 'Reports', component: 'metric-card',
+    props: ['title' => 'Reports', 'value' => '12'],
+    order: 60, group: AdminSection::GROUP_APP, icon: '◈',
+);
+```
+
+## A section may declare a whole VIEW
+
+One component is the narrow case. A plugin that brings its own UI declares a **view** — a tree of components, the
+definitions and renderers it needs, the props per component and the signals the page must seed — and the panel
+mounts it inline, in its own main, under its own header, with **one runtime for the whole page** (greenhouse
+`decisions/0211`). No frame, no second document, no second Alpine: the panel's theme applies to the guest's region
+— measured in a browser, flipping `<html data-theme>` repaints the guest's own surfaces, which an iframe could not
+do. One endpoint over one registry also makes a `RenderEffect` from a host component able to repaint a guest's —
+the mechanism is there; this slice did not exercise it. What the panel does **not** do yet is reach INTO the
+region: the topbar's search is the inert `dashboard-topbar` primitive and nothing wires it to a guest, so
+`decisions/0211`'s S3-F1 falsifier («the topbar's search reaches the composer») is **not delivered**.
+
+```php
+use Milpa\Admin\Section\AdminSection;
+use Milpa\Admin\Section\DeclaredView;
+
+AdminSection::ofView(
+    id: 'agent',
+    title: 'Agent',
+    view: new DeclaredView(
+        // Every ROOT is a Milpa element; ordinary HTML is allowed inside a component's node.
+        markup: '<milpa:desktop-tabs id="agent-tabs"/><milpa:desktop-conversation id="agent-conversation"/>',
+        definitions: ['desktop-tabs' => $tabs, 'desktop-conversation' => $conversation],
+        renderers:   ['desktop-tabs' => $renderer, 'desktop-conversation' => $renderer],
+        props:       ['desktop-conversation' => ['session' => $id]],   // per component, merged UNDER the markup's attributes
+        signals:     ['desktop.tab' => 'chat'],                        // seeded into the page's ONE signals tag
+        persist:     ['desktop.tab'],
+        computed:    ['desktop.summary' => ['template' => '{desktop.turns} turns']],
+    ),
     order: 60, group: AdminSection::GROUP_AGENT, icon: '◈',
 );
 ```
+
+The constructor takes the same thing as `view:` — `AdminSection::ofView()` is the one-liner. A section declares a
+view **or** a component, never both, and a view carries no section `props` (its props are per component).
+
+**What the host does with it.**
+
+- **It registers the tree.** Every name in `definitions` enters the panel's registry under a **layer of its own**,
+  labelled with the section's id. Names the panel registers itself (`metric-card`, `dashboard-*`, `admin-sidebar`,
+  `admin-section-header`) may be NAMED but never redefined (`ReservedComponentException`), and two sections binding
+  one name to **different** definitions throw `milpa/live`'s own `ComponentNameConflictException` naming the
+  component and both sections — the same rule everywhere: identity or a stateless class, never a structural compare.
+  The **renderer** is held to that same rule by the panel (`RendererConflictException`): two sections may legitimately
+  share one definition and still each bring their own renderer, and the renderer registry resolves the last one
+  registered — so without a rule of its own the first section's surface would be repainted by the second's renderer,
+  silently, in the one place whose whole point is that a collision is loud. Share the instance, or name your own
+  component. Either refusal leaves the book as it was.
+- **It emits one runtime.** Every renderer that implements `DeclaresClientAssets` contributes its `.css` and `.js`;
+  the panel merges them (deduplicated by URL) and hands them to `LiveBoot::html()`, which emits — in `<head>`,
+  after the panel's own stylesheets — the declared styles, the boot payload, `milpa-live.js`,
+  `milpa-live-remote.js`, the guest modules in declared order, and **Alpine last**, each `defer`, each URL once.
+  The panel hand-writes no runtime `<script>` tag. A guest never loads Alpine or `milpa-live` itself.
+- **It seeds once.** `#milpa-live-signals`, `#milpa-live-persist` and `#milpa-live-computed` are emitted by the host
+  and carry the panel's own seeds (`admin.section`, `admin.gate`, `admin.locale`) merged with the active view's. A
+  key two declarers give **different** values is a `SeedConflictException` naming both and what each said; the same
+  value twice is agreement, not a clash.
+- **It contains failures.** Each root of the view is compiled on its own: a component that throws while mounting or
+  rendering paints a small region inside its own node —
+  `<div class="mui-alert mui-alert--warning admin-section__failure" data-failed-component="…">` — and the rest of
+  the view, the header, the sidebar and the chips all stand. Never a 500 for the whole panel. Containment is per
+  **root**: a component nested inside another root fails with that root, so declare a surface you want contained as
+  a root of your tree.
+- **The lifecycle still fires.** `admin.section.before_render` / `after_render` wrap the view exactly as they wrap a
+  single component; with a view, `SectionRender::$props` is the view's own component-name → props map.
+
+The guest's client module binds its Alpine factory through the host's single runtime — the same path every
+component of the page uses:
+
+```js
+// /plugins/agent/conversation.js — served by the plugin, declared by its renderer
+MilpaLive.register('desktopConversation', function (config) { return { /* … */ }; });
+```
+
+## The live wire: `POST {route}/live`
+
+A component that ACTS needs somewhere to act. The panel mounts **one** live endpoint over the **same** registry the
+page compiled with, so one endpoint re-renders the host's components and every guest's.
+
+**The key is the app's, not the panel's — say it out loud.** The wire verifies with the panel's key (`admin.secret`,
+else `live.secret`, else one derived from this install), and every guest signs with *its own* package's key
+(the guest's, else `live.secret`, else one derived from *its* install). So an envelope a guest's renderer signed
+while painting a page comes back verified **only when host and guest sign with one key** — which is what declaring
+a single house key does:
+
+```php
+// config/app.php
+'live' => ['secret' => getenv('MILPA_LIVE_SECRET') ?: ''],
+```
+
+Measured on a fresh app with **neither** declared: posting the page's own `desktop-tabs` and `desktop-conversation`
+envelopes to `POST /milpa/admin/live` → `400 {"ok":false,"error":"invalid_signature"}` both times, while the
+panel's own `admin-sidebar` envelope decodes fine (the positive control: the refusal is the key, not the wire).
+With `live.secret` declared, the same `desktop-tabs` action → `200` with the surface re-rendered and a fresh
+envelope. The refusal is loud and per call, never silent. The residue is on this side and named as such:
+`DeclaredView` does not receive the panel's own codec, so a guest cannot sign with the host's key unless the app
+says so.
+
+```
+POST /milpa/admin/live      {action, payload, state, sessionId, csrfToken}  →  {ok, html, state, effects}
+```
+
+- **Behind the same door.** The route carries the panel's **effective middleware stack** — whatever gate the app
+  declared, loopback-only by default. A wire outside the gate would be a hole: an unauthenticated caller could act
+  on any mounted component of any section.
+- **The session is the page's.** `LiveBoot::issue()` mints it when the page is rendered; the runtime echoes it as
+  `sessionId` in every request body. No cookie carries it.
+- **The principal is the gate's.** The endpoint adds no second policy: it names the actor the gate authenticated
+  (with the component scopes), so a component whose state is bound to a principal recognises its owner. Nobody
+  signed in is `null` — the panel invents no identity.
+
+### The doors are independent — measured
+
+A view mounted in the panel is served by the **panel's** door; the calls its modules make go to the **guest's**
+routes and are judged by the **guest's** door. With both behind app-runtime's passkey gate, same origin and one
+cookie, a guest's endpoints answer normally from inside the panel (measured: `POST /agent` reached its handler,
+`/desktop/*` reached theirs). With the panel behind **loopback** and the guest behind **passkey**, a reader on
+localhost opens the panel with no principal — and every call to the guest's own routes answers **401** while the
+view is still mounted (measured: `GET /desktop` → 401, `POST /agent` → 401, `POST /milpa/admin/live` → reached,
+because that one is behind the panel's door).
+
+The panel cannot fix this and does not pretend to: `ComponentContext::$principal` and `meta['gate']` are the
+**panel's**, not the guest's. A guest whose own gate is stricter than the panel's must decide its state from those
+two facts and say so in its region — greenhouse `decisions/0210` §2 covers the common case (`gate: passkey` and no
+principal → render the sign-in offer, not the view); the asymmetric case (the panel authenticated somebody through a
+**different** door) is a **known residue**: the view mounts and its calls 401 inside a panel the reader was allowed
+into. Neither package closes it in this slice.
 
 ## Stack: a plugin declares the services it needs
 
@@ -289,6 +419,16 @@ is why that prop name is reserved.
 Every slice of this panel is proven on a fresh `composer create-project milpa/framework` app in the framework's
 house (greenhouse `decisions/0200`, `evidence/0514`): a plugin written in the app, unknown to the panel, gets its
 sections listed and rendered; an unknown section is 404; a non-loopback origin is 403; `/desktop` keeps serving.
+
+The declared view of `0.12.0` was measured the same way, in a real Chrome, on an app behind app-runtime's passkey
+gate (greenhouse `decisions/0211`, slice 3): a guest plugin written in the app declared a three-root view; the
+panel mounted it inline with **no iframe**, emitted **one** `milpa-live.js`, **one** `milpa-live-remote.js` and
+**one** Alpine (last), each declared file once, and merged the guest's seed into the page's single signals tag; the
+guest's module bound its factory through `MilpaLive.register` in that one runtime; a click sent a signed envelope to
+`POST /milpa/admin/live` and the counter went 1 → 2 → 3 with the guest's own renderer painting the answer; the third
+root threw on purpose and painted its failure region while the rest of the view, the header, the sidebar and the
+chips stood; the guest's CSS resolved the **panel's** design tokens, which an iframe could not do; the panel's own
+five sections still rendered, one runtime each; the console was clean.
 
 ## Lineage
 

@@ -16,6 +16,9 @@ namespace Milpa\Admin\View;
 
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\I18n\Catalog;
+use Milpa\Live\Http\LiveBoot;
+use Milpa\Live\Support\ClientRuntime;
+use Milpa\Live\ValueObjects\ClientAssets;
 
 /**
  * Wraps the shell into a full HTML document: the design tokens and bundle, the client runtime and Alpine
@@ -29,6 +32,16 @@ use Milpa\Admin\I18n\Catalog;
  * on `<html data-theme>`, density on `.mui-shell[data-density]`, the language override by navigating with
  * `?lang=` and keeping it on every in-panel link. Nothing of it is stored on the server; a delegated
  * listener, no per-instance state (greenhouse decisions/0204).
+ *
+ * **One runtime per page** (greenhouse decisions/0211). The page hand-writes no runtime `<script>` tag any
+ * more: given the boot the controller issued and what the compile declared, `LiveBoot::html()` emits — in
+ * `<head>`, after the panel's own stylesheets — every declared stylesheet, the boot payload,
+ * `milpa-live.js`, `milpa-live-remote.js`, every declared plugin module in declared order, and Alpine
+ * LAST, each `defer`, each URL once. The three seed tags (`#milpa-live-signals`, `#milpa-live-persist`,
+ * `#milpa-live-computed`) are written here and only here, from the {@see LiveSeeds} the shell merged, so
+ * the page never has two places that could disagree about what the store starts with. A document rendered
+ * WITHOUT a boot — the 404 of an unknown section, the 500 of a conflict — carries no runtime at all: there
+ * is no live component on it to serve.
  */
 final class AdminPage
 {
@@ -49,8 +62,15 @@ final class AdminPage
         return $page;
     }
 
-    /** The document around a rendered shell. */
-    public function render(string $shellHtml, string $title = ''): string
+    /**
+     * The document around a rendered shell.
+     *
+     * @param LiveBoot|null     $boot   the page's live boot — the endpoint, its session and its CSRF token; null for a
+     *                                  document with no live component on it (an error page), which then emits no runtime
+     * @param ClientAssets|null $assets what the compile declared — the stylesheets and modules the components need
+     * @param LiveSeeds|null    $seeds  the merged signal seeds; the three tags are emitted whenever there is a boot
+     */
+    public function render(string $shellHtml, string $title = '', ?LiveBoot $boot = null, ?ClientAssets $assets = null, ?LiveSeeds $seeds = null): string
     {
         $documentTitle = $title === '' ? $this->settings->title : $title . ' · ' . $this->settings->title;
 
@@ -65,12 +85,13 @@ final class AdminPage
             . '<style>' . "\n" . self::css() . '</style>' . "\n"
             . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl('tokens.css')) . '">' . "\n"
             . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl('bundle.css')) . '">' . "\n"
+            // A guest's stylesheets come after the panel's, unlayered, so a component keeps the look it declared;
+            // its modules are deferred, so their position in the head costs nothing (decisions/0211).
+            . $this->runtime($boot, $assets, $seeds)
             . '</head>' . "\n"
             . '<body class="mui-body milpa-admin">' . "\n"
             . '<script data-admin-prefs="early">' . self::earlyThemeScript() . '</script>' . "\n"
             . $shellHtml . "\n"
-            . '<script src="' . self::e($this->settings->assetUrl('milpa-live.js')) . '" defer></script>' . "\n"
-            . '<script src="' . self::e($this->settings->assetUrl('alpine.min.js')) . '" defer></script>' . "\n"
             . '<script data-admin-prefs="delegated">' . $this->prefsScript() . '</script>' . "\n"
             . '</body>' . "\n"
             . '</html>' . "\n";
@@ -83,6 +104,46 @@ final class AdminPage
             . '<p><a class="mui-btn mui-btn--ghost" href="' . self::e($this->settings->route) . '">' . self::e($this->settings->title) . '</a></p></main>';
 
         return $this->render($shell, (string) $status);
+    }
+
+    /**
+     * Where the panel serves each runtime file — its own asset route, so no build step and no CDN
+     * ({@see \Milpa\Admin\Controllers\AssetsController} reads them out of `milpa/live-web`).
+     *
+     * @return array<string, string>
+     */
+    public function runtimeUrls(): array
+    {
+        return [
+            ClientRuntime::LOCAL => $this->settings->assetUrl(ClientRuntime::LOCAL),
+            ClientRuntime::REMOTE => $this->settings->assetUrl(ClientRuntime::REMOTE),
+            ClientRuntime::ALPINE => $this->settings->assetUrl(ClientRuntime::ALPINE),
+        ];
+    }
+
+    /**
+     * The three seed tags and everything {@see LiveBoot::html()} emits — nothing at all without a boot.
+     * The seeds are DATA (`type="application/json"`): `</` is escaped so a value can never close the tag.
+     */
+    private function runtime(?LiveBoot $boot, ?ClientAssets $assets, ?LiveSeeds $seeds): string
+    {
+        if ($boot === null) {
+            return '';
+        }
+        $seeds ??= LiveSeeds::empty();
+
+        return self::seedTag('milpa-live-signals', $seeds->signals === [] ? new \stdClass() : $seeds->signals)
+            . self::seedTag('milpa-live-persist', $seeds->persist)
+            . self::seedTag('milpa-live-computed', $seeds->computed === [] ? new \stdClass() : $seeds->computed)
+            . $boot->html($this->runtimeUrls(), $assets ?? ClientAssets::empty()) . "\n";
+    }
+
+    /** One seed tag, JSON-encoded and safe inside a `<script>` element. */
+    private static function seedTag(string $id, mixed $value): string
+    {
+        $json = json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR);
+
+        return '<script id="' . $id . '" type="application/json">' . str_replace('</', '<\/', $json) . '</script>' . "\n";
     }
 
     /**
@@ -186,6 +247,8 @@ final class AdminPage
             .milpa-admin .admin-settings__declared{color:var(--text-muted)}
             .milpa-admin .admin-chip+.admin-chip{margin-inline-start:var(--space-2)}
             .milpa-admin .admin-chip--principal{display:inline-block;max-width:28ch;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+            .milpa-admin .admin-section__failure{display:block;margin:0}
+            .milpa-admin .admin-section__failure-why{font-family:var(--font-mono);font-size:var(--text-xs);overflow-wrap:anywhere}
             .milpa-admin .milpa-admin-error{display:grid;gap:var(--space-4);max-width:60ch}
 
             CSS;
