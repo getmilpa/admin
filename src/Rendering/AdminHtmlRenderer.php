@@ -379,8 +379,9 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         if (!\is_array($capabilities)) {
             $out[] = $this->notice($this->catalog->tr('plugins.no_capabilities'));
         } else {
-            $out[] = $this->capabilityList('plugins.installed', \is_array($capabilities['installed'] ?? null) ? $capabilities['installed'] : [], 'id');
-            $out[] = $this->capabilityList('plugins.available', \is_array($capabilities['available'] ?? null) ? $capabilities['available'] : [], 'package');
+            $out[] = $this->capabilityList('plugins.installed', \is_array($capabilities['installed'] ?? null) ? $capabilities['installed'] : [], 'id', offerToEnable: false);
+            $out[] = $this->capabilityList('plugins.available', \is_array($capabilities['available'] ?? null) ? $capabilities['available'] : [], 'package', offerToEnable: true);
+            $out[] = self::CAPABILITY_ENABLER;
         }
 
         return implode("\n", $out);
@@ -388,8 +389,9 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
 
     /**
      * @param list<mixed> $items
+     * @param bool        $offerToEnable whether each row gets the button that runs `capabilities:enable`
      */
-    private function capabilityList(string $headingKey, array $items, string $keyField): string
+    private function capabilityList(string $headingKey, array $items, string $keyField, bool $offerToEnable = false): string
     {
         $out = ['<h4 class="mui-h4">' . Html::escape($this->catalog->tr($headingKey)) . '</h4>'];
         if ($items === []) {
@@ -408,12 +410,72 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             $out[] = '<li><code>' . Html::escape($key) . '</code>'
                 . ($title !== '' ? ' — ' . Html::escape($title) : '')
                 . ($command !== '' ? ' <kbd class="mui-kbd">' . Html::escape($command) . '</kbd>' : '')
+                . ($offerToEnable && $key !== ''
+                    ? ' <button type="button" class="mui-btn admin-enable" data-capability="'
+                        . Html::escape($key) . '">' . Html::escape($this->catalog->tr('plugins.enable')) . '</button>'
+                        . '<span class="admin-enable-said" hidden></span>'
+                    : '')
                 . '</li>';
         }
         $out[] = '</ul>';
 
         return implode("\n", $out);
     }
+
+    /**
+     * The client half of the panel's first MUTATING act, and it is small on purpose.
+     *
+     * It does not run the capability install — `capabilities:enable` does, over its own governed surface. What
+     * this does is present the ceremony that operation already demands: the first POST answers `428` with a
+     * confirmation token, and only a second POST carrying that token proceeds. A human sees what they are about
+     * to authorise and says yes; the panel never decides on their behalf.
+     *
+     * Delegated from the document, so it survives a section re-render without rebinding. Inline and dependency-
+     * free: this package ships no JavaScript bundle, and one button is not a reason to start.
+     *
+     * When the operation is not exposed over HTTP the endpoint answers 404, and the honest thing to say is the
+     * `composer require` line already printed beside the button — not a retry.
+     */
+    private const string CAPABILITY_ENABLER = <<<'HTML'
+        <script>
+        (() => {
+          if (window.__milpaAdminEnable) { return; }
+          window.__milpaAdminEnable = true;
+          const post = (body) => fetch('/capabilities/enable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(body),
+          });
+          document.addEventListener('click', async (event) => {
+            const button = event.target.closest('.admin-enable');
+            if (!button) { return; }
+            const capability = button.dataset.capability;
+            const said = button.nextElementSibling;
+            const say = (text) => { if (said) { said.textContent = ' ' + text; said.hidden = false; } };
+            button.disabled = true;
+            try {
+              const asked = await post({ capability });
+              if (asked.status === 404) { say('not exposed over HTTP — use the command shown'); button.disabled = false; return; }
+              const answer = await asked.json();
+              if (answer.requires_confirmation && answer.confirm_token) {
+                if (!window.confirm('Install ' + capability + '? It downloads code that will run inside this app.')) {
+                  say('cancelled'); button.disabled = false; return;
+                }
+                const done = await post({ capability, confirm_token: answer.confirm_token });
+                const result = await done.json();
+                say(done.ok && (result.ok ?? true) ? 'installed — reload to see it' : (result.error || 'refused'));
+                return;
+              }
+              say(asked.ok ? 'installed — reload to see it' : (answer.error || 'refused'));
+            } catch (failure) {
+              say('could not reach the operation');
+              button.disabled = false;
+            }
+          });
+        })();
+        </script>
+        HTML;
 
     private function routes(StateSnapshot $state): string
     {
