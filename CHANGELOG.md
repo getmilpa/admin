@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.13.0](https://github.com/getmilpa/admin/compare/v0.12.0...v0.13.0) (2026-09-07)
+
+
+### Features
+
+* the panel can enable a capability, without stepping around the gate ([#55](https://github.com/getmilpa/admin/issues/55)) ([2c8f84e](https://github.com/getmilpa/admin/commit/2c8f84e003a849d468420633b6f55863dc534e20))
+
 ## [0.12.0](https://github.com/getmilpa/admin/compare/v0.11.1...v0.12.0) (2026-09-06)
 
 
