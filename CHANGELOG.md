@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.14.0](https://github.com/getmilpa/admin/compare/v0.13.0...v0.14.0) (2026-09-07)
+
+
+### Features
+
+* **tui:** every section of the panel, in the terminal — one declaration, two surfaces ([#57](https://github.com/getmilpa/admin/issues/57)) ([20cc6f7](https://github.com/getmilpa/admin/commit/20cc6f77c4f2d408b8712bcdce77b9780eddd1e8))
+
 ## [0.13.0](https://github.com/getmilpa/admin/compare/v0.12.0...v0.13.0) (2026-09-07)
 
 
