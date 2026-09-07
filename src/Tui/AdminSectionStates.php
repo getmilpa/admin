@@ -51,7 +51,11 @@ final readonly class AdminSectionStates implements SectionStateSource
     ) {
     }
 
-    /** @return array<string, SectionStateProvider> */
+    /**
+     * Every section the panel would show, keyed by id — each one a provider that mounts on demand.
+     *
+     * @return array<string, SectionStateProvider>
+     */
     public function sectionStates(): array
     {
         try {

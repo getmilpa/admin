@@ -68,7 +68,11 @@ final readonly class SectionState implements SectionStateProvider
     ) {
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * The section's state right now — mounted on the spot, never remembered.
+     *
+     * @return array<string, mixed>
+     */
     public function state(): array
     {
         try {
