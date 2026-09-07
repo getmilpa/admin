@@ -38,6 +38,26 @@ plugins declared they need — image, ports, environment with secrets masked, th
 port answers on loopback) and **Dev tools** (the ledgers the agent writes, read-only) — and one more per plugin
 that declares one.
 
+## The same panel, in a terminal
+
+A section is declared once. `/milpa/admin` paints it as a page, and `coa panel` paints the same declaration in
+the terminal — the sections along the bottom, one state table per section, `tab` and the digits to move:
+
+```
+$ coa panel                # the dashboard, navigable
+$ coa panel devtools       # opening on one section
+$ coa panel --json         # every section and its state, for a program
+```
+
+Nothing is declared twice and no plugin says a word about a terminal. The panel implements
+`Milpa\Console\State\SectionStateSource` **once, for everyone**: it already discovers every section every
+request, so it hands that same catalogue — its own sections and every guest's — to the dashboard
+`milpa/console` carries. A component's state IS the picture; `milpa/live-tui` turns any state array into a
+table, so no section writes a second renderer to gain a second surface.
+
+A section that cannot be mounted reports that in its own state and the rest of the panel stands, exactly as a
+component that throws paints its failure inside its own region on the page.
+
 ## The one idea: a section is a component a plugin declares
 
 ```php
