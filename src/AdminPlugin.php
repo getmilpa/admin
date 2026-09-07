@@ -34,9 +34,12 @@ use Milpa\Admin\Rendering\AdminHtmlRenderer;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\AdminSectionProvider;
 use Milpa\Admin\Stack\ComposeProjection;
+use Milpa\Admin\Tui\AdminSectionStates;
 use Milpa\Admin\Stack\TcpProbe;
 use Milpa\Admin\View\AdminPage;
 use Milpa\Admin\View\AdminShell;
+use Milpa\Console\State\SectionStateProvider;
+use Milpa\Console\State\SectionStateSource;
 use Milpa\Attributes\PluginMetadata;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
@@ -74,9 +77,12 @@ use Milpa\Runtime\Http\RouteProviderInterface;
     name: 'Admin',
     type: 'Web',
 )]
-final class AdminPlugin implements PluginInterface, RouteProviderInterface, AdminSectionProvider
+final class AdminPlugin implements PluginInterface, RouteProviderInterface, AdminSectionProvider, SectionStateSource
 {
     private ?AdminSettings $settings = null;
+
+    /** The panel's sections offered to the terminal — built at boot, so it reads the same codec the page does. */
+    private ?AdminSectionStates $states = null;
 
     /** @var list<AdminSection> */
     private array $sections = [];
@@ -152,6 +158,8 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 renderer: $renderer,
             ),
         ];
+
+        $this->states = new AdminSectionStates($this->container, $this, $codec, $settings->route, $events);
 
         $shell = new AdminShell($settings, $catalog, $codec, $events);
         $page = new AdminPage($settings, $catalog);
@@ -243,6 +251,24 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
     public function adminSections(): array
     {
         return $this->sections;
+    }
+
+    /**
+     * The same sections, offered to the terminal — every section in the catalogue, this plugin's and every
+     * guest's (greenhouse decisions/0220).
+     *
+     * The panel implements this ONCE, for everyone. `milpa/console` discovers terminal state from booted
+     * plugins implementing {@see SectionStateSource}; if each plugin implemented it, every plugin would
+     * declare its section twice — once for the panel, once for the terminal — which is the thing 0220
+     * refuses. A plugin declares an {@see AdminSection} and gains a surface it never mentioned.
+     *
+     * Empty before boot: there is no codec to mount with and no catalogue to read.
+     *
+     * @return array<string, SectionStateProvider>
+     */
+    public function sectionStates(): array
+    {
+        return $this->states?->sectionStates() ?? [];
     }
 
     /** The settings the panel booted with, or the defaults before boot. */
