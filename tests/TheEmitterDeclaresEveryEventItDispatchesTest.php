@@ -64,15 +64,15 @@ final class TheEmitterDeclaresEveryEventItDispatchesTest extends TestCase
             /** @var list<array{name: string, payload: array<string, mixed>, by: string}> every dispatch, with the class whose code called dispatch() */
             public array $seen = [];
 
-            /** How many dispatches the spy had seen when the first declaration arrived; -1 while nobody declared. */
+            /** How many dispatches the spy had seen when THIS package's first declaration arrived; -1 while it has not declared. */
             public int $seenAtDeclare = -1;
 
             public function declare(EventDeclaration ...$events): void
             {
-                if ($this->seenAtDeclare < 0) {
-                    $this->seenAtDeclare = \count($this->seen);
-                }
                 foreach ($events as $event) {
+                    if ($this->seenAtDeclare < 0 && str_starts_with($event->dispatchedBy, 'Milpa\\Admin\\')) {
+                        $this->seenAtDeclare = \count($this->seen);
+                    }
                     foreach ($this->declarations as $known) {
                         if ($known->name === $event->name) {
                             continue 2;
@@ -121,6 +121,7 @@ final class TheEmitterDeclaresEveryEventItDispatchesTest extends TestCase
         self::assertSame(200, $view->getStatusCode());
 
         $declared = array_map(static fn (EventDeclaration $d): string => $d->name, $spy->declared());
+        $ownDeclarations = array_values(array_filter($spy->declared(), static fn (EventDeclaration $d): bool => str_starts_with($d->dispatchedBy, 'Milpa\\Admin\\')));
         $own = array_values(array_filter($spy->seen, static fn (array $call): bool => str_starts_with($call['by'], 'Milpa\\Admin\\')));
         self::assertNotSame([], $own, 'the render dispatched from this package');
 
@@ -133,15 +134,19 @@ final class TheEmitterDeclaresEveryEventItDispatchesTest extends TestCase
         self::assertGreaterThanOrEqual(0, $spy->seenAtDeclare, 'the plugin declared at boot');
         self::assertSame([], array_filter(array_slice($spy->seen, 0, $spy->seenAtDeclare), static fn (array $call): bool => str_starts_with($call['by'], 'Milpa\\Admin\\')), 'nothing of this package was dispatched before it declared');
 
-        // (b) The declared set is exactly the expected list — and exactly what the render dispatched.
-        self::assertSame(self::EXPECTED, $declared);
+        // (b) THIS package's declared set is exactly the expected list — and exactly what the render dispatched.
+        // The same dispatcher also carries its neighbours' declarations (milpa/runtime declares the boot events,
+        // milpa/live the component and live ones), so the panel is measured by what IT declared — by the
+        // `dispatchedBy` of each declaration — never by everything the dispatcher happens to hold.
+        self::assertSame(self::EXPECTED, array_map(static fn (EventDeclaration $d): string => $d->name, $ownDeclarations));
         self::assertSame(self::EXPECTED, array_map(static fn (EventDeclaration $d): string => $d->name, AdminEvents::declarations()), 'what the plugin declared is what the holder returns');
         $ownNames = array_values(array_unique(array_map(static fn (array $call): string => $call['name'], $own)));
         self::assertSame(self::EXPECTED, $ownNames, 'every declared name was dispatched, in the order a render fires them, and nothing else');
         self::assertSame(self::EXPECTED, array_values(array_intersect($spy->dispatched(), self::EXPECTED)), 'the dispatcher counted them, first occurrence first');
 
-        // (c) Each declaration describes what the spy saw: the dispatching class, the payload key, the subject.
-        foreach ($spy->declared() as $declaration) {
+        // (c) Each of this package's declarations describes what the spy saw: the dispatching class, the payload
+        // key, the subject. A neighbour's declaration is its own package's falsifier to make, not this one's.
+        foreach ($ownDeclarations as $declaration) {
             $calls = array_values(array_filter($own, static fn (array $call): bool => $call['name'] === $declaration->name));
             self::assertNotSame([], $calls, sprintf('«%s» is declared but the render never dispatched it', $declaration->name));
             self::assertNotNull($declaration->subjectType, $declaration->name . ' names its subject type');
