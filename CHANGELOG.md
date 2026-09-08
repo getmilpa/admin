@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.14.1](https://github.com/getmilpa/admin/compare/v0.14.0...v0.14.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* the Routes section lists only routes of plugins that booted ([#59](https://github.com/getmilpa/admin/issues/59)) ([f056031](https://github.com/getmilpa/admin/commit/f056031ab8c1936849f57323e4d56b37b0bce197))
+
 ## [0.14.0](https://github.com/getmilpa/admin/compare/v0.13.0...v0.14.0) (2026-09-07)
 
 
