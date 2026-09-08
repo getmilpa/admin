@@ -97,6 +97,16 @@ Two lifecycle pairs let another plugin extend a section or the shell without tou
 `admin.shell.before_render` / `after_render` (the composition and sidebar items, then HTML). A sidebar item a
 subscriber adds names its `group` like a section does (`app` when it names none).
 
+The panel **declares** those four to the dispatcher it boots with (greenhouse `decisions/0228`): when the app's
+dispatcher implements `Milpa\Interfaces\Event\DeclaredEvents` (`milpa/core` ≥ 0.11), `AdminPlugin::boot()` hands it
+`AdminEvents::declarations()` — one `EventDeclaration` per name, built from the same constants `AdminShell`
+dispatches with (`AdminShell::events()`): who dispatches it, when, the payload key (`section` / `shell`), the subject
+type (`SectionRender` / `ShellRender`) and that the subject is mutable. A dispatcher that does not implement the
+contract is told nothing and every event fires the same. The falsifier,
+`tests/TheEmitterDeclaresEveryEventItDispatchesTest.php`, renders through the real kernel with a spy dispatcher and
+compares what was declared against what was dispatched — names, keys, subjects, the dispatching class — and goes red
+when one declaration is deleted (measured before it was committed).
+
 ## Hosting a guest: what a section receives
 
 A section is a guest of the panel, and the panel is the host — it tells the guest what it knows and paints what

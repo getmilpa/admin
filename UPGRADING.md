@@ -1,5 +1,22 @@
 # Upgrading
 
+## 0.15.0 — the panel declares the events it dispatches
+
+**Nothing in the existing contract breaks.** The four lifecycle events keep their names, their payload keys and
+their subjects. What is new is that the panel now *says so* to the dispatcher (greenhouse `decisions/0228`):
+
+- **`AdminShell::events()`** returns one `Milpa\Interfaces\Event\EventDeclaration` per name the shell dispatches —
+  `admin.section.before_render`, `admin.section.after_render`, `admin.shell.before_render`,
+  `admin.shell.after_render` — built from the same constants its `dispatch()` calls use. **`AdminEvents::declarations()`**
+  (`Milpa\Admin\Event`) is the package's one holder of those declarations.
+- **`AdminShell::SUBJECT_SECTION`** (`'section'`) and **`AdminShell::SUBJECT_SHELL`** (`'shell'`) name the payload
+  keys the events always used; a subscriber that read `$payload['section']` reads the same thing.
+- **`AdminPlugin::boot()`** declares them to the dispatcher it gets from the container when that dispatcher
+  implements `Milpa\Interfaces\Event\DeclaredEvents`. A dispatcher that does not is told nothing; every event
+  fires as before, declared or not.
+
+Requires **`milpa/core` ≥ 0.11** (the `EventDeclaration` value object and the `DeclaredEvents` contract).
+
 ## 0.12.0 — a section may declare a whole VIEW; the panel emits one runtime and gains its live wire
 
 **Nothing in the existing contract breaks.** `AdminSection`, `AdminSectionProvider`, the four lifecycle events and
