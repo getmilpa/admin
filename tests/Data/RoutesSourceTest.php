@@ -18,8 +18,10 @@ use Milpa\Admin\AdminPlugin;
 use Milpa\Admin\Data\RoutesSource;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
 use Milpa\Container\DIContainer;
+use Milpa\Eventing\EventDispatcher;
 use Milpa\Runtime\Kernel;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 final class RoutesSourceTest extends TestCase
 {
@@ -59,6 +61,27 @@ final class RoutesSourceTest extends TestCase
         self::assertContains('/milpa/admin', $paths);
         self::assertContains('/milpa/admin/s/{id}', $paths);
         self::assertSame($paths, self::sorted($paths), 'sorted by path');
+    }
+
+    public function testAPluginTheKernelVetoedContributesNoRoutes(): void
+    {
+        // A `plugin.booting` listener stops the slot: the kernel never runs boot() nor mounts the routes,
+        // so a row for them would show a route the app answers 404 to. `routes:list` applies the same rule.
+        $dispatcher = new EventDispatcher(new NullLogger());
+        $dispatcher->subscribe('plugin.booting', static function (string $event, array $payload): void {
+            if (($payload['event']->pluginName ?? null) === 'Hola') {
+                $payload['slot']->stop();
+            }
+        });
+        $container = new DIContainer();
+        $kernel = Kernel::boot(['root' => sys_get_temp_dir(), 'plugins' => [AdminPlugin::class, HolaPlugin::class], 'container' => $container, 'dispatcher' => $dispatcher]);
+        $container->registerService(Kernel::class, $kernel);
+        self::assertNotContains('Hola', $kernel->bootedPluginNames(), 'the veto took: the instrument sees it');
+
+        $paths = array_column((new RoutesSource($container))->snapshot()['routes'], 'path');
+
+        self::assertNotContains('/hola', $paths);
+        self::assertContains('/milpa/admin', $paths, 'the plugins that did boot are still read');
     }
 
     /**

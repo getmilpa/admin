@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Data;
 
+use Milpa\Attributes\PluginMetadata;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\Route;
 use Milpa\Interfaces\Di\DIContainerInterface;
@@ -52,9 +53,20 @@ final class RoutesSource
             : ($this->fallbackProvider !== null ? [$this->fallbackProvider] : []);
 
         $rows = [];
+        // ONLY plugins whose `boot()` ran: `plugins()` also carries the ones a `plugin.booting` listener
+        // vetoed, and the boot loop mounts a plugin's routes AFTER `boot()` — a vetoed plugin's routes are
+        // declared but not served. The same filter `routes:list` applies (app-runtime `Support\Routes`),
+        // so the panel and the terminal keep answering one fact (greenhouse decisions/0216, F4).
+        $booted = $kernel instanceof Kernel ? $kernel->bootedPluginNames() : null;
         foreach ($plugins as $plugin) {
             if (!$plugin instanceof RouteProviderInterface) {
                 continue;
+            }
+            if ($booted !== null) {
+                $attributes = (new \ReflectionClass($plugin))->getAttributes(PluginMetadata::class);
+                if ($attributes === [] || !\in_array($attributes[0]->newInstance()->name, $booted, true)) {
+                    continue;
+                }
             }
             foreach ($plugin->routes() as $route) {
                 $rows[] = self::row($route, $plugin::class);
