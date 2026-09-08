@@ -23,6 +23,7 @@ use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\DeclaredView;
 use Milpa\Admin\Section\SectionCatalogue;
 use Milpa\Admin\Section\SectionRender;
+use Milpa\Interfaces\Event\EventDeclaration;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Live\Contracts\Transport\StateTransferCodecInterface;
 use Milpa\Live\ValueObjects\ClientAssets;
@@ -41,7 +42,8 @@ use Milpa\Live\ValueObjects\ComponentContext;
  * {@see ComponentBook}.
  * Two lifecycle pairs make it extensible without touching it: `admin.section.before_render`/`after_render`
  * (the section's props, then its HTML) and `admin.shell.before_render`/`after_render` (the composition
- * and items, then the HTML).
+ * and items, then the HTML) — declared as data by {@see self::events()}, so the dispatcher can count them
+ * (greenhouse decisions/0228).
  *
  * What every section receives (greenhouse decisions/0210): the {@see ComponentContext} it mounts with
  * carries the `principal` the gate authenticated — the same actor id the topbar shows, null when nobody —
@@ -68,6 +70,12 @@ final class AdminShell
     public const SECTION_BEFORE_RENDER = 'admin.section.before_render';
     public const SECTION_AFTER_RENDER = 'admin.section.after_render';
 
+    /** The payload key the `admin.shell.*` pair carries its subject under: the {@see ShellRender}. */
+    public const SUBJECT_SHELL = 'shell';
+
+    /** The payload key the `admin.section.*` pair carries its subject under: the {@see SectionRender}. */
+    public const SUBJECT_SECTION = 'section';
+
     /** `ComponentContext::$meta`: the gate in effect, as the topbar chip names it (`loopback`|`custom`|`passkey`|`open`|`fallback`). */
     public const META_GATE = 'gate';
 
@@ -92,6 +100,52 @@ final class AdminShell
         private readonly StateTransferCodecInterface $codec,
         private readonly ?MilpaEventDispatcherInterface $events = null,
     ) {
+    }
+
+    /**
+     * What this shell dispatches, as data — one declaration per name, built from the SAME constants its
+     * `dispatch()` calls use, so a renamed event cannot leave a stale declaration behind (greenhouse
+     * decisions/0228). Every subject is a mutable object the subscriber is meant to change; none carries an
+     * interception slot. {@see \Milpa\Admin\Event\AdminEvents} hands these to the dispatcher at boot.
+     *
+     * @return list<EventDeclaration>
+     */
+    public static function events(): array
+    {
+        return [
+            new EventDeclaration(
+                name: self::SECTION_BEFORE_RENDER,
+                dispatchedBy: self::class,
+                when: 'before the active section is compiled, with its props still open',
+                subjectKey: self::SUBJECT_SECTION,
+                subjectType: SectionRender::class,
+                mutable: true,
+            ),
+            new EventDeclaration(
+                name: self::SECTION_AFTER_RENDER,
+                dispatchedBy: self::class,
+                when: 'after the active section rendered, with its HTML still open',
+                subjectKey: self::SUBJECT_SECTION,
+                subjectType: SectionRender::class,
+                mutable: true,
+            ),
+            new EventDeclaration(
+                name: self::BEFORE_RENDER,
+                dispatchedBy: self::class,
+                when: 'before the shell is compiled, with its composition and sidebar items still open',
+                subjectKey: self::SUBJECT_SHELL,
+                subjectType: ShellRender::class,
+                mutable: true,
+            ),
+            new EventDeclaration(
+                name: self::AFTER_RENDER,
+                dispatchedBy: self::class,
+                when: 'after the shell rendered, with its HTML still open',
+                subjectKey: self::SUBJECT_SHELL,
+                subjectType: ShellRender::class,
+                mutable: true,
+            ),
+        ];
     }
 
     /** The same shell answering in another catalog — a request's `?lang=` — with everything else shared. */
@@ -139,7 +193,7 @@ final class AdminShell
             markup: $this->composition($active),
             items: $this->navItems($catalogue),
         );
-        $this->events?->dispatch(self::BEFORE_RENDER, ['shell' => $shell]);
+        $this->events?->dispatch(self::BEFORE_RENDER, [self::SUBJECT_SHELL => $shell]);
 
         $defaults = [
             SidebarComponent::NAME => ['items' => $shell->items],
@@ -151,7 +205,7 @@ final class AdminShell
         $compiled = $book->compiler($defaults)->compile($shell->markup, $context);
         $assets = $assets->merge($compiled->clientAssets());
         $shell->html = $compiled->output;
-        $this->events?->dispatch(self::AFTER_RENDER, ['shell' => $shell]);
+        $this->events?->dispatch(self::AFTER_RENDER, [self::SUBJECT_SHELL => $shell]);
 
         return new ShellOutput($shell->html, $assets, $this->seeds($active));
     }
@@ -253,7 +307,7 @@ final class AdminShell
     private function renderSection(ComponentBook $book, AdminSection $active, ComponentContext $context, array $query, ClientAssets &$assets): string
     {
         $subject = new SectionRender($active, [...$active->props, 'query' => $query]);
-        $this->events?->dispatch(self::SECTION_BEFORE_RENDER, ['section' => $subject]);
+        $this->events?->dispatch(self::SECTION_BEFORE_RENDER, [self::SUBJECT_SECTION => $subject]);
 
         $markup = \sprintf(
             '<milpa:%s id="%s-section-%s"/>',
@@ -262,7 +316,7 @@ final class AdminShell
             self::attr($active->id),
         );
         $subject->html = $this->paint($book, $markup, $active->component, [$active->component => $subject->props], $context, $assets);
-        $this->events?->dispatch(self::SECTION_AFTER_RENDER, ['section' => $subject]);
+        $this->events?->dispatch(self::SECTION_AFTER_RENDER, [self::SUBJECT_SECTION => $subject]);
 
         return $subject->html;
     }
@@ -280,7 +334,7 @@ final class AdminShell
     private function renderView(ComponentBook $book, AdminSection $active, DeclaredView $view, ComponentContext $context, ClientAssets &$assets): string
     {
         $subject = new SectionRender($active, $view->props);
-        $this->events?->dispatch(self::SECTION_BEFORE_RENDER, ['section' => $subject]);
+        $this->events?->dispatch(self::SECTION_BEFORE_RENDER, [self::SUBJECT_SECTION => $subject]);
 
         /** @var array<string, array<string, mixed>> $defaults */
         $defaults = $subject->props;
@@ -294,7 +348,7 @@ final class AdminShell
             $html[] = $this->paint($book, $root->markup, $root->name, $defaults, $context, $assets);
         }
         $subject->html = implode("\n", $html);
-        $this->events?->dispatch(self::SECTION_AFTER_RENDER, ['section' => $subject]);
+        $this->events?->dispatch(self::SECTION_AFTER_RENDER, [self::SUBJECT_SECTION => $subject]);
 
         return $subject->html;
     }

@@ -28,6 +28,7 @@ use Milpa\Admin\Data\PluginsSource;
 use Milpa\Admin\Data\RoutesSource;
 use Milpa\Admin\Data\SettingsSource;
 use Milpa\Admin\Data\StackSource;
+use Milpa\Admin\Event\AdminEvents;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Rendering\AdminHtmlRenderer;
@@ -45,6 +46,7 @@ use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
 use Milpa\Interfaces\Di\DIContainerInterface;
+use Milpa\Interfaces\Event\DeclaredEvents;
 use Milpa\Interfaces\Event\MilpaEventDispatcherInterface;
 use Milpa\Interfaces\Plugin\PluginInterface;
 use Milpa\Live\Security\HmacCsrfGuard;
@@ -100,6 +102,12 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
 
         $events = $this->tryGet(MilpaEventDispatcherInterface::class);
         $events = $events instanceof MilpaEventDispatcherInterface ? $events : null;
+        // The emitter declares what it dispatches, where the dispatcher enters the package (greenhouse
+        // decisions/0228): a dispatcher that counts its events learns the panel's four here, before any
+        // render; one that does not implement DeclaredEvents is told nothing and dispatch() works the same.
+        if ($events instanceof DeclaredEvents) {
+            $events->declare(...AdminEvents::declarations());
+        }
 
         $catalog = new Catalog($settings->locale);
         $codec = new SignedXhtmlStateTransferCodec(

@@ -24,7 +24,7 @@
     "ext-dom": "*",
     "ext-mbstring": "*",
     "milpa/console": ">=0.15 <1.0",
-    "milpa/core": ">=0.10 <1.0",
+    "milpa/core": ">=0.11 <1.0",
     "milpa/http": ">=0.2 <1.0",
     "milpa/live": ">=0.18 <1.0",
     "milpa/live-web": ">=0.14 <1.0",
