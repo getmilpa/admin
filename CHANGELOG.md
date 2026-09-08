@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.15.0](https://github.com/getmilpa/admin/compare/v0.14.1...v0.15.0) (2026-09-08)
+
+
+### Features
+
+* the panel declares the four events it dispatches ([#61](https://github.com/getmilpa/admin/issues/61)) ([f45685a](https://github.com/getmilpa/admin/commit/f45685ae7a539603bf6d51027102f130a7d9a0a8))
+
 ## [0.14.1](https://github.com/getmilpa/admin/compare/v0.14.0...v0.14.1) (2026-09-08)
 
 
