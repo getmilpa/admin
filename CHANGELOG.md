@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.16.0](https://github.com/getmilpa/admin/compare/v0.15.0...v0.16.0) (2026-09-08)
+
+
+### Features
+
+* the panel names its event holder in its manifest ([#63](https://github.com/getmilpa/admin/issues/63)) ([85af341](https://github.com/getmilpa/admin/commit/85af34179b208355b19faae58053166f918195b8))
+
 ## [0.15.0](https://github.com/getmilpa/admin/compare/v0.14.1...v0.15.0) (2026-09-08)
 
 
