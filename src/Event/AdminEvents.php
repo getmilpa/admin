@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin\Event;
 
 use Milpa\Admin\View\AdminShell;
+use Milpa\Interfaces\Event\DeclaresEvents;
 use Milpa\Interfaces\Event\EventDeclaration;
 
 /**
@@ -27,8 +28,13 @@ use Milpa\Interfaces\Event\EventDeclaration;
  * to the dispatcher it is given when that dispatcher implements
  * {@see \Milpa\Interfaces\Event\DeclaredEvents}; a dispatcher that does not is told nothing, and
  * dispatching keeps working either way — declaring is a description, never a gate.
+ *
+ * Booting is not the only way in. This package's manifest names this class under `extra.milpa.events`, the
+ * way a capability already names its operation provider, so a host reading `vendor/composer/installed.json`
+ * can resolve the list WITHOUT constructing anything — a CLI process that never renders a panel still knows
+ * these four names exist (greenhouse decisions/0228, second slice).
  */
-final class AdminEvents
+final class AdminEvents implements DeclaresEvents
 {
     /**
      * One declaration per event name this package dispatches, in the order a render fires them.
