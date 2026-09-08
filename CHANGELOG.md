@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.17.0](https://github.com/getmilpa/admin/compare/v0.16.0...v0.17.0) (2026-09-08)
+
+
+### Features
+
+* the panel declares the type that makes it discoverable ([#65](https://github.com/getmilpa/admin/issues/65)) ([6224102](https://github.com/getmilpa/admin/commit/62241025bca6fa4e49dd08bff1de7f637bb46c1f))
+
 ## [0.16.0](https://github.com/getmilpa/admin/compare/v0.15.0...v0.16.0) (2026-09-08)
 
 
