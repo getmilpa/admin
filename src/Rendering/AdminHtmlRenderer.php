@@ -673,6 +673,15 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         if ($summary !== '') {
             $out[] = '<p class="admin-stack__summary">' . Html::escape($summary) . '</p>';
         }
+        // DOWN WITHOUT A VERB IS A DEAD END. The panel had the compose fragment and a download and no
+        // instruction: somebody saw red and had nowhere to go. It says the command now — and does not
+        // run it. Starting containers on a person's machine because they opened a page is authority
+        // this panel does not have, and the boundary is the same one that makes installing a
+        // capability ask first (greenhouse decisions/0252).
+        if ($state === 'down') {
+            $out[] = '<p class="admin-stack__bring-up">' . Html::escape($this->catalog->tr('stack.bring_up'))
+                . ' <kbd class="mui-kbd">' . Html::escape(\sprintf('docker compose up -d %s', $name)) . '</kbd></p>';
+        }
         $out[] = '<dl class="admin-stack__facts">'
             . '<dt>' . Html::escape($this->catalog->tr('col.image')) . '</dt><dd><code>' . Html::escape((string) ($row['image'] ?? '')) . '</code></dd>'
             . '<dt>' . Html::escape($this->catalog->tr('col.ports')) . '</dt><dd>' . $this->codes($row['ports'] ?? null) . '</dd>'

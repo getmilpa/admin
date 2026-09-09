@@ -860,4 +860,45 @@ final class AdminHtmlRendererTest extends TestCase
     {
         return new RenderRequest(context: new ComponentContext(componentId: $state->componentId, locale: $locale), state: $state);
     }
+
+    /**
+     * A service that is down says how to bring it up, and one that is up does not.
+     *
+     * The panel had the compose fragment and a download and no instruction: somebody saw red and had
+     * nowhere to go. It says the command — it does not run it. Starting containers on a person's
+     * machine because they opened a page is authority this panel does not have
+     * (greenhouse decisions/0252).
+     */
+    public function testAServiceThatIsDownSaysHowToBringItUp(): void
+    {
+        $down = self::renderer()->render(new StackComponent(new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request(self::stackState('down')))->output;
+        $up = self::renderer()->render(new StackComponent(new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request(self::stackState('up')))->output;
+
+        self::assertStringContainsString('docker compose up -d mercure', $down);
+        self::assertStringContainsString('Not answering', $down);
+        // A PERMANENT INSTRUCTION IS NOISE. It appears where it applies and nowhere else.
+        self::assertStringNotContainsString('docker compose up -d', $up);
+    }
+
+    /** @return \Milpa\Live\ValueObjects\StateSnapshot */
+    private static function stackState(string $state): \Milpa\Live\ValueObjects\StateSnapshot
+    {
+        return new \Milpa\Live\ValueObjects\StateSnapshot('s9', StackComponent::NAME, '1', [
+            'kernel' => true,
+            'services' => [[
+                'name' => 'mercure',
+                'state' => $state,
+                'image' => 'dunglas/mercure',
+                'ports' => ['3000:80'],
+                'volumes' => [],
+                'command' => [],
+                'env' => [],
+                'summary' => 'The live feed.',
+                'declaredBy' => 'AgentWorkspacePlugin',
+                'compose' => "services:\n  mercure:\n",
+                'probeHost' => '127.0.0.1',
+                'probePort' => 3000,
+            ]],
+        ], []);
+    }
 }

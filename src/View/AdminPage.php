@@ -252,6 +252,7 @@ final class AdminPage
             .milpa-admin .admin-stack__actions,.milpa-admin .admin-stack__summary,.milpa-admin .admin-devtools__actions{margin:0}
             .milpa-admin .admin-stack__probe{font-family:var(--font-mono);font-size:var(--text-xs);font-weight:var(--weight-regular);color:var(--text-muted)}
             .milpa-admin .admin-stack__declared{margin:0;color:var(--text-muted)}
+            .milpa-admin .admin-stack__bring-up{margin:0;color:var(--text-secondary)}
             .milpa-admin .admin-compose,.milpa-admin .admin-snippet,.milpa-admin .admin-log{margin:0;white-space:pre}
             .milpa-admin .admin-log{max-height:32rem}
             .milpa-admin .admin-settings__hint,.milpa-admin .admin-devtools__hint{margin:0;color:var(--text-muted)}
