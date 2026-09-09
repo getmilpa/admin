@@ -232,7 +232,20 @@ final class AdminPage
             .milpa-admin .admin-section{display:grid;gap:var(--space-4);min-width:0;padding:0}
             .milpa-admin :is(h1,h2,h3,h4)>.mui-badge{vertical-align:middle;margin-inline-start:var(--space-1)}
             .milpa-admin .admin-notice{margin:0}
-            .milpa-admin .admin-capabilities{display:grid;gap:var(--space-1);padding-inline-start:var(--space-5)}
+            .milpa-admin .admin-capabilities__form{margin:0}
+            .milpa-admin .admin-capabilities{table-layout:auto}
+            .milpa-admin .admin-capabilities__group th{background:var(--bg);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.06em;font-weight:var(--weight-regular);padding-block:var(--space-2);text-align:start}
+            .milpa-admin .admin-capabilities__count{color:var(--accent-text);margin-inline-start:var(--space-2)}
+            .milpa-admin .admin-capabilities__note{margin-inline-start:var(--space-2);text-transform:none;letter-spacing:0}
+            .milpa-admin .admin-capabilities__name{white-space:nowrap}
+            .milpa-admin .admin-capabilities__what{color:var(--text-secondary);max-inline-size:72ch}
+            .milpa-admin .admin-capabilities__unlocks{display:block;margin-block-start:var(--space-1);font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)}
+            /* THE ACT COLUMN IS FIXED, and that is the whole point: the commands are 45 characters and
+               no two are the same length, so inline they put every button on a different x. */
+            .milpa-admin .admin-capabilities__act{inline-size:14rem;text-align:end;white-space:nowrap}
+            .milpa-admin .admin-capabilities__done{font-family:var(--font-mono);font-size:var(--text-2xs);color:var(--text-muted)}
+            .milpa-admin .admin-capabilities tbody[data-state="installed"] td{color:var(--text-muted)}
+            .milpa-admin .admin-enable-said{display:block;margin-block-start:var(--space-1);font-size:var(--text-2xs);color:var(--text-muted);white-space:normal}
             .milpa-admin .admin-panel__header{padding-block:var(--space-4);border-bottom:var(--border-width) var(--border-style) var(--border-subtle)}
             .milpa-admin .admin-panel__title{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
             .milpa-admin .admin-panel__body{display:grid;gap:var(--space-4);padding:var(--space-5)}
