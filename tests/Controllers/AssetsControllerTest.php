@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin\Tests\Controllers;
 
 use Milpa\Admin\Controllers\AssetsController;
+use Milpa\Live\Support\DesignTokens;
 use Milpa\Http\Routing\HandlerReference;
 use Milpa\Http\Routing\Route;
 use Milpa\Http\Routing\RouteResult;
@@ -56,5 +57,22 @@ final class AssetsControllerTest extends TestCase
 
         self::assertSame(200, (new AssetsController())->serve($request)->getStatusCode());
         self::assertSame(404, (new AssetsController())->serve(new ServerRequest('GET', '/x'))->getStatusCode(), 'no route result → no file');
+    }
+
+    /**
+     * The panel serves the house's wordmark as the vector the logo kit mandates.
+     *
+     * It painted its name as escaped TEXT in a span called `wordmark` — built from type, the grain
+     * floats between letters and the `i` keeps its own dot, so the mark reads with two. The vector
+     * ships in `milpa/live-web`; serving it is what lets the panel obey the rule instead of
+     * approximating it (greenhouse decisions/0249).
+     */
+    public function testThePanelServesTheWordmarkAsAVector(): void
+    {
+        $response = (new AssetsController())->file(DesignTokens::WORDMARK);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame('image/svg+xml', $response->getHeaderLine('Content-Type'));
+        self::assertStringStartsWith('<svg', trim((string) $response->getBody()));
     }
 }

@@ -89,9 +89,22 @@ final class ShellHtmlRenderer implements ComponentRendererInterface
         $active = (string) ($state->data['active'] ?? '');
         $brand = (string) ($state->meta['brand'] ?? '');
         $home = (string) ($state->meta['home'] ?? '#');
+        $wordmark = (string) ($state->meta['wordmark'] ?? '');
 
         $out = '<nav ' . Html::attrs(['class' => 'mui-sidebar', 'id' => $id, 'aria-label' => $catalog->tr('nav.label'), 'data-milpa-component-id' => $id]) . '>'
-            . '<a class="mui-sidebar__brand" href="' . Html::escape($home) . '"><span class="mui-sidebar__wordmark">' . Html::escape($brand) . '</span></a>'
+            // THE VECTOR, NOT TYPE. This span held the panel's name as escaped TEXT, which is the one
+            // thing the logo kit forbids: assembled from type, the grain floats between letters and
+            // the `i` keeps its own dot, so the mark reads with two. The name stays as the accessible
+            // label, which is what it was always good for (greenhouse decisions/0249).
+            . '<a class="mui-sidebar__brand" href="' . Html::escape($home) . '" aria-label="' . Html::escape($brand) . '">'
+            // NO URL, NO BROKEN IMAGE. A consumer that composes this sidebar without saying where the
+            // vector lives gets the name, which is what it got before. An `<img src="">` would be a
+            // broken image — a worse answer than the one this replaces, offered in the name of a rule
+            // it could not follow anyway.
+            . ($wordmark === ''
+                ? '<span class="mui-sidebar__wordmark">' . Html::escape($brand) . '</span>'
+                : '<img class="mui-sidebar__wordmark" src="' . Html::escape($wordmark) . '" alt="' . Html::escape($brand) . '" width="2407" height="900">')
+            . '</a>'
             . '<div class="mui-sidebar__nav">';
 
         $position = 0;
