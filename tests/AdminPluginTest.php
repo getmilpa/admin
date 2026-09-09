@@ -757,4 +757,31 @@ final class AdminPluginTest extends TestCase
 
         return $handler->handle(new ServerRequest('GET', '/milpa/admin', [], null, '1.1', ['REMOTE_ADDR' => $remoteAddress]));
     }
+
+    /**
+     * Every native section carries a glyph, because the mechanism to paint one was already there.
+     *
+     * `AdminSection::$icon` existed, the sidebar carried it, the renderer painted it — and not one of
+     * the five sections the panel ships declared one, so five empty spans rendered beside five labels.
+     * A capability built and never used looks exactly like one that does not exist
+     * (greenhouse decisions/0249).
+     */
+    public function testEveryNativeSectionCarriesAGlyph(): void
+    {
+        $plugin = new AdminPlugin(new DIContainer());
+        // BOOTED. Before boot this list is empty, so the first version of this test asserted that no
+        // section lacked a glyph across NOTHING — vacuously true, and green with the glyphs removed.
+        $plugin->boot();
+        $sections = $plugin->adminSections();
+        $bare = [];
+
+        foreach ($sections as $section) {
+            if (trim($section->icon) === '') {
+                $bare[] = $section->id;
+            }
+        }
+
+        self::assertGreaterThan(0, \count($sections), 'an empty list would make the assertion below say nothing');
+        self::assertSame([], $bare, 'a section with no glyph renders an empty span beside its label');
+    }
 }

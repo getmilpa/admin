@@ -47,13 +47,13 @@ final class ShellHtmlRendererTest extends TestCase
     {
         $result = self::renderer()->render(new SidebarComponent(), new RenderRequest(
             new ComponentContext('milpa-admin-sidebar', locale: 'en'),
-            ['brand' => 'Milpa Admin', 'home' => '/milpa/admin', 'active' => 'hola', 'items' => self::ITEMS],
+            ['brand' => 'Milpa Admin', 'home' => '/milpa/admin', 'wordmark' => '/milpa/admin/assets/milpa-wordmark.svg', 'active' => 'hola', 'items' => self::ITEMS],
         ));
         $html = $result->output;
 
         self::assertStringStartsWith(
             '<nav class="mui-sidebar" id="milpa-admin-sidebar" aria-label="Sections" data-milpa-component-id="milpa-admin-sidebar">'
-            . '<a class="mui-sidebar__brand" href="/milpa/admin"><span class="mui-sidebar__wordmark">Milpa Admin</span></a><div class="mui-sidebar__nav">',
+            . '<a class="mui-sidebar__brand" href="/milpa/admin" aria-label="Milpa Admin"><img class="mui-sidebar__wordmark" src="/milpa/admin/assets/milpa-wordmark.svg" alt="Milpa Admin" width="2407" height="900"></a><div class="mui-sidebar__nav">',
             $html,
         );
         self::assertSame(['ADMIN', 'APP', 'AGENT', 'MY LAB'], self::headings($html), 'the house order, then the rest — an unknown group is its own name uppercased');
@@ -85,7 +85,10 @@ final class ShellHtmlRendererTest extends TestCase
         $es = self::renderer()->render(new SidebarComponent(), new RenderRequest(new ComponentContext('s', locale: 'es'), ['items' => self::ITEMS]))->output;
         self::assertStringContainsString('aria-label="Secciones"', $es);
         self::assertSame(['ADMIN', 'APP', 'AGENTE', 'MY LAB'], self::headings($es));
-        self::assertStringContainsString('<a class="mui-sidebar__brand" href="/milpa/admin"><span class="mui-sidebar__wordmark">Milpa Admin</span></a>', $es, 'the defaults');
+        // NO WORDMARK DECLARED: the name, not a broken image. The panel always says where the vector
+        // is; a consumer composing this sidebar on its own may not, and `<img src="">` would be worse
+        // than the text this replaces.
+        self::assertStringContainsString('<a class="mui-sidebar__brand" href="/milpa/admin" aria-label="Milpa Admin"><span class="mui-sidebar__wordmark">Milpa Admin</span></a>', $es, 'the defaults');
 
         $none = self::renderer()->render(new SidebarComponent(), new RenderRequest(new ComponentContext('s'), []))->output;
         self::assertStringNotContainsString('mui-sidebar__section', $none, 'no items: the brand alone, no empty group');

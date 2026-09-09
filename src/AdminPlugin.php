@@ -132,6 +132,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 group: AdminSection::GROUP_ADMIN,
                 definition: new PluginsComponent(new PluginsSource($this->container)),
                 renderer: $renderer,
+                icon: '▣',
             ),
             new AdminSection(
                 id: 'routes',
@@ -141,6 +142,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 group: AdminSection::GROUP_ADMIN,
                 definition: new RoutesComponent(new RoutesSource($this->container, $this)),
                 renderer: $renderer,
+                icon: '⇢',
             ),
             new AdminSection(
                 id: 'settings',
@@ -150,6 +152,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 group: AdminSection::GROUP_ADMIN,
                 definition: new SettingsComponent(new SettingsSource($settings)),
                 renderer: $renderer,
+                icon: '◎',
             ),
             new AdminSection(
                 id: 'stack',
@@ -159,6 +162,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 group: AdminSection::GROUP_ADMIN,
                 definition: new StackComponent($stack),
                 renderer: $renderer,
+                icon: '▤',
             ),
             new AdminSection(
                 id: DevToolsComponent::SECTION,
@@ -168,6 +172,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 group: AdminSection::GROUP_ADMIN,
                 definition: new DevToolsComponent(new DevToolsSource($this->container)),
                 renderer: $renderer,
+                icon: '◇',
             ),
         ];
 

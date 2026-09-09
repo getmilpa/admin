@@ -57,6 +57,7 @@ final class SidebarComponent implements ComponentDefinitionInterface
             propsSchema: [
                 'brand' => ['type' => 'string', 'default' => AdminSettings::DEFAULT_TITLE],
                 'home' => ['type' => 'string', 'default' => AdminSettings::DEFAULT_ROUTE],
+                'wordmark' => ['type' => 'string', 'default' => ''],
                 'active' => ['type' => 'string', 'default' => ''],
                 'items' => ['type' => 'array', 'default' => []],
             ],
@@ -75,6 +76,9 @@ final class SidebarComponent implements ComponentDefinitionInterface
             [
                 'brand' => self::string($props, 'brand', AdminSettings::DEFAULT_TITLE),
                 'home' => self::string($props, 'home', AdminSettings::DEFAULT_ROUTE),
+                // Where the vector lives on THIS panel's route, so the brand can be the mark the
+                // logo kit mandates instead of the letters a span approximates.
+                'wordmark' => self::string($props, 'wordmark', ''),
                 'groups' => self::groups($props['items'] ?? []),
             ],
         );

@@ -18,6 +18,7 @@ use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\ComponentBook;
 use Milpa\Admin\Components\SectionHeaderComponent;
 use Milpa\Admin\Components\SidebarComponent;
+use Milpa\Live\Support\DesignTokens;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\DeclaredView;
@@ -231,7 +232,7 @@ final class AdminShell
         $book = new ComponentBook($this->codec, $this->events);
         $markup = \sprintf(
             '<milpa:dashboard-shell id="%1$s" main-id="%1$s-main">'
-            . '<milpa:%3$s id="%1$s-sidebar" brand="%2$s" home="%4$s"/>'
+            . '<milpa:%3$s id="%1$s-sidebar" brand="%2$s" home="%4$s" wordmark="%5$s"/>'
             . '<milpa:dashboard-topbar id="%1$s-topbar" title="%2$s" controls="%1$s-sidebar"/>'
             . '<milpa:dashboard-main id="%1$s-main"/>'
             . '</milpa:dashboard-shell>',
@@ -239,6 +240,7 @@ final class AdminShell
             self::attr($this->settings->title),
             SidebarComponent::NAME,
             self::attr($this->settings->route),
+            self::attr($this->wordmarkUrl()),
         );
         $notice = '<p class="mui-alert mui-alert--info admin-notice">' . htmlspecialchars($this->catalog->tr('section.none'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
         $defaults = [
@@ -435,7 +437,7 @@ final class AdminShell
     {
         return \sprintf(
             '<milpa:dashboard-shell id="%1$s" title="%2$s" main-id="%1$s-main">'
-            . '<milpa:%5$s id="%1$s-sidebar" brand="%3$s" home="%6$s" active="%4$s"/>'
+            . '<milpa:%5$s id="%1$s-sidebar" brand="%3$s" home="%6$s" active="%4$s" wordmark="%7$s"/>'
             . '<milpa:dashboard-topbar id="%1$s-topbar" title="%2$s" controls="%1$s-sidebar"/>'
             . '<milpa:dashboard-main id="%1$s-main"/>'
             . '</milpa:dashboard-shell>',
@@ -445,7 +447,19 @@ final class AdminShell
             self::attr($active->id),
             SidebarComponent::NAME,
             self::attr($this->settings->route),
+            self::attr($this->wordmarkUrl()),
         );
+    }
+
+    /**
+     * Where this panel serves the house's wordmark.
+     *
+     * Built from the panel's own asset route, so a panel mounted somewhere other than `/milpa/admin`
+     * still finds its own mark — and so nothing here has to know where `milpa/live-web` keeps it.
+     */
+    private function wordmarkUrl(): string
+    {
+        return $this->settings->route . '/assets/' . DesignTokens::WORDMARK;
     }
 
     /**

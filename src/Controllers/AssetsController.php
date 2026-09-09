@@ -16,6 +16,7 @@ namespace Milpa\Admin\Controllers;
 
 use Milpa\Http\Routing\RouteResult;
 use Milpa\Live\Support\ClientRuntime;
+use Milpa\Live\Support\DesignTokens;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -51,6 +52,16 @@ final class AssetsController
     {
         if (isset(self::PACKAGED[$name])) {
             return $this->read(\dirname(__DIR__, 2) . '/assets/milpa/' . self::PACKAGED[$name], 'text/css; charset=utf-8');
+        }
+        // THE WORDMARK COMES FROM THE DESIGN SYSTEM, AS A VECTOR. The panel painted its name as
+        // escaped TEXT in a span called `wordmark`, which is the one thing the logo kit forbids: built
+        // from type, the grain floats between letters and the `i` keeps its own dot, so the mark reads
+        // with two. `milpa/live-web` ships the vector; serving it is what lets the panel obey the rule
+        // instead of approximating it (greenhouse decisions/0249).
+        if (\in_array($name, [DesignTokens::WORDMARK, DesignTokens::WORDMARK_LIGHT], true)) {
+            $path = DesignTokens::path($name);
+
+            return $path === null ? $this->missing() : $this->read($path, DesignTokens::contentType($name));
         }
         if (\in_array($name, self::RUNTIME, true)) {
             $path = ClientRuntime::path($name);

@@ -34,7 +34,7 @@ final class SidebarComponentTest extends TestCase
         self::assertInstanceOf(ComponentDefinitionInterface::class, new SidebarComponent());
         self::assertSame('admin-sidebar', $contract->name);
         self::assertSame('1', $contract->contractVersion);
-        self::assertSame(['brand', 'home', 'active', 'items'], array_keys($contract->propsSchema));
+        self::assertSame(['brand', 'home', 'wordmark', 'active', 'items'], array_keys($contract->propsSchema));
         self::assertSame(['type' => 'array', 'default' => []], $contract->propsSchema['items']);
         self::assertSame('/milpa/admin', $contract->propsSchema['home']['default']);
         self::assertSame(['active' => ['type' => 'string']], $contract->stateSchema);
@@ -71,7 +71,7 @@ final class SidebarComponentTest extends TestCase
 
         $bare = (new SidebarComponent())->mount([], new ComponentContext('s'));
         self::assertSame(['active' => ''], $bare->data);
-        self::assertSame(['brand' => 'Milpa Admin', 'home' => '/milpa/admin', 'groups' => []], $bare->meta, 'the defaults');
+        self::assertSame(['brand' => 'Milpa Admin', 'home' => '/milpa/admin', 'wordmark' => '', 'groups' => []], $bare->meta, 'the defaults');
         self::assertSame('Milpa Admin', (new SidebarComponent())->mount(['brand' => '', 'home' => 42], new ComponentContext('s'))->meta['brand'], 'an empty or malformed prop is the default');
     }
 

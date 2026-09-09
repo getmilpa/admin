@@ -1682,6 +1682,14 @@
   letter-spacing: var(--tracking-tight);
   color: var(--text); text-decoration: none;
 }
+/* THE WORDMARK IS A VECTOR NOW, AND A VECTOR HAS AN INTRINSIC SIZE. The `<img>` replaced a `<span>`
+   whose look was font, so nothing here constrained it and the mark painted at 2407x900 — across the
+   whole page, over everything. The width/height attributes stay: they give the aspect ratio and stop
+   the layout jumping while it loads. The SIZE is decided here. */
+.mui-sidebar__brand img.mui-sidebar__wordmark {
+  height: var(--space-5); width: auto; max-width: 100%; display: block;
+}
+
 .mui-sidebar__brand:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
 
 .mui-sidebar__nav {

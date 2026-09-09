@@ -148,7 +148,7 @@ final class AdminShellTest extends TestCase
         self::assertStringContainsString('<div class="admin-section__body"><p class="mui-alert mui-alert--info admin-notice">No plugin declared an admin section yet', $html, 'the notice sits in the section body like a section would — a plain wrapper: no header names it, nothing scrolls');
         self::assertStringNotContainsString('role="region"', $html, 'no unnamed region');
         $nav = self::sidebar($html);
-        self::assertStringContainsString('<a class="mui-sidebar__brand" href="/milpa/admin"><span class="mui-sidebar__wordmark">Milpa Admin</span></a>', $nav, 'the brand links home');
+        self::assertStringContainsString('<a class="mui-sidebar__brand" href="/milpa/admin" aria-label="Milpa Admin"><img class="mui-sidebar__wordmark" src="/milpa/admin/assets/milpa-wordmark.svg" alt="Milpa Admin" width="2407" height="900"></a>', $nav, 'the brand links home');
         self::assertSame([], self::headings($nav), 'no section: no group, not even an empty one');
         self::assertStringNotContainsString('admin-section__header', $html, 'no section: no header');
     }
@@ -194,7 +194,7 @@ final class AdminShellTest extends TestCase
         self::assertStringContainsString('aria-hidden="true">✦</span><span class="mui-sidebar__item-label">Hola</span>', $nav, 'a glyph the primitive used to drop');
         self::assertStringContainsString('<span class="mui-sidebar__item-label">Routes</span>', $nav, 'a catalog key is translated');
         self::assertStringNotContainsString('cultivo', $html, 'the primitive\'s literal heading is gone');
-        self::assertStringContainsString('<a class="mui-sidebar__brand" href="/milpa/admin"><span class="mui-sidebar__wordmark">Milpa Admin</span></a>', $nav);
+        self::assertStringContainsString('<a class="mui-sidebar__brand" href="/milpa/admin" aria-label="Milpa Admin"><img class="mui-sidebar__wordmark" src="/milpa/admin/assets/milpa-wordmark.svg" alt="Milpa Admin" width="2407" height="900"></a>', $nav);
         self::assertStringContainsString('aria-controls="milpa-admin-sidebar"', $html, 'the topbar toggle still points at the sidebar');
 
         $es = self::sidebar(self::shell(catalog: new Catalog('es'))->render($catalogue, $active));
