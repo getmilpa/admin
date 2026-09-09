@@ -379,8 +379,16 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         if (!\is_array($capabilities)) {
             $out[] = $this->notice($this->catalog->tr('plugins.no_capabilities'));
         } else {
-            $out[] = $this->capabilityList('plugins.installed', \is_array($capabilities['installed'] ?? null) ? $capabilities['installed'] : [], 'id', offerToEnable: false);
-            $out[] = $this->capabilityList('plugins.available', \is_array($capabilities['available'] ?? null) ? $capabilities['available'] : [], 'package', offerToEnable: true);
+            $available = \is_array($capabilities['available'] ?? null) ? array_values(array_filter($capabilities['available'], '\\is_array')) : [];
+            $installed = \is_array($capabilities['installed'] ?? null) ? array_values(array_filter($capabilities['installed'], '\\is_array')) : [];
+            // WHAT INSTALLING DOES, SAID ONCE, AS A FILE. Twelve rows repeating a consequence is
+            // noise; naming the line that changes in `git status` is the answer to the only question
+            // somebody actually has before pressing a button (greenhouse decisions/0250).
+            $out[] = $this->notice($this->catalog->tr('capabilities.consequence'));
+            // THE COMMAND, ONCE, AS A FORM. Seven rows repeating 45 near-identical characters is
+            // redundancy the table already carries — the package IS the first column.
+            $out[] = '<p class="admin-capabilities__form"><kbd class="mui-kbd">' . Html::escape($this->catalog->tr('capabilities.command_form')) . '</kbd></p>';
+            $out[] = $this->capabilityTable($available, $installed);
             $out[] = $this->capabilityEnabler();
         }
 
@@ -391,35 +399,104 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
      * @param list<mixed> $items
      * @param bool        $offerToEnable whether each row gets the button that runs `capabilities:enable`
      */
-    private function capabilityList(string $headingKey, array $items, string $keyField, bool $offerToEnable = false): string
+    /**
+     * Equipping the house: one table, the act in a fixed column, the command factored out.
+     *
+     * This was a bullet list with the CLI command wedged between the title and the button, so every
+     * button landed on a different x — the commands are 45 characters and no two are the same length.
+     * It read as a debug dump on the screen where a person decides what their house becomes.
+     *
+     * ── WHY A TABLE AND NOT CARDS ───────────────────────────────────────────────────────────────
+     *
+     * Because there is nothing to put on a card. Each capability has an id, a package, ONE sentence,
+     * and sometimes a list of unlocks. No icon, no version, no author, no screenshot. A card grid of
+     * one-sentence items is padding pretending to be design, and the panel already speaks table —
+     * the plugins table sits directly above this one.
+     *
+     * ── THE WORDS ARE THE ONES A NEWCOMER ALREADY OWNS ──────────────────────────────────────────
+     *
+     * `Available` and `Installed`, not `held` or `standing` or `in this house`. Somebody twenty
+     * minutes into this framework does not yet own the house vocabulary, and this is the screen where
+     * they decide what to install — the worst possible place to spend their vocabulary budget.
+     *
+     * And the consequence is named as a FILE: installing rewrites `config/plugins.php`, which is what
+     * they will see in `git status` tomorrow. Every abstract phrasing of "code will run inside your
+     * app" is weaker than naming the line that changes.
+     *
+     * @param list<array<string, mixed>> $available
+     * @param list<array<string, mixed>> $installed
+     */
+    private function capabilityTable(array $available, array $installed): string
     {
-        $out = ['<h4 class="mui-h4">' . Html::escape($this->catalog->tr($headingKey)) . '</h4>'];
-        if ($items === []) {
-            $out[] = $this->notice($this->catalog->tr('none'));
+        $rows = [];
+        // AVAILABLE FIRST: this screen is for deciding, and the group that carries a decision is the
+        // subject. What is already installed is the receipt underneath it.
+        $rows[] = $this->capabilityGroup('capabilities.available', \count($available), 'capabilities.available_note', 'available');
 
-            return implode("\n", $out);
+        foreach ($available as $item) {
+            $rows[] = $this->capabilityRow($item, 'package', true);
         }
-        $out[] = '<ul class="mui-list admin-capabilities">';
-        foreach ($items as $item) {
-            if (!\is_array($item)) {
-                continue;
-            }
-            $key = (string) ($item[$keyField] ?? $item['package'] ?? '');
-            $title = (string) ($item['title'] ?? '');
-            $command = (string) ($item['command'] ?? '');
-            $out[] = '<li><code>' . Html::escape($key) . '</code>'
-                . ($title !== '' ? ' — ' . Html::escape($title) : '')
-                . ($command !== '' ? ' <kbd class="mui-kbd">' . Html::escape($command) . '</kbd>' : '')
-                . ($offerToEnable && $key !== ''
-                    ? ' <button type="button" class="mui-btn admin-enable" data-capability="'
-                        . Html::escape($key) . '">' . Html::escape($this->catalog->tr('plugins.enable')) . '</button>'
-                        . '<span class="admin-enable-said" hidden></span>'
-                    : '')
-                . '</li>';
-        }
-        $out[] = '</ul>';
 
-        return implode("\n", $out);
+        $rows[] = $this->capabilityGroup('capabilities.installed', \count($installed), 'capabilities.installed_note', 'installed');
+
+        foreach ($installed as $item) {
+            $rows[] = $this->capabilityRow($item, 'id', false);
+        }
+
+        return '<div class="mui-table-wrap"><table class="mui-table admin-capabilities">'
+            . '<thead><tr>'
+            . '<th scope="col">' . Html::escape($this->catalog->tr('capabilities.col.name')) . '</th>'
+            . '<th scope="col">' . Html::escape($this->catalog->tr('capabilities.col.what')) . '</th>'
+            . '<th scope="col" class="admin-capabilities__act">' . Html::escape($this->catalog->tr('capabilities.col.act')) . '</th>'
+            . '</tr></thead>'
+            . implode('', $rows)
+            . '</table></div>';
+    }
+
+    /**
+     * A group heading that is a real rowgroup, so it is announced once and not repeated per row.
+     */
+    private function capabilityGroup(string $labelKey, int $count, string $noteKey, string $state): string
+    {
+        return '<tbody data-state="' . $state . '"><tr class="admin-capabilities__group"><th scope="rowgroup" colspan="3">'
+            . '<span>' . Html::escape($this->catalog->tr($labelKey)) . '</span>'
+            . '<span class="admin-capabilities__count">' . $count . '</span>'
+            . '<span class="admin-capabilities__note">' . Html::escape($this->catalog->tr($noteKey)) . '</span>'
+            . '</th></tr>';
+    }
+
+    /**
+     * One capability. The act column is never empty — an installed row says so rather than going blank,
+     * because a blank cell reads as something that has not finished loading.
+     *
+     * @param array<string, mixed> $item
+     */
+    private function capabilityRow(array $item, string $keyField, bool $offerToEnable): string
+    {
+        $key = (string) ($item[$keyField] ?? $item['package'] ?? '');
+        $title = (string) ($item['title'] ?? '');
+        $command = (string) ($item['command'] ?? '');
+        $unlocks = array_values(array_filter(
+            \is_array($item['unlocks'] ?? null) ? $item['unlocks'] : [],
+            static fn (mixed $u): bool => \is_string($u) && $u !== '',
+        ));
+
+        $act = $offerToEnable && $key !== ''
+            // THE BUTTON NAMES WHAT IT INSTALLS. «Install» alone, seven times in a column, cannot be
+            // misread only because of where it sits; with the package in it, it cannot be misread at all.
+            ? '<button type="button" class="mui-btn mui-btn--sm admin-enable" data-capability="' . Html::escape($key) . '"'
+                . ($command !== '' ? ' data-command="' . Html::escape($command) . '"' : '') . '>'
+                . Html::escape(\sprintf($this->catalog->tr('capabilities.install'), $key)) . '</button>'
+                . '<span class="admin-enable-said" hidden></span>'
+            : '<span class="admin-capabilities__done">' . Html::escape($this->catalog->tr('capabilities.done')) . '</span>';
+
+        return '<tr data-capability="' . Html::escape($key) . '">'
+            . '<td><code class="admin-capabilities__name">' . Html::escape($key) . '</code></td>'
+            . '<td class="admin-capabilities__what">' . ($title !== '' ? Html::escape($title) : '')
+            . ($unlocks !== [] ? '<span class="admin-capabilities__unlocks">' . Html::escape($this->join($unlocks)) . '</span>' : '')
+            . '</td>'
+            . '<td class="admin-capabilities__act">' . $act . '</td>'
+            . '</tr>';
     }
 
     /**

@@ -68,8 +68,19 @@ final class AdminHtmlRendererTest extends TestCase
         self::assertStringContainsString('mui-badge--success', $html);
         self::assertStringContainsString('mui-badge--warning', $html);
         self::assertStringContainsString('<code>App\\Hola</code>', $html);
-        self::assertStringContainsString('<code>persistence</code> — Keep data', $html);
-        self::assertStringContainsString('capabilities:enable --capability=web-search', $html);
+        // EQUIPPING IS A TABLE NOW, and the act sits in its own fixed column. The list it replaces put
+        // the 45-character command between the title and the button, so no two buttons shared an x
+        // (greenhouse decisions/0250).
+        self::assertStringContainsString('<code class="admin-capabilities__name">persistence</code>', $html);
+        self::assertStringContainsString('>Keep data', $html);
+        self::assertStringContainsString('Install milpa/web-search</button>', $html, 'the button names what it installs');
+        self::assertStringContainsString('class="admin-capabilities__act"', $html);
+        // The command rides on the button for the dialog to show, and is stated once as a form above
+        // the table — never inline in a row, which is what pushed every button off its column.
+        self::assertStringContainsString('data-command="capabilities:enable --capability=web-search"', $html);
+        self::assertStringNotContainsString('</code> <kbd', $html, 'the command is out of the row');
+        self::assertStringContainsString('config/plugins.php', $html, 'the consequence is named as the file that changes');
+        self::assertStringNotContainsString('garbage', $html, 'a non-array entry is filtered, not rendered');
         self::assertStringContainsString('data-milpa-state="s1"', $html);
         self::assertStringNotContainsString('no plugin registry', $html);
     }
