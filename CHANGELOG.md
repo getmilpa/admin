@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.19.0](https://github.com/getmilpa/admin/compare/v0.18.0...v0.19.0) (2026-09-09)
+
+
+### Features
+
+* the panel mounts what its Install button needs ([#69](https://github.com/getmilpa/admin/issues/69)) ([57d9eb7](https://github.com/getmilpa/admin/commit/57d9eb70a1061653c71a34aee004c33f31c1a02c))
+
 ## [0.18.0](https://github.com/getmilpa/admin/compare/v0.17.0...v0.18.0) (2026-09-09)
 
 
