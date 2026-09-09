@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.20.0](https://github.com/getmilpa/admin/compare/v0.19.0...v0.20.0) (2026-09-09)
+
+
+### Features
+
+* the panel wears the house — its mark and its glyphs ([#71](https://github.com/getmilpa/admin/issues/71)) ([6a90ea5](https://github.com/getmilpa/admin/commit/6a90ea52a65c1ee50b662a30f80cf6bcc713f49c))
+
 ## [0.19.0](https://github.com/getmilpa/admin/compare/v0.18.0...v0.19.0) (2026-09-09)
 
 
