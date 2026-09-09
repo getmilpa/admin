@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.21.0](https://github.com/getmilpa/admin/compare/v0.20.0...v0.21.0) (2026-09-09)
+
+
+### Features
+
+* equipping the house is a screen, not a bullet list ([#73](https://github.com/getmilpa/admin/issues/73)) ([9fdd434](https://github.com/getmilpa/admin/commit/9fdd4346e9ac346b2ece89997c014c4d50014e4c))
+
 ## [0.20.0](https://github.com/getmilpa/admin/compare/v0.19.0...v0.20.0) (2026-09-09)
 
 
