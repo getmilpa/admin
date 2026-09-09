@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.18.0](https://github.com/getmilpa/admin/compare/v0.17.0...v0.18.0) (2026-09-09)
+
+
+### Features
+
+* declare the plugin in the manifest, so enabling the capability wires it ([#67](https://github.com/getmilpa/admin/issues/67)) ([35c090d](https://github.com/getmilpa/admin/commit/35c090dee2e88b56ade27337cbbb18a3287c7ab1))
+
 ## [0.17.0](https://github.com/getmilpa/admin/compare/v0.16.0...v0.17.0) (2026-09-08)
 
 
