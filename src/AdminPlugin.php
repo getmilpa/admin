@@ -14,6 +14,10 @@ declare(strict_types=1);
 
 namespace Milpa\Admin;
 
+use Milpa\Admin\Http\CapabilityInstaller;
+use Milpa\Console\Http\HttpProjector;
+use Milpa\Console\FileConfirmTokenStore;
+use Nyholm\Psr7\Factory\Psr17Factory;
 use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
@@ -213,6 +217,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
         $middleware = $settings->effectiveMiddleware();
 
         return [
+            ...$this->installerRoute($route, $middleware),
             new Route(
                 path: $route,
                 methods: HttpMethod::GET,
@@ -313,5 +318,74 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
         $service = $this->container->get($id);
 
         return \is_object($service) ? $service : null;
+    }
+
+    /**
+     * The route the panel's own Install button posts to, when this app has an operation to install with.
+     *
+     * The panel listed what a house could grow and offered a button that answered 404: reaching
+     * `capabilities:enable` over HTTP requires the APP to name it in `config/http.php`, and a fresh
+     * app names nothing. Mounting it here keeps that opt-in untouched — nothing else becomes
+     * reachable — and carries the panel's own middleware, so who may install is exactly who may look
+     * (greenhouse decisions/0248).
+     *
+     * Absent `milpa/app-runtime` there is no such operation and no route: the panel still lists what
+     * it can see and still prints the command, which is what it did before.
+     *
+     * @param list<class-string> $middleware
+     *
+     * @return list<Route>
+     */
+    private function installerRoute(string $route, array $middleware): array
+    {
+        // NAMED AS STRINGS, like the capability catalogue this section already reads: `milpa/app-runtime`
+        // is a suggestion and not a dependency, so referencing the classes directly would make static
+        // analysis right to complain that this package does not have them.
+        $operations = 'Milpa\\AppRuntime\\Operations\\CapabilityOperations';
+        $runtime = 'Milpa\\AppRuntime\\Support\\Capabilities';
+
+        if (!class_exists($operations) || !class_exists($runtime) || !class_exists(HttpProjector::class)) {
+            return [];
+        }
+
+        $operation = null;
+
+        /** @var iterable<\Milpa\Command\Operation> $candidates */
+        $candidates = (new $operations())->operations();
+
+        foreach ($candidates as $candidate) {
+            if ($candidate->name === CapabilityInstaller::OPERATION) {
+                $operation = $candidate;
+
+                break;
+            }
+        }
+
+        if ($operation === null) {
+            return [];
+        }
+
+        $psr17 = new Psr17Factory();
+        $this->container->registerService(CapabilityInstaller::class, new CapabilityInstaller(new HttpProjector(
+            [$operation],
+            $this->container,
+            $psr17,
+            $psr17,
+            // The same store the app's own projector uses, so a token minted by one ceremony is not
+            // a stranger to the other. The root comes from milpa/app-runtime, which asks composer
+            // rather than counting directories — this class lives in a package, so `__DIR__` would
+            // answer for the package and not for the app.
+            tokens: new FileConfirmTokenStore($runtime::raizDeLaApp() . '/storage/confirm-tokens.json'),
+        )));
+
+        return [
+            new Route(
+                path: $route . '/capabilities/enable',
+                methods: HttpMethod::POST,
+                name: CapabilityInstaller::ROUTE_NAME,
+                middleware: $middleware,
+                handler: HandlerReference::method(CapabilityInstaller::class, 'handle'),
+            ),
+        ];
     }
 }
