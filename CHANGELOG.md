@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.22.0](https://github.com/getmilpa/admin/compare/v0.21.0...v0.22.0) (2026-09-09)
+
+
+### Features
+
+* a service that is down says how to bring it up ([#75](https://github.com/getmilpa/admin/issues/75)) ([74c28cc](https://github.com/getmilpa/admin/commit/74c28cc48a708ec86626a469091e8dff0d73a874))
+
 ## [0.21.0](https://github.com/getmilpa/admin/compare/v0.20.0...v0.21.0) (2026-09-09)
 
 
