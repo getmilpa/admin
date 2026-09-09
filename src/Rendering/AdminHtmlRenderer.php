@@ -381,7 +381,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         } else {
             $out[] = $this->capabilityList('plugins.installed', \is_array($capabilities['installed'] ?? null) ? $capabilities['installed'] : [], 'id', offerToEnable: false);
             $out[] = $this->capabilityList('plugins.available', \is_array($capabilities['available'] ?? null) ? $capabilities['available'] : [], 'package', offerToEnable: true);
-            $out[] = self::CAPABILITY_ENABLER;
+            $out[] = $this->capabilityEnabler();
         }
 
         return implode("\n", $out);
@@ -433,17 +433,36 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
      * Delegated from the document, so it survives a section re-render without rebinding. Inline and dependency-
      * free: this package ships no JavaScript bundle, and one button is not a reason to start.
      *
-     * When the operation is not exposed over HTTP the endpoint answers 404, and the honest thing to say is the
-     * `composer require` line already printed beside the button — not a retry.
+     * The endpoint is the PANEL'S, mounted beside the panel's page and carrying the panel's middleware. It used
+     * to be the app's global operations surface, which a fresh app does not expose — so the button answered 404
+     * in precisely the house it exists for (greenhouse decisions/0248). A 404 now means this app has no
+     * `capabilities:enable` at all, and the honest thing to say is the command already printed beside the
+     * button — not a retry.
      */
+    private function capabilityEnabler(): string
+    {
+        // THE PANEL'S OWN ROUTE, not the app's global operations surface. Reaching
+        // `capabilities:enable` there requires the app to name it in `config/http.php`, and a fresh
+        // app names nothing — so this button answered 404 in exactly the house it was built for
+        // (greenhouse decisions/0248). The panel mounts what its button needs, behind its own gate.
+        return str_replace('{ENDPOINT}', Html::escape($this->settings->route . '/capabilities/enable'), self::CAPABILITY_ENABLER);
+    }
+
     private const string CAPABILITY_ENABLER = <<<'HTML'
         <script>
         (() => {
           if (window.__milpaAdminEnable) { return; }
           window.__milpaAdminEnable = true;
-          const post = (body) => fetch('/capabilities/enable', {
+          // THE TOKEN TRAVELS AS A HEADER, which is where the operation's ceremony reads it. It was
+          // sent in the body here, so the second POST looked like a first one and answered 428 with a
+          // fresh token — forever. Nobody could see it: the endpoint 404'd before this step was ever
+          // reached (greenhouse decisions/0248).
+          const post = (body, token) => fetch('{ENDPOINT}', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: Object.assign(
+              { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              token ? { 'Confirm-Token': token } : {},
+            ),
             credentials: 'same-origin',
             body: JSON.stringify(body),
           });
@@ -456,13 +475,13 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             button.disabled = true;
             try {
               const asked = await post({ capability });
-              if (asked.status === 404) { say('not exposed over HTTP — use the command shown'); button.disabled = false; return; }
+              if (asked.status === 404) { say('this app has no installer — use the command shown'); button.disabled = false; return; }
               const answer = await asked.json();
               if (answer.requires_confirmation && answer.confirm_token) {
                 if (!window.confirm('Install ' + capability + '? It downloads code that will run inside this app.')) {
                   say('cancelled'); button.disabled = false; return;
                 }
-                const done = await post({ capability, confirm_token: answer.confirm_token });
+                const done = await post({ capability }, answer.confirm_token);
                 const result = await done.json();
                 say(done.ok && (result.ok ?? true) ? 'installed — reload to see it' : (result.error || 'refused'));
                 return;
