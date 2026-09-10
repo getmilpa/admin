@@ -27,6 +27,12 @@ namespace Milpa\Admin\Data;
  * The reader used to be private to the House section's data source, so the shell would have had to ask
  * a section for it — a shell that reaches into one section's data is a shell that breaks when that
  * section is not installed (greenhouse decisions/0269).
+ *
+ * 🚨 IT ANSWERS ONE QUESTION AND NOT TWO. A `version(string $name)` accessor shipped here first and
+ * the unwired-piece census named it within the hour: nobody called it but its own test. That is the
+ * third accessor-nobody-asked-for in a single day of work, after `ProviderReach::declared()` and
+ * `ProviderReach::endpoint()` — a habit, not an accident. Both callers want the whole list; one of
+ * them then picks from it, which is the caller's business (greenhouse decisions/0213).
  */
 final class InstalledPackages
 {
@@ -53,23 +59,5 @@ final class InstalledPackages
         usort($rows, static fn (array $a, array $b): int => $a['name'] <=> $b['name']);
 
         return $rows;
-    }
-
-    /**
-     * One package's resolved version, or null when the lock does not carry it.
-     *
-     * Null and not `'?'`: «not installed» and «installed at a version nobody could read» are different
-     * facts, and a footer that printed a question mark for an absent package would say the app runs
-     * something it does not.
-     */
-    public static function version(string $root, string $name): ?string
-    {
-        foreach (self::rows($root) as $row) {
-            if ($row['name'] === $name) {
-                return $row['version'];
-            }
-        }
-
-        return null;
     }
 }

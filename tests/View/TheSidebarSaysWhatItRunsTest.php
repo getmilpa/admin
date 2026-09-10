@@ -135,8 +135,6 @@ final class TheSidebarSaysWhatItRunsTest extends TestCase
             InstalledPackages::rows($this->root),
             'sorted by name, only milpa/*',
         );
-        self::assertSame('v2.0.0', InstalledPackages::version($this->root, 'milpa/alpha'));
-        self::assertNull(InstalledPackages::version($this->root, 'milpa/nope'), 'absent is null, never «?»');
         self::assertSame([], InstalledPackages::rows(''), 'no root, no rows');
     }
 
