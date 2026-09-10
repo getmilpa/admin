@@ -72,6 +72,33 @@
 
 @layer milpa.tokens, milpa.motion, milpa.primitives, milpa.components, milpa.artifacts, milpa.layouts;
 
+/* ════════════════════════════════════════════════════════════════════
+   [hidden] NO SE RENDERIZA — UNA REGLA, SIN CAPA, Y ES DELIBERADO.
+
+   🚨 CUALQUIER `display` de autor DERROTA al `[hidden]{display:none}` del
+   navegador, así que cada primitiva con `display` es una trampa abierta.
+   Este sistema la había parchado TRES VECES, una por componente —
+   `.mui-menu[hidden]`, `.mui-tabs__panel[hidden]`, `.mui-alert[hidden]`,
+   cada uno con su comentario diciendo exactamente esto — y quedaban 75
+   declaraciones de `display` sin guardia.
+
+   La 76ª mordió en producción: el badge de «Saved» del panel de Milpa
+   quedaba visible para siempre, vacío, con `hidden` puesto y
+   `display:flex` computado — un cuadrito verde de 14×6 px afirmando que
+   algo se guardó cuando nada pasó. Lo vio Rod en la pantalla, medido
+   después (greenhouse decisions/0284).
+
+   SIN `!important` Y SIN CAPA, que es la forma que este sistema ya tenía
+   preparada: una regla de autor sin capa le gana a TODO lo que vive en
+   `@layer milpa.*`, sin quitarle al consumidor su propia victoria — un
+   `!important` dentro de la capa le habría cerrado esa puerta.
+
+   Nada necesita legítimamente pintar un elemento con `hidden`: el
+   atributo ES la ausencia. Un componente que quiera animar su salida
+   anima antes de ponerlo, no con él puesto.
+   ════════════════════════════════════════════════════════════════════ */
+[hidden] { display: none; }
+
 @layer milpa.primitives {
 
 /* ---------- base · box model + utilidades compartidas ---------- */
@@ -809,7 +836,6 @@
   transform-origin: top;
   animation: milpa-scale-in var(--dur-fast) var(--ease-grano) both;
 }
-.mui-menu[hidden] { display: none; }         /* al quitar [hidden] la entrada se re-ejecuta */
 
 /* item — <button> o <a>; el estado activo es ARIA, nunca una clase */
 .mui-menu__item {
@@ -1285,7 +1311,6 @@
 /* slot de conteo: compone .mui-badge dentro del tab — el gap lo separa */
 
 .mui-tabs__panel { padding-top: var(--space-5); }
-.mui-tabs__panel[hidden] { display: none; }
 /* panel enfocable (tabindex=0 cuando no tiene contenido focusable) */
 .mui-tabs__panel:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
 
@@ -1368,9 +1393,6 @@
   color: var(--text); background: var(--surface);
   border: var(--border-width) var(--border-style) var(--border); border-radius: var(--radius-md);
 }
-/* guard: el display:flex de arriba pisaría el [hidden] del UA — el
-   contrato descarta con hidden (o removiendo el nodo) y debe funcionar */
-.mui-alert[hidden] { display: none; }
 .mui-alert__icon {
   flex: none; display: inline-flex; align-items: center; justify-content: center;
   inline-size: 1.25em; block-size: 1.25em; line-height: 1;
