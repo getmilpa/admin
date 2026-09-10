@@ -227,6 +227,12 @@ final class AdminPage
             .milpa-admin .admin-section__header .mui-page-header__text{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-3)}
             .milpa-admin .admin-section__header .mui-page-header__title{margin:0}
             .milpa-admin .admin-section__declared{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-muted)}
+            /* The house's package list: one row per milpa package with its resolved version. The
+               sidebar's footer names the two that identify the app and links here for the rest, so
+               this is where the rest has to be legible (decisions/0269). */
+            .milpa-admin .admin-house__packages{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(20rem,1fr));gap:var(--space-1) var(--space-5)}
+            .milpa-admin .admin-house__packages li{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);font-size:var(--text-sm)}
+            .milpa-admin .admin-house__version{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-secondary);font-variant-numeric:tabular-nums}
             .milpa-admin .admin-section__body{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:auto;padding:0 var(--admin-inset) var(--admin-inset)}
             .milpa-admin .admin-section__body:focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:calc(-1 * var(--focus-width))}
             .milpa-admin .admin-section{display:grid;gap:var(--space-4);min-width:0;padding:0}

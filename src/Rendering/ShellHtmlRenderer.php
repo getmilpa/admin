@@ -134,7 +134,7 @@ final class ShellHtmlRenderer implements ComponentRendererInterface
             $out .= '</div>';
         }
 
-        return $out . '</div></nav>';
+        return $out . '</div>' . $this->footer($state, $catalog) . '</nav>';
     }
 
     /**
@@ -202,6 +202,48 @@ final class ShellHtmlRenderer implements ComponentRendererInterface
             . '<div class="mui-sidebar__nest-menu">' . $menu . '</div>'
             . '</details>'
             . '</div>';
+    }
+
+    /**
+     * THE FOOTER: WHAT THIS PANEL IS RUNNING.
+     *
+     * A person looking at a panel could not tell which version of it they were looking at, and «which
+     * admin am I on» is the first question a bug report needs answered. The primitive has always had
+     * the slot; nobody filled it (greenhouse decisions/0269).
+     *
+     * Two rows, not the whole lock: the app's foundation and the panel you are in. The rest is a count
+     * that LINKS to the section that lists every one — the House section already reads every row and
+     * painted only the total, so the «and the rest» has somewhere to go instead of a second list here.
+     * Nothing at all when the lock could not be read, which is the honest empty rather than a footer
+     * that says «unknown».
+     */
+    private function footer(StateSnapshot $state, Catalog $catalog): string
+    {
+        $rows = \is_array($state->meta['versions'] ?? null) ? $state->meta['versions'] : [];
+        if ($rows === []) {
+            return '';
+        }
+        $href = (string) ($state->meta['versionsHref'] ?? '');
+
+        $out = '<div class="mui-sidebar__footer">';
+        foreach ($rows as $row) {
+            if (!\is_array($row)) {
+                continue;
+            }
+            $out .= '<p class="mui-sidebar__version">'
+                . '<span class="mui-sidebar__version-name">' . Html::escape((string) ($row['name'] ?? '')) . '</span>'
+                . '<span class="mui-sidebar__version-value">' . Html::escape((string) ($row['version'] ?? '')) . '</span>'
+                . '</p>';
+        }
+        $rest = (int) ($state->meta['versionsRest'] ?? 0);
+        if ($rest > 0) {
+            $label = $catalog->tr('nav.versions.rest', (string) $rest);
+            $out .= $href === ''
+                ? '<p class="mui-sidebar__version-more">' . Html::escape($label) . '</p>'
+                : '<a class="mui-sidebar__version-more" href="' . Html::escape($href) . '">' . Html::escape($label) . '</a>';
+        }
+
+        return $out . '</div>';
     }
 
     /** A group's heading: the catalog's when it knows the group, the raw name uppercased in its own alphabet when it does not. */
