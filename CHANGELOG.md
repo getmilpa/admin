@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.24.0](https://github.com/getmilpa/admin/compare/v0.23.0...v0.24.0) (2026-09-10)
+
+
+### Features
+
+* **section:** a section can belong under another, reached through its parent's gear ([#79](https://github.com/getmilpa/admin/issues/79)) ([18f0148](https://github.com/getmilpa/admin/commit/18f014830f1f28a7ed2c9be937ed06493fc587a0))
+
 ## [0.23.0](https://github.com/getmilpa/admin/compare/v0.22.0...v0.23.0) (2026-09-10)
 
 
