@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.27.1](https://github.com/getmilpa/admin/compare/v0.27.0...v0.27.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* the panel's Install button has a judge, or says it has none ([#91](https://github.com/getmilpa/admin/issues/91)) ([64cf8aa](https://github.com/getmilpa/admin/commit/64cf8aa272b2af44ed1e36c345cc1a6fc27852e9))
+
 ## [0.27.0](https://github.com/getmilpa/admin/compare/v0.26.1...v0.27.0) (2026-09-10)
 
 
