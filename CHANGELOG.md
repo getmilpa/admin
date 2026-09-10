@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.27.0](https://github.com/getmilpa/admin/compare/v0.26.1...v0.27.0) (2026-09-10)
+
+
+### Features
+
+* the panel declares its own icon so nothing guesses at the root ([#89](https://github.com/getmilpa/admin/issues/89)) ([484dd0c](https://github.com/getmilpa/admin/commit/484dd0cb10da1af1faf7aca296167fafda91fe47))
+
 ## [0.26.1](https://github.com/getmilpa/admin/compare/v0.26.0...v0.26.1) (2026-09-10)
 
 
