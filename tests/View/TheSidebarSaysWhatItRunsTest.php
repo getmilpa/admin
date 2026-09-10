@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Tests\View;
 
+use Milpa\Admin\Data\FrameworkStamp;
 use Milpa\Admin\Data\InstalledPackages;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\SectionCatalogue;
@@ -50,14 +51,30 @@ final class TheSidebarSaysWhatItRunsTest extends TestCase
     protected function tearDown(): void
     {
         @unlink($this->root . '/composer.lock');
+        @unlink($this->root . '/' . FrameworkStamp::PATH);
+        @rmdir($this->root . '/.milpa');
         @rmdir($this->root);
+    }
+
+    /**
+     * Writes the birth record the skeleton stamps at create-project time.
+     *
+     * The framework's version does NOT come from `composer.lock` and cannot: it is a skeleton, so
+     * `create-project` copies its files and the package is gone. This fixture used to fake a lock row
+     * for it, which is why the footer's own test was green while no real app ever showed the row
+     * (greenhouse decisions/0291).
+     */
+    private function stampFramework(string $version): void
+    {
+        @mkdir($this->root . '/.milpa', 0o777, true);
+        file_put_contents($this->root . '/' . FrameworkStamp::PATH, (string) json_encode(['version' => $version]));
     }
 
     /** The two rows that identify the app, the rest as a count, and a link to where the rest lives. */
     public function testTheFooterNamesTheFoundationTheRuntimeAndThePanelAndCountsTheRest(): void
     {
+        $this->stampFramework('0.48.0');
         $this->lock([
-            ['name' => 'milpa/framework', 'version' => 'v0.46.0'],
             ['name' => 'milpa/app-runtime', 'version' => 'v0.149.0'],
             ['name' => 'milpa/admin', 'version' => 'v0.24.0'],
             ['name' => 'milpa/live', 'version' => 'v0.25.0'],
@@ -67,21 +84,47 @@ final class TheSidebarSaysWhatItRunsTest extends TestCase
         $nav = self::sidebar($this->render());
 
         self::assertStringContainsString('mui-sidebar__footer', $nav);
-        self::assertStringContainsString('>milpa/framework</span><span class="mui-sidebar__version-value">v0.46.0<', $nav);
+        self::assertStringContainsString('>milpa/framework</span><span class="mui-sidebar__version-value">0.48.0<', $nav, 'read from the birth record, which is the only place that knows');
         self::assertStringContainsString('>milpa/admin</span><span class="mui-sidebar__version-value">v0.24.0<', $nav);
         self::assertStringContainsString('>milpa/app-runtime</span><span class="mui-sidebar__version-value">v0.149.0<', $nav);
-        self::assertStringContainsString('+1 more milpa packages', $nav, 'the rest is a count — psr/log is not milpa\'s to report');
+        self::assertStringContainsString('+1 more milpa packages', $nav, 'the rest is a count — psr/log is not milpa\'s to report, and the framework is not IN the lock to be counted');
         self::assertStringContainsString('href="/milpa/admin/s/house"', $nav, 'and it links to the section that lists every one');
     }
 
     /**
-     * 🚨 A PACKAGE THE LOCK DOES NOT CARRY IS DROPPED, NOT DASHED, and `milpa/framework` is the case
-     * that made it matter.
+     * THE COUNT IS OFF THE LOCK, and this is the assertion that caught it being off by one.
+     *
+     * «+N more» has always meant «lock rows this footer did not name». It was computed as
+     * `count(rows) - count(named)`, which is the same number only while every named row came FROM the
+     * lock. The moment `milpa/framework` started coming from the birth record instead, that
+     * subtraction counted one package too few — a name in `named` that was never in `rows`
+     * (greenhouse decisions/0291).
+     */
+    public function testTheCountIsOfLockRowsNotOfWhatWasNamed(): void
+    {
+        $this->stampFramework('0.48.0');
+        $this->lock([
+            ['name' => 'milpa/admin', 'version' => 'v0.27.0'],
+            ['name' => 'milpa/live', 'version' => 'v0.25.0'],
+            ['name' => 'milpa/core', 'version' => 'v0.12.0'],
+            ['name' => 'psr/log', 'version' => 'v3.0.0'],
+        ]);
+
+        $nav = self::sidebar($this->render());
+
+        self::assertStringContainsString('>milpa/framework</span>', $nav, 'named from the record, and not counted as a lock row');
+        self::assertStringContainsString('+2 more milpa packages', $nav, 'live and core — the framework is not in the lock to be one of them, and admin was named');
+    }
+
+    /**
+     * 🚨 A VERSION NOTHING CAN ANSWER IS DROPPED, NOT DASHED — and the framework is still that case
+     * for a house created before the stamp existed.
      *
      * Measured on a fresh `composer create-project milpa/framework` app: the framework is the ROOT
-     * package, so its files ARE the app's files and the lock does not carry its version at all. A
-     * founded app cannot say which framework version founded it — a real gap, and a footer that
-     * printed a dash there would answer it with a lie.
+     * package, so its files ARE the app's files and the lock does not carry its version at all. That
+     * gap is now closed by `.milpa/framework.json`, which the skeleton (>=0.48) ships and stamps — but
+     * a tree with no such file cannot know, and a guessed version is worse than a missing one: it is
+     * the first thing a bug report quotes.
      *
      * An app served by something other than `milpa/framework` is a real case — this very test suite is
      * one. A footer claiming a version the app does not have is worse than a footer with one row.

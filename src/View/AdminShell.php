@@ -22,6 +22,7 @@ use Milpa\Live\Support\DesignTokens;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Runtime\Kernel;
+use Milpa\Admin\Data\FrameworkStamp;
 use Milpa\Admin\Data\InstalledPackages;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\DeclaredView;
@@ -559,15 +560,31 @@ final class AdminShell
      *
      * A package the lock does not carry is dropped, not dashed: an app served by something other than
      * `milpa/framework` is a real case, and a footer claiming a version it does not have is worse than
-     * a footer with one row.
+     * a footer with one row. `milpa/framework` itself is never IN the lock — see the loop below, and
+     * {@see FrameworkStamp}, which is where its version actually comes from.
      *
      * @return array{versions: list<array{name: string, version: string}>, versionsRest: int, versionsHref: string}
      */
     private function versions(): array
     {
-        $rows = InstalledPackages::rows($this->root());
+        $root = $this->root();
+        $rows = InstalledPackages::rows($root);
         $named = [];
         foreach (self::FOOTER_PACKAGES as $name) {
+            // 🚨 `milpa/framework` IS NOT IN THE LOCK AND NEVER WAS. It is a skeleton: `create-project`
+            // copies its files and the package is gone. This loop resolved every footer name against the
+            // lock, so the row this list puts FIRST — the one the docblock above calls «what the app was
+            // founded on» — was dropped every time by the clause written for a missing package, and the
+            // footer showed the next two names down instead. Rod asked where the framework version was;
+            // it had never been there (greenhouse decisions/0291).
+            if ($name === 'milpa/framework') {
+                $version = FrameworkStamp::version($root);
+                if ($version !== null) {
+                    $named[] = ['name' => $name, 'version' => $version];
+                }
+
+                continue;
+            }
             foreach ($rows as $row) {
                 if ($row['name'] === $name) {
                     $named[] = $row;
@@ -577,9 +594,21 @@ final class AdminShell
             }
         }
 
+        // THE REST IS COUNTED OFF THE LOCK, not off what was named. `count($rows) - count($named)` was
+        // right while every named row came FROM the lock; the moment `milpa/framework` started coming
+        // from the birth record instead, that subtraction counted one package too few — a name in
+        // `$named` that was never in `$rows`. So the rest is «lock rows this footer did not name»,
+        // which is what «+N more» has always meant (greenhouse decisions/0291).
+        $rest = 0;
+        foreach ($rows as $row) {
+            if (!\in_array($row['name'], self::FOOTER_PACKAGES, true)) {
+                ++$rest;
+            }
+        }
+
         return [
             'versions' => $named,
-            'versionsRest' => max(0, \count($rows) - \count($named)),
+            'versionsRest' => $rest,
             'versionsHref' => $this->settings->sectionUrl('house'),
         ];
     }
