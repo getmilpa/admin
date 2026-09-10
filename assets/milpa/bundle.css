@@ -1682,15 +1682,20 @@
   letter-spacing: var(--tracking-tight);
   color: var(--text); text-decoration: none;
 }
+.mui-sidebar__brand:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+
 /* THE WORDMARK IS A VECTOR NOW, AND A VECTOR HAS AN INTRINSIC SIZE. The `<img>` replaced a `<span>`
    whose look was font, so nothing here constrained it and the mark painted at 2407x900 — across the
    whole page, over everything. The width/height attributes stay: they give the aspect ratio and stop
-   the layout jumping while it loads. The SIZE is decided here. */
+   the layout jumping while it loads. The SIZE is decided here.
+
+   This rule LIVED ONLY IN A CONSUMER'S VENDORED BUNDLE until now: it was written where the bug was
+   seen, `milpa/admin`'s copy, and never came back to the primitive. So every other consumer of this
+   stylesheet still had the bug, and the next bundle refresh would have silently un-fixed the one
+   consumer that did not (greenhouse decisions/0268). */
 .mui-sidebar__brand img.mui-sidebar__wordmark {
   height: var(--space-5); width: auto; max-width: 100%; display: block;
 }
-
-.mui-sidebar__brand:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
 
 .mui-sidebar__nav {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -1747,6 +1752,57 @@
 }
 /* badge — compone .mui-badge (contrato pendiente, HANDOFF), empujado al final */
 .mui-sidebar__item-badge { margin-inline-start: auto; }
+
+/* ---------- nest · an item that owns sub-items ----------
+   The gear is positioned INTO the row and the menu stays in flow. The nav scrolls
+   (overflow-y: auto above), so an absolutely positioned menu would be clipped —
+   measured, not assumed. Only the small toggle is positioned; the list never is. */
+.mui-sidebar__nest { position: relative; }
+.mui-sidebar__nest > .mui-sidebar__item { padding-inline-end: 2.25rem; }
+
+.mui-sidebar__more { display: block; }
+.mui-sidebar__more > summary {
+  position: absolute; inset-inline-end: var(--space-1); top: var(--space-1);
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem;
+  border-radius: var(--radius-base);
+  color: var(--text-muted); cursor: pointer;
+  list-style: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    color            var(--dur-fast) var(--ease-standard);
+}
+/* the UA's disclosure triangle, in both engines that draw one */
+.mui-sidebar__more > summary::-webkit-details-marker { display: none; }
+.mui-sidebar__more > summary::marker { content: ""; }
+.mui-sidebar__more > summary:hover { color: var(--text); background: var(--bg); }
+.mui-sidebar__more > summary:focus-visible {
+  outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset);
+}
+.mui-sidebar__more[open] > summary { color: var(--accent-text); background: var(--accent-subtle); }
+
+/* the sub-items, indented to the item's icon column (space-3 padding + 1.25rem icon + space-3 gap) */
+.mui-sidebar__nest-menu {
+  display: flex; flex-direction: column;
+  padding-inline-start: calc(var(--space-3) + 1.25rem + var(--space-3));
+}
+.mui-sidebar__subitem {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-body); font-size: var(--text-xs);
+  color: var(--text-muted); text-decoration: none;
+  border-radius: var(--radius-base);
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    color            var(--dur-fast) var(--ease-standard);
+}
+.mui-sidebar__subitem:hover { color: var(--text); background: var(--bg); }
+.mui-sidebar__subitem:focus-visible {
+  outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset);
+}
+.mui-sidebar__subitem[aria-current="page"] {
+  color: var(--accent-text); font-weight: var(--weight-medium);
+}
 
 /* footer — slot para user-card mini */
 .mui-sidebar__footer {

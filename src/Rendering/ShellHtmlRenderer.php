@@ -43,6 +43,15 @@ use Milpa\Live\ValueObjects\StateSnapshot;
  */
 final class ShellHtmlRenderer implements ComponentRendererInterface
 {
+    /**
+     * The gear a nested item's toggle shows.
+     *
+     * A character and not an icon font or an inline SVG, for the reason the section glyphs already
+     * gave: the panel paints with no build step and no asset the design bundle does not already
+     * carry. It is decorative — the accessible name comes from the catalog, on the summary.
+     */
+    private const string GEAR = '⚙';
+
     public function __construct(private readonly StateTransferCodecInterface $codec)
     {
     }
@@ -120,21 +129,79 @@ final class ShellHtmlRenderer implements ComponentRendererInterface
                 if (!\is_array($item)) {
                     continue;
                 }
-                $out .= \sprintf(
-                    '<a %s><span class="mui-sidebar__item-icon" aria-hidden="true">%s</span><span class="mui-sidebar__item-label">%s</span></a>',
-                    Html::attrs([
-                        'class' => 'mui-sidebar__item',
-                        'href' => (string) ($item['href'] ?? '#'),
-                        'aria-current' => (string) ($item['key'] ?? '') === $active ? 'page' : null,
-                    ]),
-                    Html::escape((string) ($item['icon'] ?? '')),
-                    Html::escape((string) ($item['label'] ?? $item['key'] ?? '')),
-                );
+                $out .= $this->navItem($item, $active, $catalog);
             }
             $out .= '</div>';
         }
 
         return $out . '</div></nav>';
+    }
+
+    /**
+     * One sidebar item, and its gear when sections were declared under it.
+     *
+     * The children are a DISCLOSURE and not a popover, because the nav they live in scrolls: an
+     * absolutely positioned menu would be clipped by that `overflow-y: auto`, measured on the
+     * primitive's own stylesheet. So only the small toggle is positioned into the row and the list
+     * stays in flow (greenhouse decisions/0268).
+     *
+     * It is `<details>`, so there is NO JavaScript: the disclosure state is the browser's. That is
+     * also why the toggle is not an Alpine component — a dynamic `x-data` per instance double-initialises
+     * (greenhouse decisions/0191), and a disclosure does not need a framework to open.
+     *
+     * The item's own link stays a SIBLING of the summary rather than a child of it: nesting a link
+     * inside the toggle makes one click ambiguous, and the person who wanted the section would be
+     * opening its settings instead.
+     *
+     * @param array<string, mixed> $item
+     */
+    private function navItem(array $item, string $active, Catalog $catalog): string
+    {
+        $children = \is_array($item['children'] ?? null) ? $item['children'] : [];
+        $link = \sprintf(
+            '<a %s><span class="mui-sidebar__item-icon" aria-hidden="true">%s</span><span class="mui-sidebar__item-label">%s</span></a>',
+            Html::attrs([
+                'class' => 'mui-sidebar__item',
+                'href' => (string) ($item['href'] ?? '#'),
+                'aria-current' => (string) ($item['key'] ?? '') === $active ? 'page' : null,
+            ]),
+            Html::escape((string) ($item['icon'] ?? '')),
+            Html::escape((string) ($item['label'] ?? $item['key'] ?? '')),
+        );
+        if ($children === []) {
+            return $link;
+        }
+
+        $menu = '';
+        $holdsActive = false;
+        foreach ($children as $child) {
+            if (!\is_array($child)) {
+                continue;
+            }
+            $current = (string) ($child['key'] ?? '') === $active;
+            $holdsActive = $holdsActive || $current;
+            $menu .= \sprintf(
+                '<a %s><span class="mui-sidebar__item-icon" aria-hidden="true">%s</span><span class="mui-sidebar__item-label">%s</span></a>',
+                Html::attrs([
+                    'class' => 'mui-sidebar__subitem',
+                    'href' => (string) ($child['href'] ?? '#'),
+                    'aria-current' => $current ? 'page' : null,
+                ]),
+                Html::escape((string) ($child['icon'] ?? '')),
+                Html::escape((string) ($child['label'] ?? $child['key'] ?? '')),
+            );
+        }
+        // OPEN WHEN THE PERSON IS ALREADY INSIDE IT. A collapsed gear hiding the page you are looking
+        // at answers «where am I» with nothing.
+        $label = $catalog->tr('nav.gear');
+
+        return '<div class="mui-sidebar__nest">'
+            . $link
+            . '<details ' . Html::attrs(['class' => 'mui-sidebar__more', 'open' => $holdsActive ? 'open' : null]) . '>'
+            . '<summary ' . Html::attrs(['title' => $label, 'aria-label' => $label]) . '>' . self::GEAR . '</summary>'
+            . '<div class="mui-sidebar__nest-menu">' . $menu . '</div>'
+            . '</details>'
+            . '</div>';
     }
 
     /** A group's heading: the catalog's when it knows the group, the raw name uppercased in its own alphabet when it does not. */

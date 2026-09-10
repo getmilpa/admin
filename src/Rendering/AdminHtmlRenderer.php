@@ -193,7 +193,14 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
 
         // ── THE NEXT MOVE ───────────────────────────────────────────────────────────────────────
         $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.next')) . '</h3>';
-        $out[] = $this->notice($this->houseNextMove($foundation, $installed, $source), 'info');
+        [$says, $command] = $this->houseNextMove($foundation, $installed, $source);
+        $out[] = $this->notice($says, 'info');
+        // The command on its own line, as a `<code>`, exactly as the capability rows do it. A next
+        // move that is a governed operation says the operation — never «edit this file»
+        // (greenhouse decisions/0266).
+        if ($command !== '') {
+            $out[] = '<p><code class="admin-house__command">' . Html::escape($command) . '</code></p>';
+        }
 
         // ── STANDING ────────────────────────────────────────────────────────────────────────────
         // Last, and quietly: it is the only block a person does not need in order to act.
@@ -291,21 +298,25 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
      *
      * @param array<string, mixed>       $foundation
      * @param list<array<string, mixed>> $installed
+     *
+     * @return array{0: string, 1: string} what it says, and the command that does it — '' when there is none
      */
-    private function houseNextMove(array $foundation, array $installed, string $source): string
+    private function houseNextMove(array $foundation, array $installed, string $source): array
     {
         if (($foundation['declared'] ?? false) !== true || !\is_string($foundation['domain'] ?? null)) {
-            return $this->catalog->tr('house.next.found');
+            return [$this->catalog->tr('house.next.found'), $this->catalog->tr('house.next.found.command')];
         }
         if (str_contains($source, 'offline floor')) {
-            return $this->catalog->tr('house.next.refresh');
+            return [$this->catalog->tr('house.next.refresh'), 'coa capabilities:refresh'];
         }
         $ids = array_map(static fn (array $row): string => \is_string($row['id'] ?? null) ? $row['id'] : '', $installed);
         if (!\in_array('agent', $ids, true)) {
-            return $this->catalog->tr('house.next.agent');
+            return [$this->catalog->tr('house.next.agent'), 'coa capabilities:enable milpa/agent --sign'];
         }
 
-        return $this->catalog->tr('house.next.equipped');
+        // AND NOTHING TO RUN. The equipped case carries no command on purpose: a screen that always
+        // has one is a screen whose commands are noise.
+        return [$this->catalog->tr('house.next.equipped'), ''];
     }
 
     /**

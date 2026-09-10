@@ -92,6 +92,15 @@ final readonly class AdminSection
      * @param DeclaredView|null                 $view       the whole tree the section declares instead of one component
      *                                                      (greenhouse decisions/0211); with it, `$component`, `$props`,
      *                                                      `$definition` and `$renderer` stay empty — the view carries them
+     * @param string                            $parent     the id of the section this one belongs UNDER, optional. A child
+     *                                                      stays out of the main navigation and is reached through its
+     *                                                      parent's gear; it routes at `{route}/s/{id}` like any other,
+     *                                                      keeps the same middleware, and can never be the panel's front
+     *                                                      page. One level only: a child of a child is refused, because a
+     *                                                      gear that opens a gear is a menu nobody asked for. A parent id
+     *                                                      nobody declared leaves the section a ROOT rather than hiding
+     *                                                      it — uninstalling one plugin must not make another's section
+     *                                                      unreachable (greenhouse decisions/0268)
      */
     public function __construct(
         public string $id,
@@ -104,9 +113,18 @@ final readonly class AdminSection
         public ?ComponentRendererInterface $renderer = null,
         public string $icon = '',
         public ?DeclaredView $view = null,
+        public string $parent = '',
     ) {
         if (preg_match(self::ID_PATTERN, $id) !== 1) {
             throw new \InvalidArgumentException(\sprintf('Admin section id «%s» must match %s.', $id, self::ID_PATTERN));
+        }
+        if ($parent !== '') {
+            if (preg_match(self::ID_PATTERN, $parent) !== 1) {
+                throw new \InvalidArgumentException(\sprintf('Admin section «%s» names the parent «%s», which is not a section id (%s).', $id, $parent, self::ID_PATTERN));
+            }
+            if ($parent === $id) {
+                throw new \InvalidArgumentException(\sprintf('Admin section «%s» declares itself as its own parent.', $id));
+            }
         }
         if ($view !== null) {
             if (trim($component) !== '' || $definition !== null || $renderer !== null) {
@@ -145,14 +163,18 @@ final readonly class AdminSection
      * A section that declares a whole {@see DeclaredView} — the shape a plugin brings its own UI in
      * (greenhouse decisions/0211). The same as the constructor with `view:`, said in one line.
      *
-     * @param string $title a catalog key the panel knows, or the literal title
-     * @param int    $order sidebar position within the group; the panel's own take 10..40
-     * @param string $group {@see self::GROUP_ADMIN}, {@see self::GROUP_APP}, {@see self::GROUP_AGENT}, or any name
-     * @param string $icon  a glyph for the sidebar item, optional
+     * @param string $title  a catalog key the panel knows, or the literal title
+     * @param int    $order  sidebar position within the group; the panel's own take 10..40
+     * @param string $group  {@see self::GROUP_ADMIN}, {@see self::GROUP_APP}, {@see self::GROUP_AGENT}, or any name
+     * @param string $icon   a glyph for the sidebar item, optional
+     * @param string $parent the id of the section this one belongs under — out of the main navigation,
+     *                       behind that section's gear, same URL and same gate. A factory that could not
+     *                       say this would make nesting a privilege of the constructor, and every guest
+     *                       that brings a view uses the factory (greenhouse decisions/0268)
      */
-    public static function ofView(string $id, string $title, DeclaredView $view, int $order = 0, string $group = self::GROUP_APP, string $icon = ''): self
+    public static function ofView(string $id, string $title, DeclaredView $view, int $order = 0, string $group = self::GROUP_APP, string $icon = '', string $parent = ''): self
     {
-        return new self(id: $id, title: $title, order: $order, group: $group, icon: $icon, view: $view);
+        return new self(id: $id, title: $title, order: $order, group: $group, icon: $icon, view: $view, parent: $parent);
     }
 
     /** True when the section brings its own component instead of naming a registered one. */
