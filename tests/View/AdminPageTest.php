@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Tests\View;
 
+use Milpa\Live\Support\DesignTokens;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\View\AdminPage;
@@ -220,5 +221,25 @@ final class AdminPageTest extends TestCase
         self::assertStringContainsString('&lt;x&gt;', $html);
         self::assertStringContainsString('href="/milpa/admin"', $html);
         self::assertStringContainsString('<title>404 · Milpa Admin</title>', $html);
+    }
+
+    /**
+     * THE DOCUMENT DECLARES ITS ICON, which is what stops a browser guessing at the origin root.
+     *
+     * 🚨 IT DECLARED NONE, so every load asked for `/favicon.ico` and got a 404 — measured on a
+     * rendered panel. And that root belongs to no plugin: no route this package could add would have
+     * answered it. What answers it is the document saying which icon it has
+     * (greenhouse decisions/0286).
+     *
+     * The tag is `milpa/live-web`'s and the HREF is this panel's — served from its own asset route so
+     * it caches like every other asset here, rather than riding inline on every page.
+     */
+    public function testTheDocumentDeclaresItsIconSoNothingGuessesAtTheRoot(): void
+    {
+        $html = (new AdminPage(new AdminSettings(route: '/panel'), new Catalog()))->render('<div id="shell"></div>', 'Rutas');
+
+        self::assertStringContainsString('<link rel="icon" type="image/svg+xml"', $html);
+        self::assertStringContainsString(DesignTokens::APP_ICON, $html, 'and it is the mark this family ships, not a guess');
+        self::assertMatchesRegularExpression('#href="[^"]*/assets/' . preg_quote(DesignTokens::APP_ICON, '#') . '"#', $html, 'served from this panel\'s own asset route');
     }
 }

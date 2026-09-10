@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\View;
 
+use Milpa\Live\Support\DesignTokens;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Live\Http\LiveBoot;
@@ -80,6 +81,15 @@ final class AdminPage
             . '<meta charset="utf-8">' . "\n"
             . '<meta name="viewport" content="width=device-width, initial-scale=1">' . "\n"
             . '<title>' . self::e($documentTitle) . '</title>' . "\n"
+            // 🚨 THE PAGE DECLARES ITS ICON, and until now it declared none — so every load asked for
+            // `/favicon.ico` at the ORIGIN ROOT and got a 404, measured on a rendered panel. That root
+            // belongs to no plugin, so no plugin could have fixed it with a route: what fixes it is the
+            // document saying which icon it has (greenhouse decisions/0286).
+            //
+            // The tag is `milpa/live-web`'s, like the wordmark: five pages needed one, and five copies
+            // of a `<link>` is the duplication that was waiting to happen. The href is OURS — served
+            // from this panel's own asset route, with this panel's cache policy.
+            . DesignTokens::iconLink($this->settings->assetUrl(DesignTokens::APP_ICON)) . "\n"
             // The panel's stylesheet goes BEFORE the design bundle: its `admin.base` layer is declared first,
             // so it sits under every `milpa.*` layer the bundle declares — the bundle's pieces win over it.
             . '<style>' . "\n" . self::css() . '</style>' . "\n"

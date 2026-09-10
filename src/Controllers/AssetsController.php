@@ -58,7 +58,7 @@ final class AssetsController
         // from type, the grain floats between letters and the `i` keeps its own dot, so the mark reads
         // with two. `milpa/live-web` ships the vector; serving it is what lets the panel obey the rule
         // instead of approximating it (greenhouse decisions/0249).
-        if (\in_array($name, [DesignTokens::WORDMARK, DesignTokens::WORDMARK_LIGHT], true)) {
+        if (\in_array($name, [DesignTokens::WORDMARK, DesignTokens::WORDMARK_LIGHT, DesignTokens::APP_ICON], true)) {
             $path = DesignTokens::path($name);
 
             return $path === null ? $this->missing() : $this->read($path, DesignTokens::contentType($name));
