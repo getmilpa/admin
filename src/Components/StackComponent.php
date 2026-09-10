@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Components;
 
-use Milpa\Admin\Data\StackSource;
+use Milpa\Runtime\Stack\StackReader;
 use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
 use Milpa\Live\ValueObjects\ComponentContext;
 use Milpa\Live\ValueObjects\ComponentContract;
@@ -35,7 +35,7 @@ final class StackComponent implements ComponentDefinitionInterface
 {
     public const NAME = 'admin-stack';
 
-    public function __construct(private readonly StackSource $source)
+    public function __construct(private readonly StackReader $source)
     {
     }
 

@@ -23,9 +23,9 @@ use Milpa\Admin\Components\SettingsComponent;
 use Milpa\Admin\Components\StackComponent;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Data\DevToolsSource;
-use Milpa\Admin\Data\StackSource;
+use Milpa\Runtime\Stack\StackReader;
 use Milpa\Admin\I18n\Catalog;
-use Milpa\Admin\Stack\ResolvedEnv;
+use Milpa\Runtime\Stack\ResolvedEnv;
 use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
 use Milpa\Live\Contracts\Rendering\ComponentRendererInterface;
 use Milpa\Live\Contracts\Transport\StateTransferCodecInterface;
@@ -857,10 +857,10 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $badge = match ($state) {
             'up' => 'mui-badge mui-badge--success',
             'down' => 'mui-badge mui-badge--warning',
-            StackSource::CONFLICT => 'mui-badge mui-badge--danger',
+            StackReader::CONFLICT => 'mui-badge mui-badge--danger',
             default => 'mui-badge',
         };
-        $stateKey = \in_array($state, ['up', 'down', StackSource::CONFLICT], true) ? 'stack.state.' . $state : 'stack.state.unknown';
+        $stateKey = \in_array($state, ['up', 'down', StackReader::CONFLICT], true) ? 'stack.state.' . $state : 'stack.state.unknown';
         $probePort = $row['probePort'] ?? null;
         $probe = \is_int($probePort)
             ? $this->catalog->tr('stack.probe', (string) ($row['probeHost'] ?? ''), (string) $probePort)
@@ -873,7 +873,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             . ' <span class="' . $badge . '">' . Html::escape($this->catalog->tr($stateKey)) . '</span>'
             . ' <small class="admin-stack__probe">' . Html::escape($probe) . '</small>');
         $out[] = '<div class="mui-card__body admin-panel__body">';
-        if ($state === StackSource::CONFLICT) {
+        if ($state === StackReader::CONFLICT) {
             $others = \is_array($row['conflictsWith'] ?? null) ? array_values(array_filter($row['conflictsWith'], 'is_string')) : [];
             $out[] = $this->notice($this->catalog->tr('stack.conflict', $name, $this->join($others)), 'danger');
         }

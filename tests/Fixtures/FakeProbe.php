@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Tests\Fixtures;
 
-use Milpa\Admin\Stack\ReachabilityProbe;
+use Milpa\Runtime\Stack\ReachabilityProbe;
 
 /**
  * A probe that answers from a list of open ports, records what it was asked, and reports a host of its

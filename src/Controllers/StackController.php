@@ -14,9 +14,9 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Controllers;
 
-use Milpa\Admin\Data\StackSource;
+use Milpa\Runtime\Stack\StackReader;
 use Milpa\Admin\I18n\Catalog;
-use Milpa\Admin\Stack\ComposeProjection;
+use Milpa\Runtime\Stack\ComposeProjection;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -24,16 +24,16 @@ use Psr\Http\Message\ServerRequestInterface;
 /**
  * Serves the compose file of every service the booted plugins declared — readable by a human and by the agent.
  *
- * The same discovery the Stack section reads ({@see StackSource::declarations()}), projected whole by
+ * The same discovery the Stack section reads ({@see StackReader::declarations()}), projected whole by
  * {@see ComposeProjection}. Secrets come out as `${NAME}`; the operator supplies them. Nothing is cached:
  * the file is the declarations as they are on this request. When two plugins declare the same service
  * name there is no file to serve — compose keys services by name and one would silently overwrite the
- * other — so the answer is a 409 that names the collision instead ({@see StackSource::conflicts()}).
+ * other — so the answer is a 409 that names the collision instead ({@see StackReader::conflicts()}).
  */
 final class StackController
 {
     public function __construct(
-        private readonly StackSource $source,
+        private readonly StackReader $source,
         private readonly ComposeProjection $projection,
         private readonly Catalog $catalog,
     ) {

@@ -15,8 +15,8 @@ declare(strict_types=1);
 namespace Milpa\Admin\Tests\Data;
 
 use Milpa\Admin\AdminPlugin;
-use Milpa\Admin\Data\StackSource;
-use Milpa\Admin\Stack\ComposeProjection;
+use Milpa\Runtime\Stack\StackReader;
+use Milpa\Runtime\Stack\ComposeProjection;
 use Milpa\Admin\Tests\Fixtures\DeclaringProvider;
 use Milpa\Admin\Tests\Fixtures\FakeProbe;
 use Milpa\Admin\Tests\Fixtures\HubPlugin;
@@ -29,7 +29,7 @@ use Milpa\Runtime\Stack\PortMapping;
 use Milpa\Runtime\Stack\ServiceDeclaration;
 use PHPUnit\Framework\TestCase;
 
-final class StackSourceTest extends TestCase
+final class StackReaderTest extends TestCase
 {
     public function testTheProbeDecidesUpAndDownAndAServiceWithoutAHostPortIsUnknown(): void
     {
@@ -40,7 +40,7 @@ final class StackSourceTest extends TestCase
             new ServiceDeclaration(name: 'health', image: 'h', ports: [new PortMapping(container: 80, host: 8080)], healthPort: 9090),
         ]);
         $probe = new FakeProbe([3000, 9090]);
-        $source = new StackSource(new DIContainer(), $probe, new ComposeProjection(), $provider);
+        $source = new StackReader(new DIContainer(), $probe, new ComposeProjection(), $provider);
 
         $snapshot = $source->snapshot();
 
@@ -68,7 +68,7 @@ final class StackSourceTest extends TestCase
         $container = new DIContainer();
         $container->registerService(Config::class, new Config(['hub' => ['key' => 'config-secret', 'public_url' => 'http://localhost:3000']]));
 
-        $snapshot = (new StackSource($container, new FakeProbe(), new ComposeProjection(), new HubPlugin($container)))->snapshot();
+        $snapshot = (new StackReader($container, new FakeProbe(), new ComposeProjection(), new HubPlugin($container)))->snapshot();
 
         $encoded = json_encode($snapshot, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
         self::assertStringNotContainsString('config-secret', $encoded, 'the config value a secret points at never leaves the app');
@@ -85,7 +85,7 @@ final class StackSourceTest extends TestCase
     {
         $container = new DIContainer();
 
-        $source = new StackSource($container, new FakeProbe(), new ComposeProjection(), new HubPlugin($container));
+        $source = new StackReader($container, new FakeProbe(), new ComposeProjection(), new HubPlugin($container));
         $snapshot = $source->snapshot();
 
         self::assertFalse($source->config()?->has('hub.public_url') ?? false, 'no app config holds the key');
@@ -107,16 +107,16 @@ final class StackSourceTest extends TestCase
         $probe = new FakeProbe();
         $projection = new ComposeProjection();
 
-        $nothing = new StackSource($container, $probe, $projection);
+        $nothing = new StackReader($container, $probe, $projection);
         self::assertFalse($nothing->snapshot()['kernel']);
         self::assertSame([], $nothing->snapshot()['services']);
         self::assertSame([], $nothing->declarations());
         self::assertSame([], $nothing->conflicts());
 
-        $notAProvider = new StackSource($container, $probe, $projection, new AdminPlugin($container));
+        $notAProvider = new StackReader($container, $probe, $projection, new AdminPlugin($container));
         self::assertSame([], $notAProvider->declarations(), 'the panel itself declares no service');
 
-        $liar = new StackSource($container, $probe, $projection, new DeclaringProvider(['garbage', new ServiceDeclaration(name: 'real', image: 'r'), 42]));
+        $liar = new StackReader($container, $probe, $projection, new DeclaringProvider(['garbage', new ServiceDeclaration(name: 'real', image: 'r'), 42]));
         $declarations = $liar->declarations();
         self::assertCount(1, $declarations, 'entries that are not declarations are dropped, not trusted');
         self::assertSame('real', $declarations[0]->name);
@@ -133,7 +133,7 @@ final class StackSourceTest extends TestCase
         ]);
         $container->registerService(Kernel::class, $kernel);
 
-        $source = new StackSource($container, new FakeProbe([HubPlugin::HOST_PORT]), new ComposeProjection());
+        $source = new StackReader($container, new FakeProbe([HubPlugin::HOST_PORT]), new ComposeProjection());
         $snapshot = $source->snapshot();
 
         self::assertTrue($snapshot['kernel']);
@@ -163,7 +163,7 @@ final class StackSourceTest extends TestCase
         $container->registerService(Kernel::class, $kernel);
         $probe = new FakeProbe([HubPlugin::HOST_PORT, RivalHubPlugin::HOST_PORT]);
 
-        $source = new StackSource($container, $probe, new ComposeProjection());
+        $source = new StackReader($container, $probe, new ComposeProjection());
         $snapshot = $source->snapshot();
 
         self::assertCount(2, $snapshot['services'], 'a collision drops nothing');
@@ -186,7 +186,7 @@ final class StackSourceTest extends TestCase
         ]);
         $probe = new FakeProbe([8080]);
 
-        $source = new StackSource(new DIContainer(), $probe, new ComposeProjection(), $provider);
+        $source = new StackReader(new DIContainer(), $probe, new ComposeProjection(), $provider);
         $snapshot = $source->snapshot();
 
         $states = array_map(static fn (array $row): array => [$row['name'], $row['state'], $row['conflictsWith']], $snapshot['services']);
