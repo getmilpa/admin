@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.23.0](https://github.com/getmilpa/admin/compare/v0.22.0...v0.23.0) (2026-09-10)
+
+
+### Features
+
+* the panel opens on the house, not on a table of class names ([#77](https://github.com/getmilpa/admin/issues/77)) ([a255ec2](https://github.com/getmilpa/admin/commit/a255ec279ce0890c44ff2b65a4b64b7d39d9d911))
+
 ## [0.22.0](https://github.com/getmilpa/admin/compare/v0.21.0...v0.22.0) (2026-09-09)
 
 
