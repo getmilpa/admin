@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Tests\View;
 
-use Milpa\Admin\Data\FrameworkStamp;
+use Milpa\Admin\Data\FrameworkFacts;
 use Milpa\Admin\Data\InstalledPackages;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Section\SectionCatalogue;
@@ -51,7 +51,7 @@ final class TheSidebarSaysWhatItRunsTest extends TestCase
     protected function tearDown(): void
     {
         @unlink($this->root . '/composer.lock');
-        @unlink($this->root . '/' . FrameworkStamp::PATH);
+        @unlink($this->root . '/' . '.milpa/framework.json');
         @rmdir($this->root . '/.milpa');
         @rmdir($this->root);
     }
@@ -63,11 +63,15 @@ final class TheSidebarSaysWhatItRunsTest extends TestCase
      * `create-project` copies its files and the package is gone. This fixture used to fake a lock row
      * for it, which is why the footer's own test was green while no real app ever showed the row
      * (greenhouse decisions/0291).
+     *
+     * The path is written literally rather than taken from the reader that owns it, because that reader
+     * lives in `milpa/app-runtime` now and this package does not depend on it — the panel names it by
+     * string, once, in {@see FrameworkFacts} (greenhouse decisions/0295).
      */
     private function stampFramework(string $version): void
     {
         @mkdir($this->root . '/.milpa', 0o777, true);
-        file_put_contents($this->root . '/' . FrameworkStamp::PATH, (string) json_encode(['version' => $version]));
+        file_put_contents($this->root . '/' . '.milpa/framework.json', (string) json_encode(['version' => $version]));
     }
 
     /** The two rows that identify the app, the rest as a count, and a link to where the rest lives. */
@@ -84,7 +88,18 @@ final class TheSidebarSaysWhatItRunsTest extends TestCase
         $nav = self::sidebar($this->render());
 
         self::assertStringContainsString('mui-sidebar__footer', $nav);
-        self::assertStringContainsString('>milpa/framework</span><span class="mui-sidebar__version-value">0.48.0<', $nav, 'read from the birth record, which is the only place that knows');
+        // NOT ASSERTED HERE, AND THE REASON IS THE POINT. The framework's version comes from
+        // `Milpa\AppRuntime\Framework\FrameworkStamp`, which lives in a package this one does not
+        // depend on — the panel names it by string in `FrameworkFacts` and works without it. Installing
+        // app-runtime as a dev dependency to make this line assertable was tried and measured: it turns
+        // SIX other tests red, because the passkey gate's class becomes resolvable while `milpa/auth`
+        // is still absent (greenhouse decisions/0295).
+        //
+        // So the positive case is measured on cattle, where the package IS installed: on a house
+        // created by `composer create-project`, the footer reads «milpa/framework 0.48.1» first, with
+        // «+13 more» beside it (greenhouse evidence/0621). What this suite owns is the DEGRADATION,
+        // asserted below.
+        self::assertStringNotContainsString('>milpa/framework</span>', $nav, 'without the reader the row is dropped, not dashed and not guessed');
         self::assertStringContainsString('>milpa/admin</span><span class="mui-sidebar__version-value">v0.24.0<', $nav);
         self::assertStringContainsString('>milpa/app-runtime</span><span class="mui-sidebar__version-value">v0.149.0<', $nav);
         self::assertStringContainsString('+1 more milpa packages', $nav, 'the rest is a count — psr/log is not milpa\'s to report, and the framework is not IN the lock to be counted');
@@ -112,7 +127,9 @@ final class TheSidebarSaysWhatItRunsTest extends TestCase
 
         $nav = self::sidebar($this->render());
 
-        self::assertStringContainsString('>milpa/framework</span>', $nav, 'named from the record, and not counted as a lock row');
+        // The count is what this test is FOR, and it is right whether or not the framework row appears:
+        // «+N more» means «lock rows this footer did not name», and the framework is never a lock row.
+        // That independence is exactly what the off-by-one broke (greenhouse decisions/0291).
         self::assertStringContainsString('+2 more milpa packages', $nav, 'live and core — the framework is not in the lock to be one of them, and admin was named');
     }
 

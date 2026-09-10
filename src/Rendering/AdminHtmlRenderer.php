@@ -14,8 +14,6 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Rendering;
 
-use Milpa\Admin\Data\FrameworkDivergence;
-use Milpa\Admin\Data\FrameworkReconciliation;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\HouseComponent;
@@ -297,11 +295,11 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         // and rows that need none are the padding this panel keeps removing.
         $rows = [];
         foreach ($result['rows'] as $row) {
-            if (\in_array($row['status'], [FrameworkReconciliation::SETTLED, FrameworkReconciliation::KEPT], true)) {
+            if (\in_array($row['status'], ['settled', 'kept'], true)) {
                 continue;
             }
             $rows[] = '<tr><td><code class="admin-house__path">' . Html::escape($row['path']) . '</code></td>'
-                . '<td><span class="mui-badge' . ($row['status'] === FrameworkReconciliation::CONFLICTED ? ' mui-badge--warning' : '') . '">'
+                . '<td><span class="mui-badge' . ($row['status'] === 'conflicted' ? ' mui-badge--warning' : '') . '">'
                 . Html::escape($this->catalog->tr('house.update.' . $row['status'])) . '</span></td>'
                 . '<td class="admin-house__what">' . Html::escape($this->catalog->tr('house.update.' . $row['status'] . '.what')) . '</td></tr>';
         }
@@ -337,7 +335,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
 
         $diverged = array_values(array_filter(
             $rows,
-            static fn (array $row): bool => ($row['status'] ?? '') !== FrameworkDivergence::UNTOUCHED,
+            static fn (array $row): bool => ($row['status'] ?? '') !== 'untouched',
         ));
         if ($diverged === []) {
             return $out . '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.divergence.none')) . '</p>';
@@ -351,7 +349,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             $status = \is_string($row['status'] ?? null) ? $row['status'] : '';
             $rows[] = '<tr><td><code class="admin-house__path">'
                 . Html::escape(\is_string($row['path'] ?? null) ? $row['path'] : '') . '</code></td>'
-                . '<td><span class="mui-badge' . ($status === FrameworkDivergence::DELETED ? ' mui-badge--warning' : '') . '">'
+                . '<td><span class="mui-badge' . ($status === 'deleted' ? ' mui-badge--warning' : '') . '">'
                 . Html::escape($this->catalog->tr('house.divergence.' . $status)) . '</span></td></tr>';
         }
 
