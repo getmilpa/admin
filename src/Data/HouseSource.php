@@ -84,6 +84,12 @@ final readonly class HouseSource
             'gate' => $this->settings->gateLabel(),
             'root' => $root,
             'foundation' => $this->foundation($root),
+            // WHAT THIS HOUSE HAS CHANGED SINCE IT WAS BORN. Null when the tree carries no birth
+            // record: a house created before `milpa/framework` stamped one cannot say, and counting
+            // zero customized files would read as «nothing changed» rather than «unknown» — two
+            // different answers, and telling them apart is the point (greenhouse decisions/0293).
+            'divergence' => FrameworkDivergence::summary($root),
+            'divergenceRows' => FrameworkDivergence::rows($root),
             'packages' => $this->packages($root),
             'capabilities' => [
                 'installed' => \is_array($capabilities['installed'] ?? null) ? array_values($capabilities['installed']) : [],

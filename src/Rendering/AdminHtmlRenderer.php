@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Rendering;
 
+use Milpa\Admin\Data\FrameworkDivergence;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\HouseComponent;
@@ -169,6 +170,18 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.founded')) . '</h3>';
         $out[] = $this->houseFoundation($foundation);
 
+        // ── WHAT THIS HOUSE HAS CHANGED SINCE IT WAS BORN ───────────────────────────────────────
+        //
+        // Right after «founded to», because it answers the same question one step later: not just which
+        // framework this house came from, but how far it has walked from it. Two of the update's three
+        // points; the third — what the NEW skeleton ships — is a verb, not something a render asks for
+        // (greenhouse decisions/0293).
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.divergence')) . '</h3>';
+        $out[] = $this->houseDivergence(
+            \is_array($data['divergence'] ?? null) ? $data['divergence'] : null,
+            \is_array($data['divergenceRows'] ?? null) ? array_values(array_filter($data['divergenceRows'], '\\is_array')) : [],
+        );
+
         // ── WHAT IT CAN BE ASKED FOR ────────────────────────────────────────────────────────────
         $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.can')) . '</h3>';
         if ($installed === []) {
@@ -237,6 +250,53 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         }
 
         return implode("\n", $out);
+    }
+
+    /**
+     * The divergence: the counts first, then only the files that are not untouched.
+     *
+     * Untouched files are COUNTED and not listed. Fifteen rows saying «untouched» is the padding this
+     * panel keeps removing; the two or three that diverged are what a person is looking for, and
+     * burying them in identical rows is how a screen stops being read (greenhouse decisions/0250).
+     *
+     * @param array{born: string, at: string, untouched: int, customized: int, deleted: int}|null $summary
+     * @param list<array<string, mixed>>                                                          $rows
+     */
+    private function houseDivergence(?array $summary, array $rows): string
+    {
+        if ($summary === null) {
+            return $this->notice($this->catalog->tr('house.divergence.unknown'));
+        }
+
+        $out = '<p class="admin-house__hint">' . Html::escape($this->catalog->tr(
+            'house.divergence.count',
+            $summary['born'],
+            (string) $summary['customized'],
+            (string) $summary['deleted'],
+            (string) $summary['untouched'],
+        )) . '</p>';
+
+        $diverged = array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => ($row['status'] ?? '') !== FrameworkDivergence::UNTOUCHED,
+        ));
+        if ($diverged === []) {
+            return $out . '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.divergence.none')) . '</p>';
+        }
+
+        // `table()` takes RENDERED rows, not cells — one `<tr>` per entry. Building an array of cells
+        // here type-checked as a list of arrays and would have silently `implode`d «Array» into the
+        // markup; phpstan named it at the argument.
+        $rows = [];
+        foreach ($diverged as $row) {
+            $status = \is_string($row['status'] ?? null) ? $row['status'] : '';
+            $rows[] = '<tr><td><code class="admin-house__path">'
+                . Html::escape(\is_string($row['path'] ?? null) ? $row['path'] : '') . '</code></td>'
+                . '<td><span class="mui-badge' . ($status === FrameworkDivergence::DELETED ? ' mui-badge--warning' : '') . '">'
+                . Html::escape($this->catalog->tr('house.divergence.' . $status)) . '</span></td></tr>';
+        }
+
+        return $out . $this->table(['col.file', 'col.state'], $rows);
     }
 
     /**
