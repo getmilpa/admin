@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.30.0](https://github.com/getmilpa/admin/compare/v0.29.0...v0.30.0) (2026-09-10)
+
+
+### Features
+
+* the third point is a verb — what a newer skeleton would do to this house ([#97](https://github.com/getmilpa/admin/issues/97)) ([cecc9e9](https://github.com/getmilpa/admin/commit/cecc9e9f5111a9c866cdd72269a2a4ad3ee22639))
+
 ## [0.29.0](https://github.com/getmilpa/admin/compare/v0.28.0...v0.29.0) (2026-09-10)
 
 
