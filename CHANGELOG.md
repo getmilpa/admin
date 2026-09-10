@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.26.1](https://github.com/getmilpa/admin/compare/v0.26.0...v0.26.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **assets:** re-vendor the design bundle so [hidden] does not render ([#87](https://github.com/getmilpa/admin/issues/87)) ([b06aa0d](https://github.com/getmilpa/admin/commit/b06aa0d5e970236d09114e478273e1da56e79835))
+
 ## [0.26.0](https://github.com/getmilpa/admin/compare/v0.25.0...v0.26.0) (2026-09-10)
 
 
