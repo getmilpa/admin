@@ -90,6 +90,11 @@ final readonly class HouseSource
             // different answers, and telling them apart is the point (greenhouse decisions/0293).
             'divergence' => FrameworkDivergence::summary($root),
             'divergenceRows' => FrameworkDivergence::rows($root),
+            // THE THIRD POINT, only as far as a previous press of the verb got it. Null means nobody has
+            // checked — which is NOT «you are up to date», and a screen that showed an empty
+            // reconciliation for the first would be claiming the second (greenhouse decisions/0294).
+            'check' => FrameworkRelease::remembered($root),
+            'reconciliation' => $this->reconciliation($root),
             'packages' => $this->packages($root),
             'capabilities' => [
                 'installed' => \is_array($capabilities['installed'] ?? null) ? array_values($capabilities['installed']) : [],
@@ -158,6 +163,41 @@ final readonly class HouseSource
         $rows = InstalledPackages::rows($root);
 
         return ['count' => \count($rows), 'rows' => $rows];
+    }
+
+    /**
+     * What the last check would do to this house, read entirely from cache.
+     *
+     * No network here, ever: the version comes from the pointer the verb wrote and the hashes from the
+     * per-release cache it filled. A release whose cache went missing answers null rather than being
+     * re-fetched during a render (greenhouse decisions/0281, 0294).
+     *
+     * @return array{latest: string, at: string, summary: array<string, int>, rows: list<array{path: string, status: string}>}|null
+     */
+    private function reconciliation(string $root): ?array
+    {
+        $check = FrameworkRelease::remembered($root);
+        if ($check === null || $root === '') {
+            return null;
+        }
+        $cache = $root . '/storage/framework-releases/' . $check['latest'] . '.json';
+        if (!is_file($cache)) {
+            return null;
+        }
+        $read = json_decode((string) file_get_contents($cache), true);
+        if (!\is_array($read)) {
+            return null;
+        }
+        /** @var array<string, string> $ships */
+        $ships = array_filter($read, '\is_string');
+
+        $summary = FrameworkReconciliation::summary($root, $ships);
+        $rows = FrameworkReconciliation::rows($root, $ships);
+        if ($summary === null || $rows === null) {
+            return null;
+        }
+
+        return ['latest' => $check['latest'], 'at' => $check['at'], 'summary' => $summary, 'rows' => $rows];
     }
 
     /** The app's root, from the kernel the app registered — '' when there is none to ask. */

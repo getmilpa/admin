@@ -44,7 +44,7 @@ final class TheThreePointsJudgedTest extends TestCase
                     unlink($f);
                 }
             }
-            foreach (['public', 'config', 'bin', '.milpa', 'tools'] as $d) {
+            foreach (['public', 'config', 'bin', '.milpa', 'tools', 'storage/framework-releases', 'storage'] as $d) {
                 @rmdir($tree . '/' . $d);
             }
             @rmdir($tree);
@@ -166,18 +166,37 @@ final class TheThreePointsJudgedTest extends TestCase
         self::assertNull(FrameworkReconciliation::summary($tree, self::ships()));
     }
 
-    /** The hasher reads exactly the tracked set, off a real tree. */
-    public function testTheHasherReadsTheTrackedSetAndNothingElse(): void
+    /**
+     * A release already hashed comes back from cache, untouched and without asking anything.
+     *
+     * The cache is what lets a render show a reconciliation with no network at all: a release's bytes
+     * never change, so hashing `0.48.0` twice is pure waste. The FETCH branch needs the network and is
+     * measured on cattle instead — 567 ms to ask the registry, 1.0 s to fetch and hash, 0 ms cached
+     * (greenhouse evidence/0620).
+     */
+    public function testAReleaseAlreadyHashedComesBackFromCache(): void
     {
         $tree = $this->house();
-        file_put_contents($tree . '/phpunit.xml', "<phpunit/>\n");
+        $seeded = ['composer.json' => hash('sha256', "{\"name\":\"seeded\"}\n")];
+        mkdir($tree . '/storage/framework-releases', 0o777, true);
+        file_put_contents($tree . '/storage/framework-releases/9.9.9.json', (string) json_encode($seeded));
 
-        $hashes = FrameworkRelease::hashes($tree);
+        self::assertSame($seeded, FrameworkRelease::ships('9.9.9', $tree), 'read back exactly, with no fetch');
+    }
 
-        self::assertArrayHasKey('composer.json', $hashes);
-        self::assertArrayHasKey('bin/coa', $hashes);
-        self::assertArrayNotHasKey('phpunit.xml', $hashes, 'the skeleton\'s own harness is not offered to a house');
-        self::assertSame(hash('sha256', self::BIRTH['public/index.php']), $hashes['public/index.php']);
+    /** The pointer the verb writes is what a render reads to know which release to compare against. */
+    public function testTheCheckIsRememberedAndAnUnaskedHouseSaysSo(): void
+    {
+        $tree = $this->house();
+
+        self::assertNull(FrameworkRelease::remembered($tree), 'nobody has asked — which is not «up to date»');
+
+        FrameworkRelease::remember($tree, '0.48.1', '2026-09-10T21:00:00+00:00');
+
+        self::assertSame(
+            ['latest' => '0.48.1', 'at' => '2026-09-10T21:00:00+00:00'],
+            FrameworkRelease::remembered($tree),
+        );
     }
 
     /**
