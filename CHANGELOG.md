@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.31.0](https://github.com/getmilpa/admin/compare/v0.30.0...v0.31.0) (2026-09-10)
+
+
+### Features
+
+* the verb gets its button, and the panel says what an update would touch ([#99](https://github.com/getmilpa/admin/issues/99)) ([9a6bd64](https://github.com/getmilpa/admin/commit/9a6bd645d29f3cacd55c93345b4b163885e262ae))
+
 ## [0.30.0](https://github.com/getmilpa/admin/compare/v0.29.0...v0.30.0) (2026-09-10)
 
 
