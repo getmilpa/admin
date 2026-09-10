@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.29.0](https://github.com/getmilpa/admin/compare/v0.28.0...v0.29.0) (2026-09-10)
+
+
+### Features
+
+* the house says what it has changed since it was born ([#95](https://github.com/getmilpa/admin/issues/95)) ([2293fbe](https://github.com/getmilpa/admin/commit/2293fbefbf31f02ddcd47cc458cf4aa66ef2dde6))
+
 ## [0.28.0](https://github.com/getmilpa/admin/compare/v0.27.1...v0.28.0) (2026-09-10)
 
 
