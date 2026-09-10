@@ -51,6 +51,15 @@ final class Catalog
             // ── WHAT IT WAS FOUNDED TO DO ────────────────────────────────────────────────────
             // A foundation of nulls is NOT a missing file, and the difference is worth a sentence:
             // one says nobody has founded this app, the other says nobody told it what it is for.
+            // WHAT THE HOUSE HAS CHANGED SINCE IT WAS BORN (greenhouse decisions/0293).
+            'house.divergence' => 'Changed since it was born',
+            'house.divergence.count' => 'Born from framework %1$s · %2$s customized, %3$s deleted, %4$s untouched.',
+            'house.divergence.none' => 'Every file the skeleton handed over is still exactly as it came — an update would have nothing to reconcile.',
+            'house.divergence.unknown' => 'This house carries no birth record, so it cannot say what it has changed. Houses created with milpa/framework 0.48 or later record it; an older one can only be compared by hand.',
+            'house.divergence.customized' => 'Customized',
+            'house.divergence.deleted' => 'Deleted',
+            'house.divergence.untouched' => 'Untouched',
+            'col.file' => 'File',
             'house.founded' => 'Founded to',
             'house.founded.domain' => '%s',
             'house.founded.objective' => 'Objective: %s',
@@ -326,6 +335,15 @@ final class Catalog
             'house.standing.packages' => 'Corre %s paquetes del framework',
             'house.standing.root' => 'Su raíz es %s',
             'house.standing.rootless' => 'No hay kernel en el contenedor, así que este panel no puede decir dónde vive la app',
+            // LO QUE LA CASA CAMBIÓ DESDE QUE NACIÓ (decisions/0293).
+            'house.divergence' => 'Cambiado desde que nació',
+            'house.divergence.count' => 'Nació del framework %1$s · %2$s personalizados, %3$s borrados, %4$s intactos.',
+            'house.divergence.none' => 'Cada archivo que el skeleton entregó sigue exactamente como llegó — una actualización no tendría nada que reconciliar.',
+            'house.divergence.unknown' => 'Esta casa no trae acta de nacimiento, así que no puede decir qué cambió. Las casas creadas con milpa/framework 0.48 o posterior la registran; una más vieja sólo se puede comparar a mano.',
+            'house.divergence.customized' => 'Personalizado',
+            'house.divergence.deleted' => 'Borrado',
+            'house.divergence.untouched' => 'Intacto',
+            'col.file' => 'Archivo',
             'house.founded' => 'Fundada para',
             'house.founded.domain' => '%s',
             'house.founded.objective' => 'Objetivo: %s',
