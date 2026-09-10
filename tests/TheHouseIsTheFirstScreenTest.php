@@ -152,7 +152,13 @@ final class TheHouseIsTheFirstScreenTest extends TestCase
     public function testTheNextMoveIsDerivedInTheOrderTheAbsencesBite(): void
     {
         $unfounded = $this->paint($this->house($this->app(['domain' => null])));
-        self::assertStringContainsString('Tell this house what it is for', $unfounded);
+        // 🚨 IT NAMES THE RITE, NOT THE FILE. The first version said «fill in the domain in
+        // .milpa/foundation.json» — hand-editing what a governed operation owns, on the one screen
+        // whose point is that every act it names is an operation elsewhere (greenhouse
+        // decisions/0266). The house's own `foundation` read had been teaching it correctly all along.
+        self::assertStringContainsString('Nobody has declared what this house is for', $unfounded);
+        self::assertStringContainsString('coa foundation:found', $unfounded);
+        self::assertStringNotContainsString('foundation.json', $unfounded, 'the file is the rite\'s business, not the reader\'s');
         self::assertStringNotContainsString('capabilities:refresh', $unfounded, 'one move at a time');
     }
 
@@ -169,15 +175,16 @@ final class TheHouseIsTheFirstScreenTest extends TestCase
         $method = new \ReflectionMethod($renderer, 'houseNextMove');
         $method->setAccessible(true);
 
-        $said = $method->invoke(
+        [$says, $command] = $method->invoke(
             $renderer,
             ['declared' => true, 'domain' => 'Anything at all'],
             [['id' => 'agent'], ['id' => 'admin']],
             'registry index derived 2026-09-09T20:38:30+00:00',
         );
 
-        self::assertStringContainsString('the next move is not the panel', $said);
-        self::assertStringNotContainsString('capabilities:enable', $said, 'nothing is invented to fill the space');
+        self::assertStringContainsString('the next move is not the panel', $says);
+        // AND NO COMMAND. A screen that always has one to run is a screen whose commands are noise.
+        self::assertSame('', $command, 'nothing is invented to fill the space');
     }
 
     /** And each earlier absence wins over the later ones, one at a time. */
@@ -187,11 +194,8 @@ final class TheHouseIsTheFirstScreenTest extends TestCase
         $method = new \ReflectionMethod($renderer, 'houseNextMove');
         $method->setAccessible(true);
 
-        $offline = $method->invoke($renderer, ['declared' => true, 'domain' => 'x'], [], 'registry index derived …, offline floor beneath');
-        self::assertStringContainsString('capabilities:refresh', $offline);
-
-        $noAgent = $method->invoke($renderer, ['declared' => true, 'domain' => 'x'], [['id' => 'admin']], 'registry index derived …');
-        self::assertStringContainsString('capabilities:enable milpa/agent --sign', $noAgent);
+        self::assertSame('coa capabilities:refresh', $method->invoke($renderer, ['declared' => true, 'domain' => 'x'], [], 'registry index derived …, offline floor beneath')[1]);
+        self::assertSame('coa capabilities:enable milpa/agent --sign', $method->invoke($renderer, ['declared' => true, 'domain' => 'x'], [['id' => 'admin']], 'registry index derived …')[1]);
     }
 
     /** A house that boots and answers nothing says so, rather than showing an empty list. */

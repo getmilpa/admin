@@ -80,7 +80,14 @@ final class Catalog
             // Derived from measured absence, never invented. When there is no absence to name, the
             // screen says so: advice that is always available is advice worth nothing.
             'house.next' => 'The next move',
-            'house.next.found' => 'Tell this house what it is for: fill in the domain in .milpa/foundation.json. Everything that judges a request reads it.',
+            // NAMES THE RITE, NOT THE FILE. The first version said «fill in the domain in
+            // .milpa/foundation.json» — an instruction to hand-edit what a GOVERNED OPERATION owns,
+            // on a screen whose whole point is that every act it names is an operation elsewhere.
+            // The house already teaches this better than the panel did: `foundation` answers
+            // «nobody has declared what it is for» and names the rite. Same shape as the capability
+            // rows: the exact command, and nothing here runs it for you (greenhouse decisions/0266).
+            'house.next.found' => 'Nobody has declared what this house is for. Everything that judges a request reads it, so found it — the rite writes the constitution and its acta, once:',
+            'house.next.found.command' => 'coa foundation:found --domain="…" --objective="…" --boundaries="…"',
             'house.next.refresh' => 'The list above came from an offline floor, not from the registry. Run coa capabilities:refresh to see what is actually on offer.',
             'house.next.agent' => 'No agent lives here yet. coa capabilities:enable milpa/agent --sign gives this house sessions that outlive the process.',
             'house.next.equipped' => 'Nothing this screen can tell you. This house is equipped, founded and answering — the next move is not the panel\'s.',
@@ -336,7 +343,8 @@ final class Catalog
             'house.cannot.none' => 'Nada en oferta — toda capacidad que el índice conoce ya está aquí.',
             'house.cannot.index' => 'Ofrecidas desde %s',
             'house.next' => 'Lo que sigue',
-            'house.next.found' => 'Dile a esta casa para qué es: llena el dominio en .milpa/foundation.json. Todo lo que juzga una petición lo lee.',
+            'house.next.found' => 'Nadie ha declarado para qué es esta casa. Todo lo que juzga una petición lo lee, así que fúndala — el rito escribe la constitución y su acta, una sola vez:',
+            'house.next.found.command' => 'coa foundation:found --domain="…" --objective="…" --boundaries="…"',
             'house.next.refresh' => 'La lista de arriba salió de un piso offline, no del registro. Corre coa capabilities:refresh para ver qué hay en oferta de verdad.',
             'house.next.agent' => 'Aquí no vive ningún agente todavía. coa capabilities:enable milpa/agent --sign le da a esta casa sesiones que sobreviven al proceso.',
             'house.next.equipped' => 'Nada que esta pantalla te pueda decir. Esta casa está equipada, fundada y contestando — lo que sigue no es del panel.',
