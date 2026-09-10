@@ -388,6 +388,14 @@ final class AdminShell
         $subject = new SectionRender($active, $view->props);
         $this->events?->dispatch(self::SECTION_BEFORE_RENDER, [self::SUBJECT_SECTION => $subject]);
 
+        // What the VIEW declared, before anything it renders: a runtime module has no surface, so no
+        // component of the view owns it and walking the components would never find it. Declared first
+        // because a shared runtime is what a component's own module hangs off, and the host emits each
+        // URL once either way (greenhouse decisions/0272).
+        if ($view->assets instanceof ClientAssets) {
+            $assets = $assets->merge($view->assets);
+        }
+
         /** @var array<string, array<string, mixed>> $defaults */
         $defaults = $subject->props;
         $html = [];

@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Section;
 
+use Milpa\Live\ValueObjects\ClientAssets;
 use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
 use Milpa\Live\Contracts\Rendering\ComponentRendererInterface;
 
@@ -84,6 +85,20 @@ final readonly class DeclaredView
         public array $signals = [],
         public array $persist = [],
         public array $computed = [],
+        /**
+         * 🚨 FILES THE VIEW NEEDS THAT NO SINGLE COMPONENT OF IT OWNS — a runtime, a shared module.
+         *
+         * The contract collected a view's assets by walking the components it RENDERS, which covers
+         * every file a surface owns and nothing else. A guest whose surfaces hang off a shared runtime
+         * module had nowhere to declare it: not the component (the module has no surface to paint), not
+         * the host (it cannot know what a guest needs). A shipped screen proved the gap — the panel's
+         * Settings section rendered with a DEAD Save button, and the console said the guard module was
+         * not loaded (greenhouse decisions/0211, gap found in decisions/0272).
+         *
+         * Merged with what the components declared, and the host still emits each URL once, so a view
+         * that names a module two of its components also imply costs nothing.
+         */
+        public ?ClientAssets $assets = null,
     ) {
         if (trim($markup) === '') {
             throw new \InvalidArgumentException('A declared view carries markup: a view with nothing to compile is not a view.');
