@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin;
 
 use Milpa\Admin\Http\CapabilityInstaller;
+use Milpa\Command\OperationHttpPolicy;
 use Milpa\Console\Http\HttpProjector;
 use Milpa\Console\FileConfirmTokenStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -394,6 +395,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
         }
 
         $psr17 = new Psr17Factory();
+        $judge = $this->container->has(OperationHttpPolicy::class) ? $this->container->get(OperationHttpPolicy::class) : null;
         $this->container->registerService(CapabilityInstaller::class, new CapabilityInstaller(new HttpProjector(
             [$operation],
             $this->container,
@@ -404,6 +406,16 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
             // rather than counting directories — this class lives in a package, so `__DIR__` would
             // answer for the package and not for the app.
             tokens: new FileConfirmTokenStore($runtime::raizDeLaApp() . '/storage/confirm-tokens.json'),
+            // 🚨 THE JUDGE, WHICH WAS NEVER HANDED OVER. `capabilities:enable` declares a scope, and
+            // the projector throws whenever an operation declares one and no policy is present. This
+            // argument was simply absent, so the panel's Install button answered `internal_error` on
+            // EVERY app — with `milpa/auth` installed or without it. Measured in a browser on fresh
+            // cattle, and named by the app's own log (greenhouse decisions/0289, evidence/0615).
+            //
+            // Taken from the container rather than built here: whichever identity package the app wired
+            // published it, and a policy this panel constructed would be a second opinion about who may
+            // act — which is the thing `decisions/0278` says a policy must never be.
+            policy: $judge instanceof OperationHttpPolicy ? $judge : null,
         )));
 
         return [

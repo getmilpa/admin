@@ -54,6 +54,9 @@ final class AdminHtmlRendererTest extends TestCase
                 ['name' => 'Off', 'version' => '0.1', 'type' => 'CLI', 'enabled' => false, 'source' => 'packagist', 'class' => null],
                 'garbage',
             ],
+            // The app can judge an install, which is the state the button belongs to — see
+            // `TheInstallButtonNeedsAJudgeTest` for the other one (greenhouse decisions/0289).
+            'installable' => true,
             'capabilities' => [
                 'installed' => [['id' => 'persistence', 'title' => 'Keep data'], 'garbage'],
                 'available' => [['package' => 'milpa/web-search', 'title' => 'Search the web', 'command' => 'capabilities:enable --capability=web-search']],
@@ -842,6 +845,41 @@ final class AdminHtmlRendererTest extends TestCase
     private static function settings(array $config): SettingsComponent
     {
         return new SettingsComponent(new SettingsSource(AdminSettings::fromConfig($config === [] ? null : new Config($config))));
+    }
+
+    /**
+     * NO INSTALL BUTTON WHERE NOTHING CAN AUTHORIZE THE ACT — and the missing door is named.
+     *
+     * Measured in a browser on fresh cattle: clicking «Install milpa/devtools» answered `internal_error`,
+     * because `capabilities:enable` declares a scope and the app had no `OperationHttpPolicy` to judge
+     * the caller. The route now refuses in words ({@see \Milpa\Admin\Tests\Http\TheInstallButtonHasAJudgeTest}),
+     * but a button that exists in order to explain why it cannot work is still a button somebody presses
+     * first and reads second — the shape this house keeps finding (greenhouse decisions/0280, 0289).
+     */
+    public function testNoInstallButtonWhereTheActCannotBeJudged(): void
+    {
+        $state = new StateSnapshot('s1', PluginsComponent::NAME, '1', [
+            'registry' => true,
+            'plugins' => [],
+            'installable' => false,
+            'capabilities' => [
+                'available' => [['package' => 'milpa/devtools', 'title' => 'Scaffolding and diagnosis', 'command' => 'coa capabilities:enable milpa/devtools --sign']],
+                'installed' => [],
+            ],
+        ], ['title' => 'Plugins']);
+
+        $html = self::renderer()->render(new PluginsComponent(new PluginsSource(new DIContainer())), self::request($state))->output;
+
+        self::assertStringNotContainsString('admin-enable', $html, 'no button, and no script bound to one');
+        self::assertStringContainsString('milpa/auth', $html, 'the door that would make the act judgeable is named');
+        self::assertStringContainsString('capabilities:enable', $html, 'and the command a terminal can always run stays on screen');
+        self::assertStringContainsString('milpa/devtools', $html, 'the catalogue itself is still readable — this is not a hidden section');
+
+        // 🚨 AND IT DOES NOT CALL AN AVAILABLE CAPABILITY «Installed». The column used to be «button or
+        // Installed»; the moment a third reason to withhold the button appeared, the false branch
+        // labelled every AVAILABLE row as installed. Caught in a browser the same day it was written.
+        self::assertStringNotContainsString('admin-capabilities__done', $html, 'nothing available may be labelled installed');
+        self::assertStringContainsString('admin-capabilities__from-terminal', $html, 'it says where the act can be run instead');
     }
 
     private static function renderer(string $locale = 'en'): AdminHtmlRenderer

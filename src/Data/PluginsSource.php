@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Data;
 
+use Milpa\Command\OperationHttpPolicy;
 use Milpa\Attributes\PluginMetadata;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Plugin\Activation\DeclaredPlugins;
@@ -100,6 +101,14 @@ final class PluginsSource
         return [
             'registry' => $registry instanceof PluginRegistryInterface,
             'plugins' => $rows,
+            // WHETHER THIS APP CAN AUTHORIZE AN INSTALL AT ALL. `capabilities:enable` declares a scope,
+            // so the operation's HTTP ceremony needs a policy to judge the caller; without one it
+            // refuses. Measured in a browser on fresh cattle, the panel offered the button anyway and it
+            // answered `internal_error` (greenhouse decisions/0289).
+            //
+            // Asked HERE, where the container already is, so the renderer never has to reach for a
+            // service and the button and the route read the same fact.
+            'installable' => $this->tryGet(OperationHttpPolicy::class) instanceof OperationHttpPolicy,
             'capabilities' => $this->capabilities(),
         ];
     }
