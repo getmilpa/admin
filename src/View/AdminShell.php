@@ -493,18 +493,31 @@ final class AdminShell
      * One flat item per section, in the catalogue's order (`order`, then `id`), each naming its group — the
      * sidebar groups them when it mounts, so an item a subscriber adds names its group the same way.
      *
-     * @return list<array{key: string, label: string, href: string, icon: string, group: string}>
+     * @return list<array{key: string, label: string, href: string, icon: string, group: string, children: list<array{key: string, label: string, href: string, icon: string}>}>
      */
     private function navItems(SectionCatalogue $catalogue): array
     {
         $items = [];
-        foreach ($catalogue->sections() as $section) {
+        foreach ($catalogue->roots() as $section) {
+            $children = [];
+            foreach ($catalogue->children($section->id) as $child) {
+                $children[] = [
+                    'key' => $child->id,
+                    'label' => $this->title($child),
+                    'href' => $this->settings->sectionUrl($child->id),
+                    'icon' => $child->icon,
+                ];
+            }
             $items[] = [
                 'key' => $section->id,
                 'label' => $this->title($section),
                 'href' => $this->settings->sectionUrl($section->id),
                 'icon' => $section->icon,
                 'group' => $section->group,
+                // The gear's contents travel WITH the item that owns them, so a renderer never has to
+                // hold the catalogue to paint one. A root nobody declared a child under carries an
+                // empty list, which is how the renderer decides not to paint a gear at all.
+                'children' => $children,
             ];
         }
 

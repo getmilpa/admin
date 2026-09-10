@@ -62,10 +62,10 @@ final class SidebarComponentTest extends TestCase
         self::assertSame('My Panel', $state->meta['brand']);
         self::assertSame('/panel', $state->meta['home']);
         self::assertSame([
-            ['key' => 'admin', 'items' => [['key' => 'plugins', 'label' => 'Plugins', 'href' => '/panel/s/plugins', 'icon' => '']]],
+            ['key' => 'admin', 'items' => [['key' => 'plugins', 'label' => 'Plugins', 'href' => '/panel/s/plugins', 'icon' => '', 'children' => []]]],
             ['key' => 'app', 'items' => [
-                ['key' => 'hola', 'label' => 'Hola', 'href' => '/panel/s/hola', 'icon' => '✦'],
-                ['key' => 'echo', 'label' => 'Echo', 'href' => '/panel/s/echo', 'icon' => ''],
+                ['key' => 'hola', 'label' => 'Hola', 'href' => '/panel/s/hola', 'icon' => '✦', 'children' => []],
+                ['key' => 'echo', 'label' => 'Echo', 'href' => '/panel/s/echo', 'icon' => '', 'children' => []],
             ]],
         ], $state->meta['groups'], 'admin before app, whatever order the items arrived in; an item without a group is the app\'s');
 
@@ -124,11 +124,11 @@ final class SidebarComponentTest extends TestCase
 
         self::assertCount(1, $groups);
         self::assertSame([
-            ['key' => 'seven', 'label' => 'Seven', 'href' => '#', 'icon' => ''],
-            ['key' => 'k', 'label' => 'k', 'href' => '#', 'icon' => ''],
+            ['key' => 'seven', 'label' => 'Seven', 'href' => '#', 'icon' => '', 'children' => []],
+            ['key' => 'k', 'label' => 'k', 'href' => '#', 'icon' => '', 'children' => []],
         ], $groups[0]['items'], 'the key falls to the index, the label to the key, the href to #, the icon to nothing');
 
-        self::assertSame([['key' => 'app', 'items' => [['key' => 'j', 'label' => 'J', 'href' => '/j', 'icon' => '']]]], SidebarComponent::groups('[{"key":"j","label":"J","href":"/j"}]'), 'a JSON list is accepted — a markup attribute');
+        self::assertSame([['key' => 'app', 'items' => [['key' => 'j', 'label' => 'J', 'href' => '/j', 'icon' => '', 'children' => []]]]], SidebarComponent::groups('[{"key":"j","label":"J","href":"/j"}]'), 'a JSON list is accepted — a markup attribute');
         self::assertSame([], SidebarComponent::groups('{not json'));
         self::assertSame([], SidebarComponent::groups('"a string"'), 'JSON that is not a list is no item');
         self::assertSame([], SidebarComponent::groups(42));

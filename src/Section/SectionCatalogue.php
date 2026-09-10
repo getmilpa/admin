@@ -74,6 +74,29 @@ final class SectionCatalogue
             static fn (AdminSection $a, AdminSection $b): int => [$a->order, $a->id] <=> [$b->order, $b->id],
         );
 
+        // ONE LEVEL, AND THE REFUSAL IS HERE BECAUSE ONLY HERE IS THE WHOLE SET KNOWN. A section cannot
+        // see, at construction, whether the parent it names is itself somebody's child — that fact
+        // belongs to the catalogue. A gear that opens a gear is a menu nobody asked for, and the depth
+        // is refused rather than flattened so the author learns it instead of discovering that their
+        // third level silently became a second (greenhouse decisions/0268).
+        //
+        // A parent nobody declared is NOT an error: that section is a root (see roots()). Only a parent
+        // that exists AND is itself a child is refused.
+        foreach ($catalogue->sections as $section) {
+            if ($section->parent === '') {
+                continue;
+            }
+            $parent = $catalogue->sections[$section->parent] ?? null;
+            if ($parent !== null && $parent->parent !== '' && isset($catalogue->sections[$parent->parent])) {
+                throw new SectionConflictException(\sprintf(
+                    'Admin section «%s» is declared under «%s», which is itself under «%s»: sections nest one level, and a gear that opens a gear is a menu nobody asked for.',
+                    $section->id,
+                    $parent->id,
+                    $parent->parent,
+                ));
+            }
+        }
+
         return $catalogue;
     }
 
@@ -87,16 +110,80 @@ final class SectionCatalogue
         return array_values($this->sections);
     }
 
+    /**
+     * The sections the MAIN NAVIGATION shows: the ones that belong under nobody.
+     *
+     * 🚨 THIS IS A SECOND READER AND NOT A NARROWING OF {@see sections()}, deliberately. Three of that
+     * method's five callers want every section: the panel's 404 lists the ids present, and a child
+     * missing from the error whose whole job is naming what exists would be invisible exactly when
+     * somebody is looking for it; the component book must cover a child's component like any other;
+     * and the TUI needs state for every section it can open. Narrowing the old method would have
+     * broken all three in silence (greenhouse decisions/0268).
+     *
+     * A section whose parent nobody declared comes back HERE, as a root. The alternative hides a
+     * working section because a different plugin is absent, which turns uninstalling one thing into
+     * losing another.
+     *
+     * @return list<AdminSection>
+     */
+    public function roots(): array
+    {
+        $roots = [];
+        foreach ($this->sections as $section) {
+            if ($section->parent === '' || !isset($this->sections[$section->parent])) {
+                $roots[] = $section;
+            }
+        }
+
+        return $roots;
+    }
+
+    /**
+     * The sections declared under that one, in the same order the sidebar uses.
+     *
+     * Empty for a section nobody named as a parent — which is what the shell reads to decide whether
+     * to paint a gear at all.
+     *
+     * @return list<AdminSection>
+     */
+    public function children(string $id): array
+    {
+        // 🚨 AN UNDECLARED PARENT HAS NO CHILDREN, and this line is the invariant.
+        //
+        // Without it a section whose parent nobody declared came back BOTH from roots() — where it
+        // belongs, so it stays findable — and from here, under an id that does not exist. Every
+        // section appears exactly once between the roots and somebody's children; two answers about
+        // one section is how a navigation ends up listing it twice or not at all.
+        if (!isset($this->sections[$id])) {
+            return [];
+        }
+
+        $children = [];
+        foreach ($this->sections as $section) {
+            if ($section->parent === $id && $section->id !== $id) {
+                $children[] = $section;
+            }
+        }
+
+        return $children;
+    }
+
     /** The section with that id, or null when no plugin declared it. */
     public function find(string $id): ?AdminSection
     {
         return $this->sections[$id] ?? null;
     }
 
-    /** The section the panel opens on — the first in sidebar order — or null when there is none. */
+    /**
+     * The section the panel opens on — the first ROOT in sidebar order — or null when there is none.
+     *
+     * A child can never be the front page: it is reached through its parent's gear, and a panel that
+     * opened on somebody's settings screen would answer «what is this house» with «here are its
+     * knobs» (greenhouse decisions/0264, decisions/0268).
+     */
     public function first(): ?AdminSection
     {
-        foreach ($this->sections as $section) {
+        foreach ($this->roots() as $section) {
             return $section;
         }
 

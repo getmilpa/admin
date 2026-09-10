@@ -101,7 +101,7 @@ final class SidebarComponent implements ComponentDefinitionInterface
      * it an int key). A JSON-encoded list is accepted like an array (a markup attribute); anything that is
      * not a list of arrays is no item.
      *
-     * @return list<array{key: string, items: list<array{key: string, label: string, href: string, icon: string}>}>
+     * @return list<array{key: string, items: list<array{key: string, label: string, href: string, icon: string, children: list<array{key: string, label: string, href: string, icon: string}>}>}>
      */
     public static function groups(mixed $items): array
     {
@@ -125,6 +125,10 @@ final class SidebarComponent implements ComponentDefinitionInterface
                 'label' => (string) ($item['label'] ?? $key),
                 'href' => (string) ($item['href'] ?? '#'),
                 'icon' => (string) ($item['icon'] ?? ''),
+                // 🚨 NORMALISED HERE OR LOST HERE. This method rebuilds every item from named keys, so
+                // anything it does not name is dropped — which is what would have happened to the
+                // sections declared under this one, silently, leaving a gear with nothing behind it.
+                'children' => self::children($item['children'] ?? []),
             ];
         }
 
@@ -137,6 +141,36 @@ final class SidebarComponent implements ComponentDefinitionInterface
         }
 
         return $groups;
+    }
+
+    /**
+     * The sections declared under an item, normalised the same way the item itself is.
+     *
+     * A child carries no `group`: it lists behind its parent's gear, not in a heading of its own. It
+     * carries no children either — sections nest one level, which the catalogue refuses to exceed.
+     *
+     * @return list<array{key: string, label: string, href: string, icon: string}>
+     */
+    private static function children(mixed $children): array
+    {
+        if (!\is_array($children)) {
+            return [];
+        }
+        $out = [];
+        foreach ($children as $index => $child) {
+            if (!\is_array($child)) {
+                continue;
+            }
+            $key = (string) ($child['key'] ?? $index);
+            $out[] = [
+                'key' => $key,
+                'label' => (string) ($child['label'] ?? $key),
+                'href' => (string) ($child['href'] ?? '#'),
+                'icon' => (string) ($child['icon'] ?? ''),
+            ];
+        }
+
+        return $out;
     }
 
     /** The place of a group: its index in {@see self::GROUP_ORDER}, or after every one of those. */

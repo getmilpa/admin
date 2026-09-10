@@ -187,4 +187,59 @@ final class ShellHtmlRendererTest extends TestCase
     {
         return new ShellHtmlRenderer(new SignedXhtmlStateTransferCodec(new XhtmlStateTransferCodec(), new HmacStateSigner('test-secret-0123456789'), null));
     }
+    /**
+     * 🚨 THE GEAR IS PAINTED ONLY WHERE SOMETHING IS BEHIND IT, and the sub-items are in flow.
+     *
+     * A gear on a section with nothing under it is a control that does nothing, which teaches a
+     * person that controls here might do nothing. And the list is a `<details>` disclosure rather
+     * than a popover because the nav it lives in scrolls: `overflow-y: auto` on `.mui-sidebar__nav`
+     * would clip an absolutely positioned menu, measured on the primitive's own stylesheet
+     * (greenhouse decisions/0268).
+     */
+    public function testTheGearAppearsOnlyOnAnItemThatOwnsSubItems(): void
+    {
+        $html = self::renderer()->render(new SidebarComponent(), new RenderRequest(new ComponentContext('s', locale: 'en'), ['items' => [
+            ['key' => 'plugins', 'label' => 'Plugins', 'href' => '/panel/s/plugins', 'group' => 'admin'],
+            ['key' => 'agent', 'label' => 'Agent', 'href' => '/panel/s/agent', 'group' => 'agent', 'children' => [
+                ['key' => 'agent-settings', 'label' => 'Settings', 'href' => '/panel/s/agent-settings'],
+            ]],
+        ]]))->output;
+
+        // The full class, not the substring: `mui-sidebar__nest-menu` contains it too.
+        self::assertSame(1, substr_count($html, 'class="mui-sidebar__nest"'), 'one nest, for the one item that owns something');
+        self::assertSame(1, substr_count($html, '<details '), 'and one disclosure');
+        self::assertStringContainsString('aria-label="Settings for this section"', $html, 'named from the catalog, not hardcoded');
+        self::assertStringContainsString('class="mui-sidebar__subitem" href="/panel/s/agent-settings"', $html);
+
+        // THE LINK IS A SIBLING OF THE TOGGLE, never inside it: nesting a link in the summary makes
+        // one click ambiguous, and the person who wanted the section would open its settings instead.
+        self::assertStringContainsString('<div class="mui-sidebar__nest"><a class="mui-sidebar__item" href="/panel/s/agent"', $html);
+        self::assertStringNotContainsString('<summary', explode('</a>', $html, 2)[0], 'no toggle before the first link closes');
+    }
+
+    /** Open when the person is already inside it — a collapsed gear hiding the page you are on answers «where am I» with nothing. */
+    public function testTheGearIsOpenWhenOneOfItsSubItemsIsTheCurrentPage(): void
+    {
+        $items = [['key' => 'agent', 'label' => 'Agent', 'href' => '/a', 'group' => 'agent', 'children' => [
+            ['key' => 'agent-settings', 'label' => 'Settings', 'href' => '/s'],
+        ]]];
+
+        $onParent = self::renderer()->render(new SidebarComponent(), new RenderRequest(new ComponentContext('s'), ['items' => $items, 'active' => 'agent']))->output;
+        self::assertStringContainsString('<details class="mui-sidebar__more">', $onParent, 'closed while the parent is the page');
+
+        $onChild = self::renderer()->render(new SidebarComponent(), new RenderRequest(new ComponentContext('s'), ['items' => $items, 'active' => 'agent-settings']))->output;
+        self::assertStringContainsString('open', $onChild);
+        self::assertStringContainsString('class="mui-sidebar__subitem" href="/s" aria-current="page"', $onChild, 'and the sub-item says it is the one');
+    }
+
+    /** The gear is decorative and the name is the catalog's, in the locale the page answers in. */
+    public function testTheGearSpeaksTheRequestsLocale(): void
+    {
+        $es = self::renderer()->render(new SidebarComponent(), new RenderRequest(new ComponentContext('s', locale: 'es'), ['items' => [
+            ['key' => 'agent', 'label' => 'Agent', 'href' => '/a', 'children' => [['key' => 'k', 'label' => 'Ajustes', 'href' => '/k']]],
+        ]]))->output;
+
+        self::assertStringContainsString('aria-label="Ajustes de esta sección"', $es);
+    }
+
 }

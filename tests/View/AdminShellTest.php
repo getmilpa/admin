@@ -27,6 +27,7 @@ use Milpa\Admin\Tests\Fixtures\GuestPlugin;
 use Milpa\Admin\Tests\Fixtures\HolaPlugin;
 use Milpa\Admin\Tests\Fixtures\ReadsSidebar;
 use Milpa\Admin\Tests\Fixtures\RecordingDispatcher;
+use Milpa\Admin\Tests\Fixtures\NestingPlugin;
 use Milpa\Admin\View\AdminShell;
 use Milpa\Admin\View\ShellRender;
 use Milpa\Container\DIContainer;
@@ -365,6 +366,40 @@ final class AdminShellTest extends TestCase
         self::assertNotNull($active);
         self::assertStringContainsString('data-locale="es">es</span>', $spanish->render($catalogue, $active));
         self::assertStringContainsString('Ningún plugin declaró todavía', $spanish->renderEmpty(SectionCatalogue::discover([])));
+    }
+
+    /**
+     * 🚨 THE PROPERTY ROD ASKED FOR, ASSERTED WHERE IT IS VISIBLE: a child is not a menu entry.
+     *
+     * This test exists because a mutation caught its absence. Replacing `roots()` with `sections()`
+     * in the shell's nav — putting every settings screen back in the main menu — left twenty-one
+     * tests green: the catalogue's own tests assert `roots()`, and NOTHING asserted the painted
+     * navigation. A property proven one layer below the one a person sees is not proven
+     * (greenhouse decisions/0268).
+     */
+    public function testAChildIsNotAMenuEntryAndIsReachedThroughItsParentsGear(): void
+    {
+        $catalogue = SectionCatalogue::discover([new NestingPlugin(new DIContainer())]);
+        $active = $catalogue->find('parent');
+        self::assertNotNull($active);
+
+        $nav = self::sidebar(self::shell()->render($catalogue, $active));
+
+        self::assertSame(
+            1,
+            substr_count($nav, 'class="mui-sidebar__item" href="/milpa/admin/s/parent"'),
+            'the parent is the menu entry',
+        );
+        self::assertStringNotContainsString(
+            'class="mui-sidebar__item" href="/milpa/admin/s/child"',
+            $nav,
+            'and the child is NOT one — it would crowd the menu it was moved out of',
+        );
+        self::assertStringContainsString(
+            'class="mui-sidebar__subitem" href="/milpa/admin/s/child"',
+            $nav,
+            'it is behind the gear, with the same URL it always had',
+        );
     }
 
     private static function shell(?RecordingDispatcher $events = null, ?AdminSettings $settings = null, ?Catalog $catalog = null): AdminShell

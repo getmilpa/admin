@@ -33,6 +33,7 @@ final class Catalog
             'nav.group.admin' => 'ADMIN',
             'nav.group.app' => 'APP',
             'nav.group.agent' => 'AGENT',
+            'nav.gear' => 'Settings for this section',
             'nav.house' => 'The house',
             // ── THE SCREEN THE PANEL OPENS ON ────────────────────────────────────────────────
             // The house's own sentence about this panel, taken from its capability manifest rather
@@ -311,6 +312,7 @@ final class Catalog
             'nav.group.admin' => 'ADMIN',
             'nav.group.app' => 'APP',
             'nav.group.agent' => 'AGENTE',
+            'nav.gear' => 'Ajustes de esta sección',
             'nav.house' => 'La casa',
             'house.heading' => 'Esta casa',
             'house.doctrine' => 'Aquí es donde un humano deja la casa lista para el agente.',

@@ -23,13 +23,17 @@ namespace Milpa\Admin\View;
  * The items are flat: each carries the sidebar `group` it lists under (the section's, or `app` for an
  * item a subscriber adds without one) and the sidebar groups them when it mounts — so a subscriber adds
  * an item and names its group, and never rebuilds the groups.
+ *
+ * An item may also carry `children`: the sections declared UNDER it, which the sidebar paints behind a
+ * gear instead of listing beside their parent. They travel with the item that owns them so a subscriber
+ * can add or remove one without holding the catalogue (greenhouse decisions/0268).
  */
 final class ShellRender
 {
     /**
-     * @param string                                                                              $markup the `<milpa:…>` composition — mutable before render
-     * @param list<array{key: string, label: string, href: string, icon: string, group?: string}> $items  the sidebar items, in sidebar order — mutable before render
-     * @param string                                                                              $html   the rendered shell — mutable after render
+     * @param string                                                                                                                                                              $markup the `<milpa:…>` composition — mutable before render
+     * @param list<array{key: string, label: string, href: string, icon: string, group?: string, children?: list<array{key: string, label: string, href: string, icon: string}>}> $items  the sidebar items, in sidebar order — mutable before render
+     * @param string                                                                                                                                                              $html   the rendered shell — mutable after render
      */
     public function __construct(
         public string $markup,
