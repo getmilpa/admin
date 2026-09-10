@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.26.0](https://github.com/getmilpa/admin/compare/v0.25.0...v0.26.0) (2026-09-10)
+
+
+### Features
+
+* **section:** a declared view can name files no single component of it owns ([#84](https://github.com/getmilpa/admin/issues/84)) ([28841ce](https://github.com/getmilpa/admin/commit/28841ce4e05a9e500954229899f5736feba20023))
+
 ## [0.25.0](https://github.com/getmilpa/admin/compare/v0.24.0...v0.25.0) (2026-09-10)
 
 
