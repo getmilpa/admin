@@ -140,29 +140,16 @@ final readonly class HouseSource
     /**
      * Which of the framework's own packages this house runs, at which versions.
      *
-     * From `composer.lock`, which is the only place that says what is ACTUALLY installed —
-     * `composer.json` says what was asked for, and the two disagree the moment a range resolves.
-     * Absent lock, absent list: a house whose dependencies were never resolved has nothing to
-     * report here, and inventing a row would be worse than an empty one.
+     * Delegated to {@see InstalledPackages}, which the sidebar's footer reads too: the same fact, one
+     * owner. It lived here, private, until a second surface needed it — and a shell that reaches into
+     * one section's data source is a shell that breaks when that section is not installed
+     * (greenhouse decisions/0269).
      *
      * @return array{count: int, rows: list<array{name: string, version: string}>}
      */
     private function packages(string $root): array
     {
-        $file = $root . '/composer.lock';
-        if ($root === '' || !is_file($file)) {
-            return ['count' => 0, 'rows' => []];
-        }
-        $read = json_decode((string) file_get_contents($file), true);
-        $rows = [];
-        foreach (\is_array($read['packages'] ?? null) ? $read['packages'] : [] as $package) {
-            $name = \is_array($package) && \is_string($package['name'] ?? null) ? $package['name'] : '';
-            if (!str_starts_with($name, 'milpa/')) {
-                continue;
-            }
-            $rows[] = ['name' => $name, 'version' => \is_string($package['version'] ?? null) ? $package['version'] : '?'];
-        }
-        usort($rows, static fn (array $a, array $b): int => $a['name'] <=> $b['name']);
+        $rows = InstalledPackages::rows($root);
 
         return ['count' => \count($rows), 'rows' => $rows];
     }

@@ -199,7 +199,9 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
 
         $this->states = new AdminSectionStates($this->container, $this, $codec, $settings->route, $events);
 
-        $shell = new AdminShell($settings, $catalog, $codec, $events);
+        // The container, so the shell's footer can ask the kernel for the app's root AT RENDER TIME —
+        // measured: the kernel is not registered yet while a plugin boots (greenhouse decisions/0269).
+        $shell = new AdminShell($settings, $catalog, $codec, $events, $this->container);
         $page = new AdminPage($settings, $catalog);
         // One key per page, one wire (greenhouse decisions/0211): the CSRF guard signs with the SAME secret
         // that signs the state envelopes, so the boot a page issues is the boot the panel's own endpoint

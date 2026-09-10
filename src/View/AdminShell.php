@@ -20,6 +20,9 @@ use Milpa\Admin\Components\SectionHeaderComponent;
 use Milpa\Admin\Components\SidebarComponent;
 use Milpa\Live\Support\DesignTokens;
 use Milpa\Admin\I18n\Catalog;
+use Milpa\Interfaces\Di\DIContainerInterface;
+use Milpa\Runtime\Kernel;
+use Milpa\Admin\Data\InstalledPackages;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\DeclaredView;
 use Milpa\Admin\Section\SectionCatalogue;
@@ -77,6 +80,25 @@ final class AdminShell
     /** The payload key the `admin.section.*` pair carries its subject under: the {@see SectionRender}. */
     public const SUBJECT_SECTION = 'section';
 
+    /**
+     * The packages the footer names, in the order it names them — the rest is a count.
+     *
+     * 🚨 `milpa/framework` IS FIRST AND USUALLY ABSENT, and that absence is a real fact rather than a
+     * miss. Measured on a fresh `composer create-project milpa/framework` app: the framework is the
+     * ROOT package, so its files ARE the app's files and the lock does not carry its version at all —
+     * a founded app cannot say which framework version founded it. It is named here because an app
+     * that took the framework as a DEPENDENCY does carry it, and a footer that refused to look would
+     * hide the version in exactly the case where one exists.
+     *
+     * `milpa/app-runtime` is the runtime such an app consumes and always in the lock, so it answers
+     * «which Milpa is this» when the framework cannot. `milpa/admin` is the panel you are looking at,
+     * which is the question a bug report needs first (greenhouse decisions/0269).
+     *
+     * @var list<string>
+     */
+    private const FOOTER_PACKAGES = ['milpa/framework', 'milpa/app-runtime', 'milpa/admin'];
+
+
     /** `ComponentContext::$meta`: the gate in effect, as the topbar chip names it (`loopback`|`custom`|`passkey`|`open`|`fallback`). */
     public const META_GATE = 'gate';
 
@@ -100,7 +122,35 @@ final class AdminShell
         private Catalog $catalog,
         private readonly StateTransferCodecInterface $codec,
         private readonly ?MilpaEventDispatcherInterface $events = null,
+        /**
+         * Where the footer's one fact comes from: which versions this panel runs.
+         *
+         * 🚨 A CONTAINER AND NOT A ROOT STRING, AND THE TIMING IS WHY. Passing the root looked cleaner —
+         * a shell that composes a page has no business reaching a container — but measured on cattle,
+         * `Kernel` IS NOT REGISTERED WHEN A PLUGIN BOOTS, so the plugin that builds this shell has no
+         * root to hand it and the footer came back empty. `HouseSource` already resolved it lazily, per
+         * request, for exactly that reason. Deriving the root from `__DIR__` instead is the defect that
+         * cost greenhouse decisions/0267: an autoloader-derived root points at the package, not the app.
+         *
+         * A string root is still accepted, and the tests use it: it is the seam that lets this be
+         * measured against a temporary directory with no kernel at all (greenhouse decisions/0269).
+         */
+        private readonly DIContainerInterface|string $rootOrContainer = '',
     ) {
+    }
+
+    /**
+     * The app's root: the string when one was handed over, else the kernel's, asked at RENDER time
+     * because that is the first moment it exists.
+     */
+    private function root(): string
+    {
+        if (\is_string($this->rootOrContainer)) {
+            return $this->rootOrContainer;
+        }
+        $kernel = $this->rootOrContainer->has(Kernel::class) ? $this->rootOrContainer->get(Kernel::class) : null;
+
+        return $kernel instanceof Kernel ? $kernel->root() : '';
     }
 
     /**
@@ -197,7 +247,7 @@ final class AdminShell
         $this->events?->dispatch(self::BEFORE_RENDER, [self::SUBJECT_SHELL => $shell]);
 
         $defaults = [
-            SidebarComponent::NAME => ['items' => $shell->items],
+            SidebarComponent::NAME => ['items' => $shell->items, ...$this->versions()],
             // A subscriber that swapped the primitive into the composition still gets the items.
             'dashboard-sidebar' => ['items' => $shell->items],
             'dashboard-topbar' => ['childrenHtml' => $this->chips($principal)],
@@ -487,6 +537,43 @@ final class AdminShell
             . '<span class="mui-badge admin-chip admin-chip--locale" data-locale="' . self::attr($locale) . '">'
             . self::attr($locale)
             . '</span>';
+    }
+
+    /**
+     * WHAT THIS PANEL IS RUNNING, for the sidebar's footer.
+     *
+     * TWO ROWS, AND THEY ARE CHOSEN RATHER THAN TRUNCATED: `milpa/framework` is what the app was
+     * founded on, and `milpa/admin` is the panel you are looking at. Those two answer «what is this,
+     * and which version of it am I on» — the first question a bug report needs and the one a person
+     * cannot answer from a screenshot. The rest is a COUNT that links to the House section, which
+     * already reads every row and painted only the total, so «and the rest» has somewhere to go
+     * instead of a second list in a footer (greenhouse decisions/0269).
+     *
+     * A package the lock does not carry is dropped, not dashed: an app served by something other than
+     * `milpa/framework` is a real case, and a footer claiming a version it does not have is worse than
+     * a footer with one row.
+     *
+     * @return array{versions: list<array{name: string, version: string}>, versionsRest: int, versionsHref: string}
+     */
+    private function versions(): array
+    {
+        $rows = InstalledPackages::rows($this->root());
+        $named = [];
+        foreach (self::FOOTER_PACKAGES as $name) {
+            foreach ($rows as $row) {
+                if ($row['name'] === $name) {
+                    $named[] = $row;
+
+                    break;
+                }
+            }
+        }
+
+        return [
+            'versions' => $named,
+            'versionsRest' => max(0, \count($rows) - \count($named)),
+            'versionsHref' => $this->settings->sectionUrl('house'),
+        ];
     }
 
     /**

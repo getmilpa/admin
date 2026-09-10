@@ -1804,10 +1804,29 @@
   color: var(--accent-text); font-weight: var(--weight-medium);
 }
 
-/* footer — slot para user-card mini */
+/* footer — slot para user-card mini, o las versiones que corre el panel */
 .mui-sidebar__footer {
   flex: none; padding: var(--space-3);
   border-top: var(--border-width) var(--border-style) var(--border-subtle);
+}
+/* version rows: the name gives, the value takes what it needs — tabular so the numbers line up
+   between rows without a table. Muted: this is provenance, not navigation. */
+.mui-sidebar__version {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-mono); font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+.mui-sidebar__version-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mui-sidebar__version-value { flex: none; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.mui-sidebar__version-more {
+  display: block; margin: var(--space-1) 0 0;
+  font-family: var(--font-mono); font-size: var(--text-2xs);
+  color: var(--text-muted); text-decoration: none;
+}
+a.mui-sidebar__version-more:hover { color: var(--text); text-decoration: underline; }
+a.mui-sidebar__version-more:focus-visible {
+  outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset);
 }
 
 /* ---------- rail (solo desktop) · .mui-shell--rail ----------

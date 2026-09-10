@@ -216,6 +216,26 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             . implode('</li><li>', array_map(Html::escape(...), $standing))
             . '</li></ul>';
 
+        // AND THE ROWS THEMSELVES, which this block used to read and throw away.
+        //
+        // The source returned every package with its resolved version and only the COUNT was painted,
+        // so «17 packages» was the whole answer to «which ones, at which versions» — the question a
+        // person actually asks before reporting a bug or reproducing one. The sidebar's footer names
+        // the two that identify the app and links HERE for the rest, so this is where the rest has to
+        // be (greenhouse decisions/0269).
+        $rows = \is_array($packages['rows'] ?? null) ? $packages['rows'] : [];
+        if ($rows !== []) {
+            $items = '';
+            foreach ($rows as $row) {
+                if (!\is_array($row)) {
+                    continue;
+                }
+                $items .= '<li><code>' . Html::escape((string) ($row['name'] ?? '')) . '</code>'
+                    . '<span class="admin-house__version">' . Html::escape((string) ($row['version'] ?? '')) . '</span></li>';
+            }
+            $out[] = '<ul class="admin-house__packages">' . $items . '</ul>';
+        }
+
         return implode("\n", $out);
     }
 

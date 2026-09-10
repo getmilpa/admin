@@ -60,6 +60,9 @@ final class SidebarComponent implements ComponentDefinitionInterface
                 'wordmark' => ['type' => 'string', 'default' => ''],
                 'active' => ['type' => 'string', 'default' => ''],
                 'items' => ['type' => 'array', 'default' => []],
+                'versions' => ['type' => 'array', 'default' => []],
+                'versionsHref' => ['type' => 'string', 'default' => ''],
+                'versionsRest' => ['type' => 'int', 'default' => 0],
             ],
             stateSchema: ['active' => ['type' => 'string']],
         );
@@ -80,6 +83,15 @@ final class SidebarComponent implements ComponentDefinitionInterface
                 // logo kit mandates instead of the letters a span approximates.
                 'wordmark' => self::string($props, 'wordmark', ''),
                 'groups' => self::groups($props['items'] ?? []),
+                // WHAT THIS PANEL IS RUNNING, in the footer slot the primitive has always had and
+                // nobody filled. A person looking at a panel cannot tell which version of it they are
+                // looking at, and «which admin am I on» is the first question a bug report needs
+                // answered (greenhouse decisions/0269).
+                'versions' => self::versions($props['versions'] ?? []),
+                'versionsHref' => self::string($props, 'versionsHref', ''),
+                // How many more the app runs than the footer names — a count that links, not a
+                // second list of what another section already lists.
+                'versionsRest' => max(0, (int) ($props['versionsRest'] ?? 0)),
             ],
         );
     }
@@ -168,6 +180,40 @@ final class SidebarComponent implements ComponentDefinitionInterface
                 'href' => (string) ($child['href'] ?? '#'),
                 'icon' => (string) ($child['icon'] ?? ''),
             ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * The versions the footer shows, normalised.
+     *
+     * A row with no version is DROPPED rather than printed with a placeholder: «this app does not have
+     * that package» and «it has it at a version nobody could read» are different facts, and a footer
+     * that showed a dash for the first would say the app runs something it does not.
+     *
+     * @return list<array{name: string, version: string}>
+     */
+    private static function versions(mixed $versions): array
+    {
+        if (\is_string($versions)) {
+            $decoded = json_decode($versions, true);
+            $versions = \is_array($decoded) ? $decoded : [];
+        }
+        if (!\is_array($versions)) {
+            return [];
+        }
+        $out = [];
+        foreach ($versions as $row) {
+            if (!\is_array($row)) {
+                continue;
+            }
+            $name = trim((string) ($row['name'] ?? ''));
+            $version = trim((string) ($row['version'] ?? ''));
+            if ($name === '' || $version === '') {
+                continue;
+            }
+            $out[] = ['name' => $name, 'version' => $version];
         }
 
         return $out;

@@ -34,6 +34,7 @@ final class Catalog
             'nav.group.app' => 'APP',
             'nav.group.agent' => 'AGENT',
             'nav.gear' => 'Settings for this section',
+            'nav.versions.rest' => '+%s more milpa packages',
             'nav.house' => 'The house',
             // ── THE SCREEN THE PANEL OPENS ON ────────────────────────────────────────────────
             // The house's own sentence about this panel, taken from its capability manifest rather
@@ -313,6 +314,7 @@ final class Catalog
             'nav.group.app' => 'APP',
             'nav.group.agent' => 'AGENTE',
             'nav.gear' => 'Ajustes de esta sección',
+            'nav.versions.rest' => '+%s paquetes milpa más',
             'nav.house' => 'La casa',
             'house.heading' => 'Esta casa',
             'house.doctrine' => 'Aquí es donde un humano deja la casa lista para el agente.',
