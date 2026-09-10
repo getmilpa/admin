@@ -106,10 +106,10 @@ final class AdminPluginTest extends TestCase
         // The PSR-11 registry, not DIContainer::has() — which is true for any auto-wirable class and so
         // proved nothing here while the gate was never registered (greenhouse evidence/0522).
         self::assertTrue($container->getContainer()->has(LoopbackOnlyMiddleware::class), 'the gate is REGISTERED, not merely auto-wirable');
-        self::assertSame(['plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
-        self::assertSame([10, 20, 25, 30, 40], array_map(static fn ($s): int => $s->order, $plugin->adminSections()));
-        self::assertSame('nav.devtools', $plugin->adminSections()[4]->title);
-        self::assertSame('admin', $plugin->adminSections()[4]->group);
+        self::assertSame(['house', 'plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
+        self::assertSame([5, 10, 20, 25, 30, 40], array_map(static fn ($s): int => $s->order, $plugin->adminSections()));
+        self::assertSame('nav.devtools', $plugin->adminSections()[5]->title);
+        self::assertSame('admin', $plugin->adminSections()[5]->group);
         self::assertSame('/milpa/admin', $plugin->settings()->route);
 
         $plugin->install();
@@ -196,7 +196,7 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('id="milpa-admin-section-hola"', $html, 'order 5 puts the foreign section first');
         $nav = self::sidebar($html);
         self::assertSame(['ADMIN', 'APP'], self::headings($nav), 'the panel\'s own under ADMIN, the foreign plugin\'s under APP');
-        self::assertSame(['/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
+        self::assertSame(['/milpa/admin/s/house', '/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
         self::assertSame(['/milpa/admin/s/hola', '/milpa/admin/s/echo'], self::itemsUnder($nav, 'app'));
         self::assertStringContainsString('href="/milpa/admin/s/hola" aria-current="page"><span class="mui-sidebar__item-icon" aria-hidden="true">✦</span>', $nav, 'the glyph the plugin declared is painted');
         self::assertStringContainsString('<h1 class="mui-page-header__title">Hola</h1><span class="admin-section__declared" data-declared-by="Milpa\\Admin\\Tests\\Fixtures\\HolaPlugin">declared by HolaPlugin</span>', $html, 'the host attributes the section');
@@ -223,7 +223,7 @@ final class AdminPluginTest extends TestCase
         self::assertSame(404, $missing->getStatusCode());
         $body = (string) $missing->getBody();
         self::assertStringContainsString('No section is named «ghost». The sections present are: ', $body);
-        foreach (['hola', 'echo', 'plugins', 'routes', 'settings', 'stack', 'devtools'] as $present) {
+        foreach (['hola', 'echo', 'house', 'plugins', 'routes', 'settings', 'stack', 'devtools'] as $present) {
             self::assertMatchesRegularExpression('~The sections present are: [^.]*\b' . $present . '\b~', $body, 'the 404 lists ' . $present);
         }
         self::assertSame(404, $controller->section(new ServerRequest('GET', '/x'))->getStatusCode(), 'no route result → empty id → nothing is named that');
@@ -241,7 +241,7 @@ final class AdminPluginTest extends TestCase
             self::assertSame([LoopbackOnlyMiddleware::class], $route->middleware, $route->path . ' carries the strict gate, and only it');
         }
         self::assertSame('fallback', $admin->settings()->gateKind());
-        self::assertSame(['plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $admin->adminSections()));
+        self::assertSame(['house', 'plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $admin->adminSections()));
 
         $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
         self::assertStringContainsString('href="/milpa/admin/s/settings"', $index, 'the Settings section is in the sidebar');
@@ -413,7 +413,7 @@ final class AdminPluginTest extends TestCase
         $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
         $nav = self::sidebar($index);
         self::assertSame(['ADMIN', 'APP', 'AGENT', 'LAB'], self::headings($nav), 'admin, app, agent, then a group the catalog does not know — named anyway');
-        self::assertSame(['/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
+        self::assertSame(['/milpa/admin/s/house', '/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
         self::assertSame(['/milpa/admin/s/hola', '/milpa/admin/s/echo'], self::itemsUnder($nav, 'app'));
         self::assertSame(['/milpa/admin/s/agent'], self::itemsUnder($nav, 'agent'));
         self::assertSame(['/milpa/admin/s/lab'], self::itemsUnder($nav, 'lab'));
@@ -540,9 +540,14 @@ final class AdminPluginTest extends TestCase
         $es = (string) $controller->index((new ServerRequest('GET', '/milpa/admin?lang=es'))->withQueryParams(['lang' => 'es']))->getBody();
         self::assertStringContainsString('<html lang="es"', $es);
         self::assertStringContainsString('Rutas', $es, 'the sidebar speaks Spanish');
-        self::assertStringContainsString('Plugins que esta app arranca', $es, 'so does the section body');
+        // The panel opens on the house now, so the body this asserts over is the house's — and its
+        // Spanish is what proves the query reached the section and not only the chrome.
+        self::assertStringContainsString('Aquí es donde un humano deja la casa lista para el agente.', $es, 'so does the section body');
         self::assertStringContainsString('data-locale="es">es</span>', $es, 'and the chip');
-        self::assertStringContainsString('<title>Plugins · Milpa Admin</title>', $es);
+        // The landing's title, translated — the whole point of the assertion. It used to read
+        // «Plugins», which happens to be the same word in both languages and so could not tell a
+        // reached catalog from an ignored one (greenhouse decisions/0264).
+        self::assertStringContainsString('<title>La casa · Milpa Admin</title>', $es);
 
         $fromUri = (string) $controller->index(new ServerRequest('GET', '/milpa/admin?lang=es'))->getBody();
         self::assertStringContainsString('Rutas', $fromUri, 'read from the URI when the host did not parse the query');

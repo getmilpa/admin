@@ -19,6 +19,8 @@ use Milpa\Console\Http\HttpProjector;
 use Milpa\Console\FileConfirmTokenStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Milpa\Admin\Components\DevToolsComponent;
+use Milpa\Admin\Components\HouseComponent;
+use Milpa\Admin\Data\HouseSource;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
 use Milpa\Admin\Components\SettingsComponent;
@@ -122,15 +124,34 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
         $renderer = new AdminHtmlRenderer($codec, $catalog, $settings);
         $projection = new ComposeProjection();
         $stack = new StackSource($this->container, new TcpProbe(), $projection, fallbackProvider: null);
+        // ONE INSTANCE OF EACH SOURCE, shared by the section that owns it and by the home that
+        // summarises it. Two instances would be two ways to count one thing, which is how a panel
+        // ends up disagreeing with itself about how many plugins it boots.
+        $pluginsSource = new PluginsSource($this->container);
+        $routesSource = new RoutesSource($this->container, $this);
 
         $this->sections = [
+            // THE SCREEN THE PANEL OPENS ON, and it is first BY DECISION rather than by arithmetic.
+            // Plugins used to be the home because `order: 10` won a flat `(order, id)` sort — nobody
+            // chose it — so a human who had just installed the framework met a table of PHP class
+            // names (greenhouse decisions/0264). The table is not wrong; Plugins is where it belongs.
+            new AdminSection(
+                id: HouseComponent::SECTION,
+                title: 'nav.house',
+                component: HouseComponent::NAME,
+                order: 5,
+                group: AdminSection::GROUP_ADMIN,
+                definition: new HouseComponent(new HouseSource($this->container, $settings, $pluginsSource, $routesSource)),
+                renderer: $renderer,
+                icon: '⌂',
+            ),
             new AdminSection(
                 id: 'plugins',
                 title: 'nav.plugins',
                 component: PluginsComponent::NAME,
                 order: 10,
                 group: AdminSection::GROUP_ADMIN,
-                definition: new PluginsComponent(new PluginsSource($this->container)),
+                definition: new PluginsComponent($pluginsSource),
                 renderer: $renderer,
                 icon: '▣',
             ),
@@ -140,7 +161,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 component: RoutesComponent::NAME,
                 order: 20,
                 group: AdminSection::GROUP_ADMIN,
-                definition: new RoutesComponent(new RoutesSource($this->container, $this)),
+                definition: new RoutesComponent($routesSource),
                 renderer: $renderer,
                 icon: '⇢',
             ),
