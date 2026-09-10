@@ -16,6 +16,7 @@ namespace Milpa\Admin\Rendering;
 
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\DevToolsComponent;
+use Milpa\Admin\Components\HouseComponent;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
 use Milpa\Admin\Components\SettingsComponent;
@@ -83,14 +84,16 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $painter = $this->forLocale($request->context->locale);
 
         $body = match ($name) {
+            HouseComponent::NAME => $painter->house($state),
             PluginsComponent::NAME => $painter->plugins($state),
             RoutesComponent::NAME => $painter->routes($state),
             SettingsComponent::NAME => $painter->settings($state),
             StackComponent::NAME => $painter->stack($state),
             DevToolsComponent::NAME => $painter->devtools($state),
             default => throw new \InvalidArgumentException(\sprintf(
-                '%s renders %s, %s, %s, %s and %s, not «%s».',
+                '%s renders %s, %s, %s, %s, %s and %s, not «%s».',
                 self::class,
+                HouseComponent::NAME,
                 PluginsComponent::NAME,
                 RoutesComponent::NAME,
                 SettingsComponent::NAME,
@@ -130,6 +133,179 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $painter->lang = $locale;
 
         return $painter;
+    }
+
+    /**
+     * THE SCREEN THE PANEL OPENS ON — what this house is, what it can be asked for, what it cannot
+     * do yet, and one next move derived from a measured absence.
+     *
+     * Every absence is reported as the fact it is, WITH ITS COST: an empty foundation is not «—», it
+     * is a house with no subject to judge a request against. And when nothing is missing the screen
+     * says so and stops — advice that is always available is advice worth nothing
+     * (greenhouse decisions/0264).
+     */
+    private function house(StateSnapshot $state): string
+    {
+        $data = $state->data;
+        $foundation = \is_array($data['foundation'] ?? null) ? $data['foundation'] : [];
+        $capabilities = \is_array($data['capabilities'] ?? null) ? $data['capabilities'] : [];
+        $installed = \is_array($capabilities['installed'] ?? null) ? array_values(array_filter($capabilities['installed'], 'is_array')) : [];
+        $available = \is_array($capabilities['available'] ?? null) ? array_values(array_filter($capabilities['available'], 'is_array')) : [];
+        $principal = (string) ($state->meta['principal'] ?? '');
+        $gate = (string) ($data['gate'] ?? '');
+        $root = (string) ($data['root'] ?? '');
+
+        $out = ['<h2 class="mui-h2">' . Html::escape($this->catalog->tr('house.heading')) . '</h2>'];
+        $out[] = '<p class="admin-house__doctrine">' . Html::escape($this->catalog->tr('house.doctrine')) . '</p>';
+
+        // ── WHO IS IN IT ────────────────────────────────────────────────────────────────────────
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.who')) . '</h3>';
+        $out[] = $principal === ''
+            ? $this->notice($this->catalog->tr('house.who.nobody', $gate), 'warning')
+            : '<p class="admin-house__line">' . Html::escape($this->catalog->tr('house.who.signed', $principal))
+                . ' — ' . Html::escape($this->catalog->tr('house.who.gate', $gate)) . '</p>';
+
+        // ── FOUNDED TO ──────────────────────────────────────────────────────────────────────────
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.founded')) . '</h3>';
+        $out[] = $this->houseFoundation($foundation);
+
+        // ── WHAT IT CAN BE ASKED FOR ────────────────────────────────────────────────────────────
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.can')) . '</h3>';
+        if ($installed === []) {
+            $out[] = $this->notice($this->catalog->tr('house.can.none'), 'danger');
+        } else {
+            $out[] = '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.can.count', (string) \count($installed))) . '</p>';
+            $out[] = '<ul class="admin-house__caps">' . implode('', array_map($this->houseCapability(...), $installed)) . '</ul>';
+        }
+
+        // ── WHAT IT CANNOT DO YET ───────────────────────────────────────────────────────────────
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.cannot')) . '</h3>';
+        if ($available === []) {
+            $out[] = '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.cannot.none')) . '</p>';
+        } else {
+            $out[] = '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.cannot.hint')) . '</p>';
+            $out[] = '<ul class="admin-house__caps">' . implode('', array_map($this->houseOffer(...), $available)) . '</ul>';
+        }
+        $source = (string) ($capabilities['source'] ?? '');
+        if ($source !== '') {
+            $out[] = '<p class="admin-house__aside">' . Html::escape($this->catalog->tr('house.cannot.index', $source)) . '</p>';
+        }
+
+        // ── THE NEXT MOVE ───────────────────────────────────────────────────────────────────────
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.next')) . '</h3>';
+        $out[] = $this->notice($this->houseNextMove($foundation, $installed, $source), 'info');
+
+        // ── STANDING ────────────────────────────────────────────────────────────────────────────
+        // Last, and quietly: it is the only block a person does not need in order to act.
+        $packages = \is_array($data['packages'] ?? null) ? $data['packages'] : [];
+        $standing = [
+            $this->catalog->tr('house.standing.route', (string) ($data['route'] ?? '')),
+            $this->catalog->tr('house.standing.surface', (string) ($data['routes'] ?? 0), (string) ($data['plugins'] ?? 0)),
+            $this->catalog->tr('house.standing.packages', (string) ($packages['count'] ?? 0)),
+            $root === '' ? $this->catalog->tr('house.standing.rootless') : $this->catalog->tr('house.standing.root', $root),
+        ];
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.standing')) . '</h3>';
+        $out[] = '<ul class="admin-house__standing"><li>'
+            . implode('</li><li>', array_map(Html::escape(...), $standing))
+            . '</li></ul>';
+
+        return implode("\n", $out);
+    }
+
+    /**
+     * What this house was founded to do — or which of the two absences it is in.
+     *
+     * A missing file and a file of nulls are different facts and get different sentences: one says
+     * nobody founded this app, the other says nobody told it what it is for. Rendering «—» for both
+     * teaches nothing about which one you are looking at.
+     *
+     * @param array<string, mixed> $foundation
+     */
+    private function houseFoundation(array $foundation): string
+    {
+        if (($foundation['declared'] ?? false) !== true) {
+            return $this->notice($this->catalog->tr('house.founded.absent'), 'warning');
+        }
+        $domain = \is_string($foundation['domain'] ?? null) ? (string) $foundation['domain'] : '';
+        if ($domain === '') {
+            return $this->notice($this->catalog->tr('house.founded.blank'), 'warning');
+        }
+
+        $lines = ['<p class="admin-house__domain">' . Html::escape($domain) . '</p>'];
+        if (\is_string($foundation['objective'] ?? null)) {
+            $lines[] = '<p class="admin-house__line">' . Html::escape($this->catalog->tr('house.founded.objective', (string) $foundation['objective'])) . '</p>';
+        }
+        $asides = [];
+        $boundaries = (int) ($foundation['boundaries'] ?? 0);
+        $asides[] = $boundaries === 0
+            ? $this->catalog->tr('house.founded.no_boundaries')
+            : $this->catalog->tr('house.founded.boundaries', (string) $boundaries);
+        if (\is_string($foundation['founded_at'] ?? null)) {
+            $asides[] = $this->catalog->tr('house.founded.since', (string) $foundation['founded_at']);
+        }
+        foreach (\is_array($foundation['authorities'] ?? null) ? $foundation['authorities'] : [] as $what => $who) {
+            if (\is_string($what) && \is_string($who)) {
+                $asides[] = $this->catalog->tr('house.founded.authority', str_replace('_', ' ', $what), $who);
+            }
+        }
+        $lines[] = '<p class="admin-house__aside">' . implode(' · ', array_map(Html::escape(...), $asides)) . '</p>';
+
+        return implode("\n", $lines);
+    }
+
+    /** One installed capability, led by what it lets somebody ASK FOR rather than by its vendor name. */
+    private function houseCapability(mixed $capability): string
+    {
+        $row = \is_array($capability) ? $capability : [];
+        $unlocks = \is_array($row['unlocks'] ?? null) ? array_values(array_filter($row['unlocks'], 'is_string')) : [];
+
+        return '<li class="admin-house__cap"><div class="admin-house__cap-title">'
+            . Html::escape((string) ($row['title'] ?? ($row['id'] ?? '')))
+            . '</div><div class="admin-house__aside">'
+            . ($unlocks === []
+                ? Html::escape($this->catalog->tr('house.can.silent'))
+                : Html::escape($this->catalog->tr('house.can.unlocks')) . ' ' . $this->codes($unlocks))
+            . '</div></li>';
+    }
+
+    /** One capability on offer, with the exact signed command that installs it — never a button. */
+    private function houseOffer(mixed $capability): string
+    {
+        $row = \is_array($capability) ? $capability : [];
+        $command = \is_string($row['command'] ?? null) ? (string) $row['command'] : '';
+
+        return '<li class="admin-house__cap"><div class="admin-house__cap-title">'
+            . Html::escape((string) ($row['title'] ?? ($row['id'] ?? '')))
+            . '</div>'
+            . ($command === '' ? '' : '<div><code class="admin-house__command">' . Html::escape($command) . '</code></div>')
+            . '</li>';
+    }
+
+    /**
+     * ONE next move, derived from a measured absence in the order the absences bite.
+     *
+     * Founding first: everything that judges a request reads the domain, so a house without one
+     * cannot hold an agent to anything. Then the index, because an offline floor makes the offer
+     * list a guess. Then the agent, which is what the panel exists to prepare for. And when none of
+     * those is missing the screen says it has nothing to tell you — because it does not.
+     *
+     * @param array<string, mixed>       $foundation
+     * @param list<array<string, mixed>> $installed
+     */
+    private function houseNextMove(array $foundation, array $installed, string $source): string
+    {
+        if (($foundation['declared'] ?? false) !== true || !\is_string($foundation['domain'] ?? null)) {
+            return $this->catalog->tr('house.next.found');
+        }
+        if (str_contains($source, 'offline floor')) {
+            return $this->catalog->tr('house.next.refresh');
+        }
+        $ids = array_map(static fn (array $row): string => \is_string($row['id'] ?? null) ? $row['id'] : '', $installed);
+        if (!\in_array('agent', $ids, true)) {
+            return $this->catalog->tr('house.next.agent');
+        }
+
+        return $this->catalog->tr('house.next.equipped');
     }
 
     /**
