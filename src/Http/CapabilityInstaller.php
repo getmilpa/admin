@@ -15,9 +15,12 @@ declare(strict_types=1);
 namespace Milpa\Admin\Http;
 
 use Milpa\Console\Http\HttpProjector;
+use Milpa\Console\Http\UnguardedOperationException;
 use Milpa\Http\HttpMethod;
 use Milpa\Http\Routing\Route;
 use Milpa\Http\Routing\RouteResult;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -62,9 +65,21 @@ final class CapabilityInstaller
 
     public const string ROUTE_NAME = 'milpa_admin_capability_enable';
 
-    public function __construct(private readonly HttpProjector $projector)
-    {
+    /**
+     * The sentence this panel answers with when the app has no judge for the act.
+     *
+     * A constant because two surfaces say it: this route, when a click arrives anyway, and the section
+     * that decides whether to paint the button at all. One text, so the refusal and the explanation
+     * cannot drift (greenhouse decisions/0289).
+     */
+    public const string NO_JUDGE = 'This app cannot authorize «' . self::OPERATION . '» over HTTP: it registered no OperationHttpPolicy, so nothing here can hold the scope the act declares. Install milpa/auth and enrol a passkey, or run `coa capabilities:enable <package> --sign` from a terminal.';
+
+    public function __construct(
+        private readonly HttpProjector $projector,
+        private readonly ResponseFactoryInterface $responses = new Psr17Factory(),
+    ) {
     }
+
 
     /**
      * Runs the install the panel's button asked for, through the operation's own HTTP ceremony.
@@ -74,7 +89,7 @@ final class CapabilityInstaller
         // The projector looks the operation up by matched route name. This route has its own name so
         // it can never collide with a host that exposes the same operation, so the name it needs is
         // handed over here — the one place that knows both.
-        return $this->projector->handle($request->withAttribute(
+        $routed = $request->withAttribute(
             RouteResult::ATTRIBUTE,
             RouteResult::matched(new Route(
                 path: '/',
@@ -82,6 +97,26 @@ final class CapabilityInstaller
                 name: self::OPERATION,
                 handler: null,
             )),
-        ));
+        );
+
+        // 🚨 A NAMEABLE REFUSAL IS NOT AN EXCEPTION. Measured in a browser on fresh cattle: this button
+        // answered `internal_error`, and only the app's log said why — «exige los scopes […] y este host
+        // no cableó una OperationHttpPolicy». The framework names that same condition at BOOT when an
+        // app lists the operation in `config/http.php`; letting it escape HERE turns a sentence somebody
+        // can act on into a stack trace and a 500 (greenhouse decisions/0289).
+        //
+        // 501 and not 403: the caller is not being denied, and nothing about them would change the
+        // answer. This app has not implemented a way to judge the act at all.
+        try {
+            return $this->projector->handle($routed);
+        } catch (UnguardedOperationException) {
+            $response = $this->responses->createResponse(501)->withHeader('Content-Type', 'application/json');
+            $response->getBody()->write((string) json_encode(
+                ['ok' => false, 'error' => self::NO_JUDGE],
+                \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES,
+            ));
+
+            return $response;
+        }
     }
 }

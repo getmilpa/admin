@@ -595,8 +595,19 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             // THE COMMAND, ONCE, AS A FORM. Seven rows repeating 45 near-identical characters is
             // redundancy the table already carries — the package IS the first column.
             $out[] = '<p class="admin-capabilities__form"><kbd class="mui-kbd">' . Html::escape($this->catalog->tr('capabilities.command_form')) . '</kbd></p>';
-            $out[] = $this->capabilityTable($available, $installed);
-            $out[] = $this->capabilityEnabler();
+            // NO BUTTON WHERE THE ACT CANNOT BE JUDGED, and the reason said instead of hidden. The
+            // operation declares a scope; with no `OperationHttpPolicy` in the app nothing here can hold
+            // it, and the button answered `internal_error` (greenhouse decisions/0289). The command form
+            // above stays either way — a person with a terminal was never blocked.
+            $installable = ($data['installable'] ?? null) === true;
+            if (!$installable) {
+                $out[] = $this->notice($this->catalog->tr('capabilities.needs_judge'));
+            }
+            $out[] = $this->capabilityTable($available, $installed, $installable);
+            // The enabler's script is only worth shipping where there is a button for it to bind to.
+            if ($installable) {
+                $out[] = $this->capabilityEnabler();
+            }
         }
 
         return implode("\n", $out);
@@ -605,6 +616,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     /**
      * @param list<mixed> $items
      * @param bool        $offerToEnable whether each row gets the button that runs `capabilities:enable`
+     * @param bool        $installed     whether the row is an already-installed capability rather than an available one
      */
     /**
      * Equipping the house: one table, the act in a fixed column, the command factored out.
@@ -633,7 +645,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
      * @param list<array<string, mixed>> $available
      * @param list<array<string, mixed>> $installed
      */
-    private function capabilityTable(array $available, array $installed): string
+    private function capabilityTable(array $available, array $installed, bool $installable = true): string
     {
         $rows = [];
         // AVAILABLE FIRST: this screen is for deciding, and the group that carries a decision is the
@@ -641,13 +653,13 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $rows[] = $this->capabilityGroup('capabilities.available', \count($available), 'capabilities.available_note', 'available');
 
         foreach ($available as $item) {
-            $rows[] = $this->capabilityRow($item, 'package', true);
+            $rows[] = $this->capabilityRow($item, 'package', $installable);
         }
 
         $rows[] = $this->capabilityGroup('capabilities.installed', \count($installed), 'capabilities.installed_note', 'installed');
 
         foreach ($installed as $item) {
-            $rows[] = $this->capabilityRow($item, 'id', false);
+            $rows[] = $this->capabilityRow($item, 'id', false, installed: true);
         }
 
         return '<div class="mui-table-wrap"><table class="mui-table admin-capabilities">'
@@ -678,7 +690,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
      *
      * @param array<string, mixed> $item
      */
-    private function capabilityRow(array $item, string $keyField, bool $offerToEnable): string
+    private function capabilityRow(array $item, string $keyField, bool $offerToEnable, bool $installed = false): string
     {
         $key = (string) ($item[$keyField] ?? $item['package'] ?? '');
         $title = (string) ($item['title'] ?? '');
@@ -688,14 +700,25 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             static fn (mixed $u): bool => \is_string($u) && $u !== '',
         ));
 
-        $act = $offerToEnable && $key !== ''
+        // THREE STATES, NOT TWO. This column used to be «button or Installed», and the moment a third
+        // reason to withhold the button appeared — an app with nothing that can authorize the act — the
+        // false branch put «Installed» next to a capability that is NOT installed. Caught in the browser
+        // on the same day it was written: the AVAILABLE group read «Installed» down its whole column
+        // (greenhouse decisions/0289).
+        //
+        // So the row says which of the three it is. A dash is not an option: the reason lives in the
+        // notice above the table, and repeating it twelve times is the noise `decisions/0250` removed.
+        $act = match (true) {
+            $key === '' => '',
             // THE BUTTON NAMES WHAT IT INSTALLS. «Install» alone, seven times in a column, cannot be
             // misread only because of where it sits; with the package in it, it cannot be misread at all.
-            ? '<button type="button" class="mui-btn mui-btn--sm admin-enable" data-capability="' . Html::escape($key) . '"'
+            $offerToEnable => '<button type="button" class="mui-btn mui-btn--sm admin-enable" data-capability="' . Html::escape($key) . '"'
                 . ($command !== '' ? ' data-command="' . Html::escape($command) . '"' : '') . '>'
                 . Html::escape(\sprintf($this->catalog->tr('capabilities.install'), $key)) . '</button>'
-                . '<span class="admin-enable-said" hidden></span>'
-            : '<span class="admin-capabilities__done">' . Html::escape($this->catalog->tr('capabilities.done')) . '</span>';
+                . '<span class="admin-enable-said" hidden></span>',
+            $installed => '<span class="admin-capabilities__done">' . Html::escape($this->catalog->tr('capabilities.done')) . '</span>',
+            default => '<span class="admin-capabilities__from-terminal">' . Html::escape($this->catalog->tr('capabilities.from_terminal')) . '</span>',
+        };
 
         return '<tr data-capability="' . Html::escape($key) . '">'
             . '<td><code class="admin-capabilities__name">' . Html::escape($key) . '</code></td>'
