@@ -15,9 +15,9 @@ declare(strict_types=1);
 namespace Milpa\Admin\Tests\Controllers;
 
 use Milpa\Admin\Controllers\StackController;
-use Milpa\Admin\Data\StackSource;
+use Milpa\Runtime\Stack\StackReader;
 use Milpa\Admin\I18n\Catalog;
-use Milpa\Admin\Stack\ComposeProjection;
+use Milpa\Runtime\Stack\ComposeProjection;
 use Milpa\Admin\Tests\Fixtures\DeclaringProvider;
 use Milpa\Admin\Tests\Fixtures\FakeProbe;
 use Milpa\Admin\Tests\Fixtures\HubPlugin;
@@ -35,7 +35,7 @@ final class StackControllerTest extends TestCase
     {
         $container = new DIContainer();
         $container->registerService(Config::class, new Config(['hub' => ['public_url' => 'http://localhost:3000', 'key' => 'config-secret']]));
-        $controller = self::controller(new StackSource($container, new FakeProbe(), new ComposeProjection(), new HubPlugin($container)));
+        $controller = self::controller(new StackReader($container, new FakeProbe(), new ComposeProjection(), new HubPlugin($container)));
 
         $response = $controller->compose(new ServerRequest('GET', '/milpa/admin/stack/compose.yml'));
 
@@ -53,7 +53,7 @@ final class StackControllerTest extends TestCase
 
     public function testAnEmptyStackIsStillAComposeFile(): void
     {
-        $controller = self::controller(new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection()));
+        $controller = self::controller(new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection()));
 
         $response = $controller->compose(new ServerRequest('GET', '/milpa/admin/stack/compose.yml'));
 
@@ -66,7 +66,7 @@ final class StackControllerTest extends TestCase
         $container = new DIContainer();
         $kernel = Kernel::boot(['root' => sys_get_temp_dir(), 'plugins' => [HubPlugin::class, RivalHubPlugin::class], 'config' => [], 'container' => $container]);
         $container->registerService(Kernel::class, $kernel);
-        $source = new StackSource($container, new FakeProbe(), new ComposeProjection());
+        $source = new StackReader($container, new FakeProbe(), new ComposeProjection());
 
         $response = self::controller($source)->compose(new ServerRequest('GET', '/milpa/admin/stack/compose.yml'));
 
@@ -97,7 +97,7 @@ final class StackControllerTest extends TestCase
             new ServiceDeclaration(name: 'db', image: 'mysql'),
             new ServiceDeclaration(name: 'fine', image: 'alone'),
         ]);
-        $source = new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection(), $provider);
+        $source = new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection(), $provider);
 
         $response = self::controller($source)->compose(new ServerRequest('GET', '/milpa/admin/stack/compose.yml'));
 
@@ -109,7 +109,7 @@ final class StackControllerTest extends TestCase
         self::assertStringNotContainsString('fine', (string) $response->getBody());
     }
 
-    private static function controller(StackSource $source, string $locale = 'en'): StackController
+    private static function controller(StackReader $source, string $locale = 'en'): StackController
     {
         return new StackController($source, new ComposeProjection(), new Catalog($locale));
     }

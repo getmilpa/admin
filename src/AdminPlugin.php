@@ -33,16 +33,16 @@ use Milpa\Admin\Data\DevToolsSource;
 use Milpa\Admin\Data\PluginsSource;
 use Milpa\Admin\Data\RoutesSource;
 use Milpa\Admin\Data\SettingsSource;
-use Milpa\Admin\Data\StackSource;
+use Milpa\Runtime\Stack\StackReader;
 use Milpa\Admin\Event\AdminEvents;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Rendering\AdminHtmlRenderer;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\AdminSectionProvider;
-use Milpa\Admin\Stack\ComposeProjection;
+use Milpa\Runtime\Stack\ComposeProjection;
 use Milpa\Admin\Tui\AdminSectionStates;
-use Milpa\Admin\Stack\TcpProbe;
+use Milpa\Runtime\Stack\TcpProbe;
 use Milpa\Admin\View\AdminPage;
 use Milpa\Admin\View\AdminShell;
 use Milpa\Console\State\SectionStateProvider;
@@ -123,7 +123,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
         );
         $renderer = new AdminHtmlRenderer($codec, $catalog, $settings);
         $projection = new ComposeProjection();
-        $stack = new StackSource($this->container, new TcpProbe(), $projection, fallbackProvider: null);
+        $stack = new StackReader($this->container, new TcpProbe(), $projection, fallbackProvider: null);
         // ONE INSTANCE OF EACH SOURCE, shared by the section that owns it and by the home that
         // summarises it. Two instances would be two ways to count one thing, which is how a panel
         // ends up disagreeing with itself about how many plugins it boots.

@@ -24,11 +24,11 @@ use Milpa\Admin\Data\DevToolsSource;
 use Milpa\Admin\Data\PluginsSource;
 use Milpa\Admin\Data\RoutesSource;
 use Milpa\Admin\Data\SettingsSource;
-use Milpa\Admin\Data\StackSource;
+use Milpa\Runtime\Stack\StackReader;
 use Milpa\Admin\Http\LoopbackOnlyMiddleware;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Admin\Rendering\AdminHtmlRenderer;
-use Milpa\Admin\Stack\ComposeProjection;
+use Milpa\Runtime\Stack\ComposeProjection;
 use Milpa\Admin\Tests\Fixtures\EchoComponent;
 use Milpa\Admin\Tests\Fixtures\FakeProbe;
 use Milpa\Container\DIContainer;
@@ -165,7 +165,7 @@ final class AdminHtmlRendererTest extends TestCase
             'garbage',
         ]]);
 
-        $html = self::renderer()->render(new StackComponent(new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request($state))->output;
+        $html = self::renderer()->render(new StackComponent(new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request($state))->output;
 
         self::assertStringContainsString('admin-section--admin-stack', $html);
         self::assertStringContainsString('href="/milpa/admin/stack/compose.yml"', $html);
@@ -203,7 +203,7 @@ final class AdminHtmlRendererTest extends TestCase
 
     public function testStackEmptyAndNoKernelNoticesAndTheSpanishTwin(): void
     {
-        $component = new StackComponent(new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection()));
+        $component = new StackComponent(new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection()));
 
         $empty = new StateSnapshot('k2', StackComponent::NAME, '1', ['kernel' => false, 'services' => []]);
         $html = self::renderer()->render($component, self::request($empty))->output;
@@ -242,7 +242,7 @@ final class AdminHtmlRendererTest extends TestCase
             $row('ThirdPlugin', ['HubPlugin', 'RivalHubPlugin']),
             $row('LonePlugin', ['OtherPlugin', 42]),
         ]]);
-        $component = new StackComponent(new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection()));
+        $component = new StackComponent(new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection()));
 
         $html = self::renderer()->render($component, self::request($state))->output;
 
@@ -871,8 +871,8 @@ final class AdminHtmlRendererTest extends TestCase
      */
     public function testAServiceThatIsDownSaysHowToBringItUp(): void
     {
-        $down = self::renderer()->render(new StackComponent(new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request(self::stackState('down')))->output;
-        $up = self::renderer()->render(new StackComponent(new StackSource(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request(self::stackState('up')))->output;
+        $down = self::renderer()->render(new StackComponent(new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request(self::stackState('down')))->output;
+        $up = self::renderer()->render(new StackComponent(new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request(self::stackState('up')))->output;
 
         self::assertStringContainsString('docker compose up -d mercure', $down);
         self::assertStringContainsString('Not answering', $down);
