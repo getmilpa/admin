@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Http;
 
-use Milpa\Admin\Data\FrameworkRelease;
+use Milpa\Admin\Data\FrameworkFacts;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Runtime\Kernel;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -87,17 +87,17 @@ final class FrameworkCheck
             return $this->json(200, ['ok' => false, 'error' => 'no_app_root']);
         }
 
-        $latest = FrameworkRelease::latest();
+        $latest = FrameworkFacts::latest();
         if ($latest === null) {
             return $this->json(200, ['ok' => false, 'error' => 'registry_unreachable']);
         }
 
-        $ships = FrameworkRelease::ships($latest, $root);
+        $ships = FrameworkFacts::ships($latest, $root);
         if ($ships === null) {
             return $this->json(200, ['ok' => false, 'error' => 'release_unavailable', 'latest' => $latest]);
         }
 
-        FrameworkRelease::remember($root, $latest, gmdate('c'));
+        FrameworkFacts::remember($root, $latest, gmdate('c'));
 
         return $this->json(200, ['ok' => true, 'latest' => $latest, 'files' => \count($ships)]);
     }

@@ -88,12 +88,12 @@ final readonly class HouseSource
             // record: a house created before `milpa/framework` stamped one cannot say, and counting
             // zero customized files would read as «nothing changed» rather than «unknown» — two
             // different answers, and telling them apart is the point (greenhouse decisions/0293).
-            'divergence' => FrameworkDivergence::summary($root),
-            'divergenceRows' => FrameworkDivergence::rows($root),
+            'divergence' => FrameworkFacts::divergence($root),
+            'divergenceRows' => FrameworkFacts::divergenceRows($root),
             // THE THIRD POINT, only as far as a previous press of the verb got it. Null means nobody has
             // checked — which is NOT «you are up to date», and a screen that showed an empty
             // reconciliation for the first would be claiming the second (greenhouse decisions/0294).
-            'check' => FrameworkRelease::remembered($root),
+            'check' => FrameworkFacts::lastCheck($root),
             'reconciliation' => $this->reconciliation($root),
             'packages' => $this->packages($root),
             'capabilities' => [
@@ -176,7 +176,7 @@ final readonly class HouseSource
      */
     private function reconciliation(string $root): ?array
     {
-        $check = FrameworkRelease::remembered($root);
+        $check = FrameworkFacts::lastCheck($root);
         if ($check === null || $root === '') {
             return null;
         }
@@ -191,13 +191,12 @@ final readonly class HouseSource
         /** @var array<string, string> $ships */
         $ships = array_filter($read, '\is_string');
 
-        $summary = FrameworkReconciliation::summary($root, $ships);
-        $rows = FrameworkReconciliation::rows($root, $ships);
-        if ($summary === null || $rows === null) {
+        $judged = FrameworkFacts::reconcile($root, $ships);
+        if ($judged === null) {
             return null;
         }
 
-        return ['latest' => $check['latest'], 'at' => $check['at'], 'summary' => $summary, 'rows' => $rows];
+        return ['latest' => $check['latest'], 'at' => $check['at'], 'summary' => $judged['summary'], 'rows' => $judged['rows']];
     }
 
     /** The app's root, from the kernel the app registered — '' when there is none to ask. */

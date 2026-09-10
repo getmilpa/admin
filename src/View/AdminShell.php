@@ -22,7 +22,7 @@ use Milpa\Live\Support\DesignTokens;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Interfaces\Di\DIContainerInterface;
 use Milpa\Runtime\Kernel;
-use Milpa\Admin\Data\FrameworkStamp;
+use Milpa\Admin\Data\FrameworkFacts;
 use Milpa\Admin\Data\InstalledPackages;
 use Milpa\Admin\Section\AdminSection;
 use Milpa\Admin\Section\DeclaredView;
@@ -578,7 +578,7 @@ final class AdminShell
             // footer showed the next two names down instead. Rod asked where the framework version was;
             // it had never been there (greenhouse decisions/0291).
             if ($name === 'milpa/framework') {
-                $version = FrameworkStamp::version($root);
+                $version = FrameworkFacts::version($root);
                 if ($version !== null) {
                     $named[] = ['name' => $name, 'version' => $version];
                 }
