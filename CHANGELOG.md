@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.25.0](https://github.com/getmilpa/admin/compare/v0.24.0...v0.25.0) (2026-09-10)
+
+
+### Features
+
+* **shell:** the sidebar's footer says which versions this panel runs ([#81](https://github.com/getmilpa/admin/issues/81)) ([5525a61](https://github.com/getmilpa/admin/commit/5525a6188fba1e16680f828905c0df3b6e51002b))
+
 ## [0.24.0](https://github.com/getmilpa/admin/compare/v0.23.0...v0.24.0) (2026-09-10)
 
 
