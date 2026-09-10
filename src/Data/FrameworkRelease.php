@@ -143,11 +143,56 @@ final class FrameworkRelease
     }
 
     /**
+     * Remembers which release was found, so a render never has to ask the network to know.
+     *
+     * The version alone, plus when it was asked. The release's HASHES already live in their own cache
+     * ({@see self::ships()}); this is only the pointer that says which of them the panel should compare
+     * against. Two files rather than one because a release's bytes never change while «what is newest»
+     * does — mixing them would make an answer that is still true expire with one that is not.
+     */
+    public static function remember(string $root, string $version, string $at): void
+    {
+        @mkdir($root . '/storage', 0o775, true);
+        file_put_contents(
+            $root . '/storage/framework-check.json',
+            json_encode(['latest' => $version, 'at' => $at], \JSON_PRETTY_PRINT) . "\n",
+        );
+    }
+
+    /**
+     * What the last check found, or null when nobody has checked.
+     *
+     * Null is what makes the screen offer the verb instead of a table: «nobody has asked» and «you are
+     * up to date» are different, and a panel that showed an empty reconciliation for the first would be
+     * claiming the second.
+     *
+     * @return array{latest: string, at: string}|null
+     */
+    public static function remembered(string $root): ?array
+    {
+        $file = $root . '/storage/framework-check.json';
+        if (!is_file($file)) {
+            return null;
+        }
+        $read = json_decode((string) file_get_contents($file), true);
+        if (!\is_array($read) || !\is_string($read['latest'] ?? null) || $read['latest'] === '') {
+            return null;
+        }
+
+        return ['latest' => $read['latest'], 'at' => \is_string($read['at'] ?? null) ? $read['at'] : ''];
+    }
+
+    /**
      * The tracked files of a tree, path relative to it, keyed to the sha256 of its bytes.
+     *
+     * PRIVATE, because nothing outside needs it: it is how {@see self::ships()} turns a fetched release
+     * into hashes. It shipped public for one commit and the unwired-piece census named it the same day —
+     * a same-file caller does not make a public method wired, and «something will want it» is the excuse
+     * `decisions/0213` exists to refuse.
      *
      * @return array<string, string>
      */
-    public static function hashes(string $root): array
+    private static function hashes(string $root): array
     {
         $out = [];
         foreach (self::TRACKED as $glob) {

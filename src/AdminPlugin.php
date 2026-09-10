@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin;
 
 use Milpa\Admin\Http\CapabilityInstaller;
+use Milpa\Admin\Http\FrameworkCheck;
 use Milpa\Command\OperationHttpPolicy;
 use Milpa\Console\Http\HttpProjector;
 use Milpa\Console\FileConfirmTokenStore;
@@ -106,6 +107,11 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
         $config = $this->tryGet(Config::class);
         $settings = AdminSettings::fromConfig($config instanceof Config ? $config : null);
         $this->settings = $settings;
+
+        // The update check's controller. It takes the CONTAINER and not a root: the Kernel is registered
+        // after plugins boot, so a root resolved here is the empty string — see the constructor, which
+        // carries what that cost (greenhouse decisions/0294).
+        $this->container->registerService(FrameworkCheck::class, new FrameworkCheck($this->container));
 
         $events = $this->tryGet(MilpaEventDispatcherInterface::class);
         $events = $events instanceof MilpaEventDispatcherInterface ? $events : null;
@@ -247,6 +253,18 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
 
         return [
             ...$this->installerRoute($route, $middleware),
+            // THE UPDATE CHECK, at this level and not inside `installerRoute()`, because that method
+            // returns nothing at all when `milpa/app-runtime` is absent — and asking the registry which
+            // framework release is newest needs no operation, no capability and no identity package.
+            // It changes nothing about the house: it writes two caches under `storage/` and reports.
+            // The panel's own door is its gate (greenhouse decisions/0294).
+            new Route(
+                path: $route . FrameworkCheck::PATH,
+                methods: HttpMethod::POST,
+                name: FrameworkCheck::ROUTE_NAME,
+                middleware: $middleware,
+                handler: HandlerReference::method(FrameworkCheck::class, 'handle'),
+            ),
             new Route(
                 path: $route,
                 methods: HttpMethod::GET,

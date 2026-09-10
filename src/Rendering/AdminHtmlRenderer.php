@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin\Rendering;
 
 use Milpa\Admin\Data\FrameworkDivergence;
+use Milpa\Admin\Data\FrameworkReconciliation;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\HouseComponent;
@@ -182,6 +183,13 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             \is_array($data['divergenceRows'] ?? null) ? array_values(array_filter($data['divergenceRows'], '\\is_array')) : [],
         );
 
+        // ── WHAT A NEWER SKELETON WOULD DO ──────────────────────────────────────────────────────
+        $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.update')) . '</h3>';
+        $out[] = $this->houseUpdate(
+            \is_array($data['reconciliation'] ?? null) ? $data['reconciliation'] : null,
+            \is_array($data['divergence'] ?? null),
+        );
+
         // ── WHAT IT CAN BE ASKED FOR ────────────────────────────────────────────────────────────
         $out[] = '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('house.can')) . '</h3>';
         if ($installed === []) {
@@ -250,6 +258,57 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         }
 
         return implode("\n", $out);
+    }
+
+    /**
+     * The update: the verb when nobody has pressed it, the answer when somebody has.
+     *
+     * 🚨 «NOBODY HAS ASKED» IS NOT «YOU ARE UP TO DATE». An empty reconciliation rendered for a house
+     * that never checked would print the second while meaning the first — the reassuring one, again.
+     * So the button stands alone until a check has run, and the table only exists afterwards.
+     *
+     * A house with no birth record gets no button at all: there is nothing to compare against, and the
+     * divergence notice above already says why (greenhouse decisions/0294).
+     *
+     * @param array{latest: string, at: string, summary: array<string, int>, rows: list<array{path: string, status: string}>}|null $result
+     */
+    private function houseUpdate(?array $result, bool $comparable): string
+    {
+        if (!$comparable) {
+            return $this->notice($this->catalog->tr('house.update.incomparable'));
+        }
+
+        $button = '<p><button type="button" class="mui-btn mui-btn--sm admin-fwcheck">'
+            . Html::escape($this->catalog->tr('house.update.check')) . '</button>'
+            . '<span class="admin-fwcheck-said" hidden></span></p>' . $this->frameworkChecker();
+
+        if ($result === null) {
+            return '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.update.unasked')) . '</p>' . $button;
+        }
+
+        $summary = $result['summary'];
+        $out = '<p class="admin-house__hint">' . Html::escape($this->catalog->tr(
+            'house.update.found',
+            $result['latest'],
+            (string) ($summary['actionable'] ?? 0),
+        )) . '</p>' . $button;
+
+        // Settled and kept are counted, never listed: a person is looking for what needs a decision,
+        // and rows that need none are the padding this panel keeps removing.
+        $rows = [];
+        foreach ($result['rows'] as $row) {
+            if (\in_array($row['status'], [FrameworkReconciliation::SETTLED, FrameworkReconciliation::KEPT], true)) {
+                continue;
+            }
+            $rows[] = '<tr><td><code class="admin-house__path">' . Html::escape($row['path']) . '</code></td>'
+                . '<td><span class="mui-badge' . ($row['status'] === FrameworkReconciliation::CONFLICTED ? ' mui-badge--warning' : '') . '">'
+                . Html::escape($this->catalog->tr('house.update.' . $row['status'])) . '</span></td>'
+                . '<td class="admin-house__what">' . Html::escape($this->catalog->tr('house.update.' . $row['status'] . '.what')) . '</td></tr>';
+        }
+
+        return $rows === []
+            ? $out . '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.update.nothing')) . '</p>'
+            : $out . $this->table(['col.file', 'col.state', 'col.what'], $rows);
     }
 
     /**
@@ -788,6 +847,60 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             . '<td class="admin-capabilities__act">' . $act . '</td>'
             . '</tr>';
     }
+
+    /**
+     * The one script this section ships: the button that presses the verb.
+     *
+     * It is emitted only when there is a button for it to bind to, for the same reason the capability
+     * enabler is — a script whose hooks the server did not print is bytes on the wire that can never
+     * run (greenhouse decisions/0289).
+     */
+    private function frameworkChecker(): string
+    {
+        return str_replace(
+            ['{ENDPOINT}', '{WORKING}', '{FAILED}', '{UNREACHABLE}'],
+            [
+                Html::escape($this->settings->route . '/framework/check'),
+                Html::escape($this->catalog->tr('house.update.working')),
+                Html::escape($this->catalog->tr('house.update.failed')),
+                Html::escape($this->catalog->tr('house.update.unreachable')),
+            ],
+            self::FRAMEWORK_CHECKER,
+        );
+    }
+
+    /**
+     * Asks, then reloads — because the ANSWER is server-rendered.
+     *
+     * It could paint the table itself from the JSON, and that would be a second renderer for one fact:
+     * the reconciliation is computed in PHP from two caches, and a reload shows exactly what any later
+     * visit would show. The only thing this script owns is «I am asking» and «I could not».
+     */
+    private const string FRAMEWORK_CHECKER = <<<'HTML'
+        <script>
+        (() => {
+          if (window.__milpaFrameworkCheck) { return; }
+          window.__milpaFrameworkCheck = true;
+          document.addEventListener('click', async (event) => {
+            const button = event.target.closest('.admin-fwcheck');
+            if (!button) { return; }
+            const said = button.parentElement.querySelector('.admin-fwcheck-said');
+            const say = (text) => { if (said) { said.textContent = ' ' + text; said.hidden = false; } };
+            button.disabled = true;
+            say('{WORKING}');
+            try {
+              const response = await fetch('{ENDPOINT}', { method: 'POST', headers: { 'Accept': 'application/json' } });
+              const answer = await response.json();
+              if (answer && answer.ok) { location.reload(); return; }
+              say(answer && answer.error === 'registry_unreachable' ? '{UNREACHABLE}' : '{FAILED}');
+            } catch (failure) {
+              say('{UNREACHABLE}');
+            }
+            button.disabled = false;
+          });
+        })();
+        </script>
+        HTML;
 
     /**
      * The client half of the panel's first MUTATING act, and it is small on purpose.

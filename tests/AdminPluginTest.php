@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Tests;
 
+use Milpa\Admin\Http\FrameworkCheck;
 use Milpa\Admin\AdminPlugin;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Controllers\AdminController;
@@ -88,21 +89,28 @@ final class AdminPluginTest extends TestCase
 
         $routes = $plugin->routes();
         // greenhouse decisions/0211: the live wire is a panel route like the others — same stack, same door.
+        // The update check leads: it is mounted OUTSIDE `installerRoute()` on purpose, because that
+        // method returns nothing when milpa/app-runtime is absent and asking the registry which
+        // framework release is newest needs no operation, no capability and no identity package
+        // (greenhouse decisions/0294).
         self::assertSame(
-            ['/milpa/admin', '/milpa/admin/s/{id}', '/milpa/admin/live', '/milpa/admin/assets/{file}', '/milpa/admin/stack/compose.yml'],
+            ['/milpa/admin/framework/check', '/milpa/admin', '/milpa/admin/s/{id}', '/milpa/admin/live', '/milpa/admin/assets/{file}', '/milpa/admin/stack/compose.yml'],
             array_map(static fn (Route $r): string => $r->path, $routes),
         );
         foreach ($routes as $route) {
             self::assertSame([LoopbackOnlyMiddleware::class], $route->middleware);
             self::assertTrue($route->isBound());
         }
-        self::assertSame('milpa_admin_live', $routes[2]->name);
-        self::assertSame('POST', $routes[2]->methods[0]->value, 'the wire only answers POST');
-        self::assertSame('milpa_admin_stack_compose', $routes[4]->name);
+        self::assertSame(FrameworkCheck::ROUTE_NAME, $routes[0]->name);
+        self::assertSame('POST', $routes[0]->methods[0]->value, 'the check is a verb, so it answers POST');
+        self::assertSame('milpa_admin_live', $routes[3]->name);
+        self::assertSame('POST', $routes[3]->methods[0]->value, 'the wire only answers POST');
+        self::assertSame('milpa_admin_stack_compose', $routes[5]->name);
         self::assertTrue($container->has(AdminController::class));
         self::assertTrue($container->has(LiveController::class));
         self::assertTrue($container->has(AssetsController::class));
         self::assertTrue($container->has(StackController::class));
+        self::assertTrue($container->has(FrameworkCheck::class), 'the verb needs a service, or its route resolves to nothing');
         // The PSR-11 registry, not DIContainer::has() — which is true for any auto-wirable class and so
         // proved nothing here while the gate was never registered (greenhouse evidence/0522).
         self::assertTrue($container->getContainer()->has(LoopbackOnlyMiddleware::class), 'the gate is REGISTERED, not merely auto-wirable');
@@ -117,7 +125,7 @@ final class AdminPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
         self::assertSame('/milpa/admin', (new AdminPlugin(new DIContainer()))->settings()->route, 'defaults before boot');
-        self::assertCount(5, (new AdminPlugin(new DIContainer()))->routes(), 'routes exist before boot too');
+        self::assertCount(6, (new AdminPlugin(new DIContainer()))->routes(), 'routes exist before boot too — six since the update check joined');
     }
 
     public function testAPluginThatDeclaresAServiceShowsUpInTheStackSectionAndInTheComposeFile(): void
@@ -788,5 +796,32 @@ final class AdminPluginTest extends TestCase
 
         self::assertGreaterThan(0, \count($sections), 'an empty list would make the assertion below say nothing');
         self::assertSame([], $bare, 'a section with no glyph renders an empty span beside its label');
+    }
+
+    /**
+     * 🚨 THE VERB RESOLVES THE APP ROOT PER REQUEST, because at boot there is no Kernel to ask.
+     *
+     * The skeleton registers the Kernel in the container AFTER `Kernel::boot()` returns, so a root
+     * captured while plugins are booting is the empty string. Pressed in a real browser, the check
+     * answered `{"ok":true,"latest":"0.48.1"}` and wrote nothing — `FrameworkRelease::ships()` caches
+     * best-effort, so a bad root loses the cache in silence and still returns the hashes, while the
+     * pointer the render reads never appeared. The button worked and the page kept saying nobody had
+     * asked (greenhouse decisions/0294).
+     */
+    public function testTheUpdateCheckRefusesWhenNothingCanNameTheAppRoot(): void
+    {
+        $container = new DIContainer();
+        $plugin = new AdminPlugin($container);
+        $plugin->boot();
+
+        $check = $container->get(FrameworkCheck::class);
+        self::assertInstanceOf(FrameworkCheck::class, $check);
+
+        // No Kernel in the container — which is exactly the state during boot.
+        $response = $check->handle(new \Nyholm\Psr7\ServerRequest('POST', '/milpa/admin/framework/check'));
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertStringContainsString('no_app_root', (string) $response->getBody(), 'it says it cannot, instead of writing nowhere and reporting success');
+        self::assertStringContainsString('"ok":false', (string) $response->getBody());
     }
 }
