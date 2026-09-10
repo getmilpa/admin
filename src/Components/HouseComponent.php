@@ -50,6 +50,7 @@ final class HouseComponent implements ComponentDefinitionInterface
     {
     }
 
+    /** What this screen holds: the house's standing, its founding, its capabilities — and no actions. */
     public static function contract(): ComponentContract
     {
         return new ComponentContract(
@@ -70,6 +71,13 @@ final class HouseComponent implements ComponentDefinitionInterface
         );
     }
 
+    /**
+     * The house as it stands, plus WHO the gate authenticated.
+     *
+     * The principal reaches every section through its context (greenhouse decisions/0210) and this
+     * screen says who it is, because «who is in the house» is one of the three questions it exists
+     * to answer — and nobody is an answer too, not a blank.
+     */
     public function mount(array $props, ComponentContext $context): StateSnapshot
     {
         return new StateSnapshot(
@@ -77,18 +85,19 @@ final class HouseComponent implements ComponentDefinitionInterface
             componentName: self::NAME,
             version: '1',
             data: $this->source->snapshot(),
-            // The principal the gate authenticated reaches every section through its context
-            // (greenhouse decisions/0210). This screen SAYS who that is, because «who is in the
-            // house» is one of the three things it exists to answer — and null is an answer too.
             meta: ['principal' => $context->principal ?? '', 'title' => (string) ($props['title'] ?? '')],
         );
     }
 
+    /**
+     * Reports an action rather than running one — this section reads.
+     *
+     * Every act it NAMES is a governed operation somewhere else: a signed command, a ceremony in a
+     * browser. A button here would run it under whatever authority the panel happens to have, which
+     * is the one thing a panel must never lend.
+     */
     public function handle(InteractionRequest $request): InteractionResult
     {
-        // This screen reads. Every act it names is a governed operation run somewhere else — a
-        // signed command, a ceremony in a browser — never a button here that would run it under
-        // whatever authority the panel happens to have.
         return new InteractionResult(
             state: $request->state,
             errors: ['action' => 'this section reads; every act it names is a governed operation elsewhere'],

@@ -55,6 +55,11 @@ final readonly class HouseSource
     }
 
     /**
+     * Everything the first screen paints, in one read.
+     *
+     * Composed from the sources the other sections already use, plus the two facts nobody else
+     * reports: what this house was FOUNDED to do, and which of the framework's own packages it runs.
+     *
      * @return array{
      *     title: string,
      *     route: string,
