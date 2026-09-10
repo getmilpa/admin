@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.28.0](https://github.com/getmilpa/admin/compare/v0.27.1...v0.28.0) (2026-09-10)
+
+
+### Features
+
+* the sidebar says which framework the house runs on ([#93](https://github.com/getmilpa/admin/issues/93)) ([a732908](https://github.com/getmilpa/admin/commit/a7329086c172825f65a72e034606e2515bd10eb3))
+
 ## [0.27.1](https://github.com/getmilpa/admin/compare/v0.27.0...v0.27.1) (2026-09-10)
 
 
