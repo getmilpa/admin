@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.32.1](https://github.com/getmilpa/admin/compare/v0.32.0...v0.32.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **panel:** the commands the panel prints can be typed ([#104](https://github.com/getmilpa/admin/issues/104)) ([7bf3991](https://github.com/getmilpa/admin/commit/7bf3991a8fbca833199ca72658f3ef7abcab2c0e))
+
 ## [0.32.0](https://github.com/getmilpa/admin/compare/v0.31.0...v0.32.0) (2026-09-11)
 
 
