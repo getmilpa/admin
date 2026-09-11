@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Milpa\Admin;
 
 use Milpa\Admin\Http\CapabilityInstaller;
+use Milpa\Admin\Http\FrameworkApplier;
 use Milpa\Admin\Http\FrameworkCheck;
 use Milpa\Command\OperationHttpPolicy;
 use Milpa\Console\Http\HttpProjector;
@@ -252,7 +253,7 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
         $middleware = $settings->effectiveMiddleware();
 
         return [
-            ...$this->installerRoute($route, $middleware),
+            ...$this->governedRoutes($route, $middleware),
             // THE UPDATE CHECK, at this level and not inside `installerRoute()`, because that method
             // returns nothing at all when `milpa/app-runtime` is absent — and asking the registry which
             // framework release is newest needs no operation, no capability and no identity package.
@@ -378,6 +379,123 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
      *
      * Absent `milpa/app-runtime` there is no such operation and no route: the panel still lists what
      * it can see and still prints the command, which is what it did before.
+     *
+     * @param list<class-string> $middleware
+     *
+     * @return list<Route>
+     */
+    /**
+     * The two governed buttons' routes: installing a capability, and applying a newer framework.
+     *
+     * One builder for both, because they are the same act with a different operation name — a scoped,
+     * consent-demanding operation projected behind the panel's own door. Two builders would drift, and
+     * the half that drifted would be the refusal (greenhouse decisions/0297).
+     *
+     * @param list<class-string> $middleware
+     *
+     * @return list<Route>
+     */
+    private function governedRoutes(string $route, array $middleware): array
+    {
+        return [
+            ...$this->installerRoute($route, $middleware),
+            ...$this->applierRoute($route, $middleware),
+        ];
+    }
+
+    /**
+     * The apply route, when this app carries the operation that can perform it.
+     *
+     * Absent `milpa/app-runtime` there is no `framework:apply` to project, so there is no route — and
+     * the section asks the same question before offering the button, so the two cannot disagree.
+     *
+     * @param list<class-string> $middleware
+     *
+     * @return list<Route>
+     */
+    private function applierRoute(string $route, array $middleware): array
+    {
+        $operations = 'Milpa\\AppRuntime\\Operations\\FrameworkOperations';
+        $runtime = 'Milpa\\AppRuntime\\Support\\Capabilities';
+
+        if (!class_exists($operations) || !class_exists($runtime) || !class_exists(HttpProjector::class)) {
+            return [];
+        }
+
+        return $this->applierRouteWithAppRuntime($operations, $runtime, $route, $middleware);
+    }
+
+    /**
+     * The same route, once the framework family is known to be installed.
+     *
+     * 🚨 SPLIT OUT SO ITS UNREACHABILITY IS DECLARED RATHER THAN COUNTED. This package does not depend
+     * on `milpa/app-runtime` and does not install it as a dev dependency either: doing so turned six
+     * green tests red on coupling, which is why `FrameworkFacts` names that family by string
+     * (greenhouse decisions/0297). So no test in this suite can execute the body below — not because
+     * nobody wrote one, but because the condition it needs is one this package refuses to create.
+     *
+     * The guard above IS covered, and so is the answer it produces: {@see \Milpa\Admin\Tests\AdminPluginTest}
+     * asserts the exact route list an app without the family gets. What is ignored here is the half
+     * that only a consumer app can run, and `evidence/0561` is where it ran.
+     *
+     * @param string             $operations the class name the guard above proved exists — plain `string`
+     *                                       and not `class-string`, because narrowing by `class_exists`
+     *                                       does not survive a call boundary and phpstan TRUSTS the
+     *                                       narrow `@param`: declaring the stricter type here made the
+     *                                       honest call site the error
+     * @param string             $runtime    likewise
+     * @param list<class-string> $middleware
+     *
+     * @return list<Route>
+     *
+     * @codeCoverageIgnore
+     */
+    private function applierRouteWithAppRuntime(string $operations, string $runtime, string $route, array $middleware): array
+    {
+        $operation = null;
+        /** @var iterable<\Milpa\Command\Operation> $candidates */
+        $candidates = (new $operations())->operations();
+        foreach ($candidates as $candidate) {
+            if ($candidate->name === FrameworkApplier::OPERATION) {
+                $operation = $candidate;
+
+                break;
+            }
+        }
+        if ($operation === null) {
+            return [];
+        }
+
+        $psr17 = new Psr17Factory();
+        $judge = $this->container->has(OperationHttpPolicy::class) ? $this->container->get(OperationHttpPolicy::class) : null;
+        $this->container->registerService(FrameworkApplier::class, new FrameworkApplier(new HttpProjector(
+            [$operation],
+            $this->container,
+            $psr17,
+            $psr17,
+            // The same confirm-token store the installer and the app's own projector use: a token minted
+            // by one ceremony is not a stranger to another.
+            tokens: new FileConfirmTokenStore($runtime::raizDeLaApp() . '/storage/confirm-tokens.json'),
+            policy: $judge instanceof OperationHttpPolicy ? $judge : null,
+        )));
+
+        return [
+            new Route(
+                path: $route . '/framework/apply',
+                methods: HttpMethod::POST,
+                name: FrameworkApplier::ROUTE_NAME,
+                middleware: $middleware,
+                handler: HandlerReference::method(FrameworkApplier::class, 'handle'),
+            ),
+        ];
+    }
+
+    /**
+     * The capability-install route, when this app carries the operation that can perform it.
+     *
+     * Its docblock was taken by the two methods inserted above it and had to be written again — an
+     * insertion that lands between a docblock and its method leaves the method undocumented and the
+     * docblock describing the wrong thing, and the gate catches only the first half of that.
      *
      * @param list<class-string> $middleware
      *
