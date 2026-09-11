@@ -51,7 +51,7 @@ final class FrameworkApplier
      * an app with no `OperationHttpPolicy` has nothing that can hold it. The command is named because a
      * person with a terminal was never blocked (greenhouse decisions/0289).
      */
-    public const string NO_JUDGE = 'This app cannot authorize «' . self::OPERATION . '» over HTTP: it registered no OperationHttpPolicy, so nothing here can hold the scope the act declares. Install milpa/auth and enrol a passkey, or run `coa framework:apply --sign` from a terminal.';
+    public const string NO_JUDGE = 'This app cannot authorize «' . self::OPERATION . '» over HTTP: it registered no OperationHttpPolicy, so nothing here can hold the scope the act declares. Install milpa/auth and enrol a passkey, or run `php bin/coa framework:apply --sign` from a terminal.';
 
     public function __construct(
         private readonly HttpProjector $projector,

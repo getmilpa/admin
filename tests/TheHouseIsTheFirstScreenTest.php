@@ -194,8 +194,8 @@ final class TheHouseIsTheFirstScreenTest extends TestCase
         $method = new \ReflectionMethod($renderer, 'houseNextMove');
         $method->setAccessible(true);
 
-        self::assertSame('coa capabilities:refresh', $method->invoke($renderer, ['declared' => true, 'domain' => 'x'], [], 'registry index derived …, offline floor beneath')[1]);
-        self::assertSame('coa capabilities:enable milpa/agent --sign', $method->invoke($renderer, ['declared' => true, 'domain' => 'x'], [['id' => 'admin']], 'registry index derived …')[1]);
+        self::assertSame('php bin/coa capabilities:refresh', $method->invoke($renderer, ['declared' => true, 'domain' => 'x'], [], 'registry index derived …, offline floor beneath')[1]);
+        self::assertSame('php bin/coa capabilities:enable milpa/agent --sign', $method->invoke($renderer, ['declared' => true, 'domain' => 'x'], [['id' => 'admin']], 'registry index derived …')[1]);
     }
 
     /** A house that boots and answers nothing says so, rather than showing an empty list. */
@@ -271,7 +271,7 @@ final class TheHouseIsTheFirstScreenTest extends TestCase
                     ['id' => 'admin', 'title' => 'The admin panel — where a human leaves the house ready for the agent', 'unlocks' => []],
                     ['id' => 'agent', 'title' => 'Sessions that outlive the process: plan, todos, permissions and decisions', 'unlocks' => ['agent:sessions']],
                 ],
-                'available' => [['id' => 'devtools', 'title' => 'Scaffolding and diagnosis: generate artifacts and explain the app without booting it', 'command' => 'coa capabilities:enable milpa/devtools --sign']],
+                'available' => [['id' => 'devtools', 'title' => 'Scaffolding and diagnosis: generate artifacts and explain the app without booting it', 'command' => 'php bin/coa capabilities:enable milpa/devtools --sign']],
                 'source' => 'registry index derived 2026-09-09',
             ],
             'plugins' => 6,

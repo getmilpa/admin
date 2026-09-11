@@ -465,11 +465,11 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             return [$this->catalog->tr('house.next.found'), $this->catalog->tr('house.next.found.command')];
         }
         if (str_contains($source, 'offline floor')) {
-            return [$this->catalog->tr('house.next.refresh'), 'coa capabilities:refresh'];
+            return [$this->catalog->tr('house.next.refresh'), 'php bin/coa capabilities:refresh'];
         }
         $ids = array_map(static fn (array $row): string => \is_string($row['id'] ?? null) ? $row['id'] : '', $installed);
         if (!\in_array('agent', $ids, true)) {
-            return [$this->catalog->tr('house.next.agent'), 'coa capabilities:enable milpa/agent --sign'];
+            return [$this->catalog->tr('house.next.agent'), 'php bin/coa capabilities:enable milpa/agent --sign'];
         }
 
         // AND NOTHING TO RUN. The equipped case carries no command on purpose: a screen that always
