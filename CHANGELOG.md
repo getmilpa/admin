@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.32.2](https://github.com/getmilpa/admin/compare/v0.32.1...v0.32.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **assets:** the panel asks the design system instead of supplying it ([#106](https://github.com/getmilpa/admin/issues/106)) ([9238f8d](https://github.com/getmilpa/admin/commit/9238f8d980892705a6ffd04bd259d3a6f6f97c29))
+
 ## [0.32.1](https://github.com/getmilpa/admin/compare/v0.32.0...v0.32.1) (2026-09-11)
 
 
