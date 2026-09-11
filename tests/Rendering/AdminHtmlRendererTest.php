@@ -863,7 +863,7 @@ final class AdminHtmlRendererTest extends TestCase
             'plugins' => [],
             'installable' => false,
             'capabilities' => [
-                'available' => [['package' => 'milpa/devtools', 'title' => 'Scaffolding and diagnosis', 'command' => 'coa capabilities:enable milpa/devtools --sign']],
+                'available' => [['package' => 'milpa/devtools', 'title' => 'Scaffolding and diagnosis', 'command' => 'php bin/coa capabilities:enable milpa/devtools --sign']],
                 'installed' => [],
             ],
         ], ['title' => 'Plugins']);

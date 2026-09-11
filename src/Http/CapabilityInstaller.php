@@ -68,7 +68,7 @@ final class CapabilityInstaller
      * that decides whether to paint the button at all. One text, so the refusal and the explanation
      * cannot drift (greenhouse decisions/0289).
      */
-    public const string NO_JUDGE = 'This app cannot authorize «' . self::OPERATION . '» over HTTP: it registered no OperationHttpPolicy, so nothing here can hold the scope the act declares. Install milpa/auth and enrol a passkey, or run `coa capabilities:enable <package> --sign` from a terminal.';
+    public const string NO_JUDGE = 'This app cannot authorize «' . self::OPERATION . '» over HTTP: it registered no OperationHttpPolicy, so nothing here can hold the scope the act declares. Install milpa/auth and enrol a passkey, or run `php bin/coa capabilities:enable <package> --sign` from a terminal.';
 
     public function __construct(
         private readonly HttpProjector $projector,
