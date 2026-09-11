@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.32.0](https://github.com/getmilpa/admin/compare/v0.31.0...v0.32.0) (2026-09-11)
+
+
+### Features
+
+* **house:** the panel can apply a newer framework, through the same door as install ([#102](https://github.com/getmilpa/admin/issues/102)) ([862cc9d](https://github.com/getmilpa/admin/commit/862cc9d595f9d3584986e63f07015f0035abf872))
+
 ## [0.31.0](https://github.com/getmilpa/admin/compare/v0.30.0...v0.31.0) (2026-09-10)
 
 
