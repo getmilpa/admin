@@ -304,9 +304,30 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
                 . '<td class="admin-house__what">' . Html::escape($this->catalog->tr('house.update.' . $row['status'] . '.what')) . '</td></tr>';
         }
 
-        return $rows === []
-            ? $out . '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.update.nothing')) . '</p>'
-            : $out . $this->table(['col.file', 'col.state', 'col.what'], $rows);
+        if ($rows === []) {
+            return $out . '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.update.nothing')) . '</p>';
+        }
+
+        // THE APPLY BUTTON IS OFFERED ONLY WHERE THERE IS SOMETHING SAFE TO TAKE. `offered` and `added`
+        // are the only two the operation will write; with none of them the act would refuse, and a
+        // button whose only outcome is a refusal is the shape this panel keeps removing
+        // (greenhouse decisions/0289, 0297).
+        $takeable = 0;
+        foreach ($result['rows'] as $row) {
+            if (\in_array($row['status'], ['offered', 'added'], true)) {
+                ++$takeable;
+            }
+        }
+
+        $apply = $takeable === 0
+            ? '<p class="admin-house__hint">' . Html::escape($this->catalog->tr('house.update.nothing_safe')) . '</p>'
+            : '<p>' . Html::escape($this->catalog->tr('house.update.take', (string) $takeable)) . '</p>'
+                . '<p><button type="button" class="mui-btn mui-btn--sm mui-btn--primary admin-fwapply">'
+                . Html::escape($this->catalog->tr('house.update.apply')) . '</button>'
+                . '<span class="admin-fwapply-said" hidden></span></p>'
+                . $this->frameworkApplier();
+
+        return $out . $this->table(['col.file', 'col.state', 'col.what'], $rows) . $apply;
     }
 
     /**
@@ -845,6 +866,66 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             . '<td class="admin-capabilities__act">' . $act . '</td>'
             . '</tr>';
     }
+
+    /**
+     * The apply button's script — emitted only where the button is.
+     *
+     * It runs the framework's two-step confirm, the same ceremony the capability enabler runs: the first
+     * POST answers `428` with a token and the second carries it in a header. The token travels as a
+     * HEADER because that is where the operation's ceremony reads it — sent in the body it looks like a
+     * first call and answers 428 forever (greenhouse decisions/0289).
+     */
+    private function frameworkApplier(): string
+    {
+        return str_replace(
+            ['{ENDPOINT}', '{WORKING}', '{REFUSED}', '{DONE}'],
+            [
+                Html::escape($this->settings->route . '/framework/apply'),
+                Html::escape($this->catalog->tr('house.update.applying')),
+                Html::escape($this->catalog->tr('house.update.refused')),
+                Html::escape($this->catalog->tr('house.update.applied')),
+            ],
+            self::FRAMEWORK_APPLIER,
+        );
+    }
+
+    /** Asks, confirms, then reloads — because what it did is server-rendered, like the check's answer. */
+    private const string FRAMEWORK_APPLIER = <<<'HTML'
+        <script>
+        (() => {
+          if (window.__milpaFrameworkApply) { return; }
+          window.__milpaFrameworkApply = true;
+          document.addEventListener('click', async (event) => {
+            const button = event.target.closest('.admin-fwapply');
+            if (!button) { return; }
+            const said = button.parentElement.querySelector('.admin-fwapply-said');
+            const say = (text) => { if (said) { said.textContent = ' ' + text; said.hidden = false; } };
+            button.disabled = true;
+            say('{WORKING}');
+            const post = (token) => fetch('{ENDPOINT}', {
+              method: 'POST',
+              headers: token
+                ? { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Confirm-Token': token }
+                : { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              body: '{}',
+            });
+            try {
+              let response = await post(null);
+              let answer = await response.json();
+              if (answer && answer.confirm_token) {
+                response = await post(answer.confirm_token);
+                answer = await response.json();
+              }
+              if (answer && answer.applied && answer.applied.length) { say('{DONE}'); setTimeout(() => location.reload(), 900); return; }
+              say((answer && (answer.refused || answer.error)) || '{REFUSED}');
+            } catch (failure) {
+              say('{REFUSED}');
+            }
+            button.disabled = false;
+          });
+        })();
+        </script>
+        HTML;
 
     /**
      * The one script this section ships: the button that presses the verb.
