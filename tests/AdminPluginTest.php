@@ -94,7 +94,7 @@ final class AdminPluginTest extends TestCase
         // framework release is newest needs no operation, no capability and no identity package
         // (greenhouse decisions/0294).
         self::assertSame(
-            ['/milpa/admin/framework/check', '/milpa/admin', '/milpa/admin/s/{id}', '/milpa/admin/live', '/milpa/admin/assets/{file}', '/milpa/admin/stack/compose.yml'],
+            ['/milpa/admin/framework/check', '/milpa/admin', '/milpa/admin/s/{id}', '/milpa/admin/live', '/milpa/admin/assets/{file}', '/milpa/admin/assets/fonts/{face}', '/milpa/admin/stack/compose.yml'],
             array_map(static fn (Route $r): string => $r->path, $routes),
         );
         foreach ($routes as $route) {
@@ -105,7 +105,14 @@ final class AdminPluginTest extends TestCase
         self::assertSame('POST', $routes[0]->methods[0]->value, 'the check is a verb, so it answers POST');
         self::assertSame('milpa_admin_live', $routes[3]->name);
         self::assertSame('POST', $routes[3]->methods[0]->value, 'the wire only answers POST');
-        self::assertSame('milpa_admin_stack_compose', $routes[5]->name);
+        // By NAME and not by position: inserting a route used to move this assertion onto an
+        // unrelated one, which reads as a failure of the new route rather than of the test.
+        $named = [];
+        foreach ($routes as $route) {
+            $named[(string) $route->name] = $route->path;
+        }
+        self::assertArrayHasKey('milpa_admin_stack_compose', $named);
+        self::assertSame('/milpa/admin/assets/fonts/{face}', $named['milpa_admin_asset_face'] ?? null, 'the faces the fonts stylesheet asks for');
         self::assertTrue($container->has(AdminController::class));
         self::assertTrue($container->has(LiveController::class));
         self::assertTrue($container->has(AssetsController::class));
@@ -125,7 +132,7 @@ final class AdminPluginTest extends TestCase
         $plugin->enable();
         $plugin->disable();
         self::assertSame('/milpa/admin', (new AdminPlugin(new DIContainer()))->settings()->route, 'defaults before boot');
-        self::assertCount(6, (new AdminPlugin(new DIContainer()))->routes(), 'routes exist before boot too — six since the update check joined');
+        self::assertCount(7, (new AdminPlugin(new DIContainer()))->routes(), 'routes exist before boot too — seven since the font faces got their own path');
     }
 
     public function testAPluginThatDeclaresAServiceShowsUpInTheStackSectionAndInTheComposeFile(): void
