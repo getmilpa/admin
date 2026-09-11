@@ -93,7 +93,13 @@ final class AdminPage
             // The panel's stylesheet goes BEFORE the design bundle: its `admin.base` layer is declared first,
             // so it sits under every `milpa.*` layer the bundle declares — the bundle's pieces win over it.
             . '<style>' . "\n" . self::css() . '</style>' . "\n"
-            . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl('tokens.css')) . '">' . "\n"
+            // THE SYSTEM'S TOKENS AND THE SYSTEM'S FACES, not a copy and not a third party. The panel
+            // served its own `tokens.css` — the system's file minus `--space-32` — and took its type
+            // from `fonts.googleapis.com` through the vendored bundle's first line. Both are the same
+            // mistake in two shapes: a surface that supplies the design system instead of asking for
+            // it (greenhouse decisions/0309).
+            . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl(DesignTokens::TOKENS)) . '">' . "\n"
+            . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl(DesignTokens::FONTS)) . '">' . "\n"
             . '<link rel="stylesheet" href="' . self::e($this->settings->assetUrl('bundle.css')) . '">' . "\n"
             // A guest's stylesheets come after the panel's, unlayered, so a component keeps the look it declared;
             // its modules are deferred, so their position in the head costs nothing (decisions/0211).

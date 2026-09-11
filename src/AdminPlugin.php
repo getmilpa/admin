@@ -294,6 +294,16 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 middleware: $middleware,
                 handler: HandlerReference::method(AssetsController::class, 'serve'),
             ),
+            // A SECOND ASSET ROUTE, because `milpa-fonts.css` names its faces RELATIVELY — see
+            // {@see AssetsController::face()}. Without it the stylesheet loads and every `src` in it
+            // 404s, which the browser reports as nothing at all (greenhouse decisions/0309).
+            new Route(
+                path: $route . '/assets/fonts/{face}',
+                methods: HttpMethod::GET,
+                name: 'milpa_admin_asset_face',
+                middleware: $middleware,
+                handler: HandlerReference::method(AssetsController::class, 'face'),
+            ),
             new Route(
                 path: $settings->composeUrl(),
                 methods: HttpMethod::GET,

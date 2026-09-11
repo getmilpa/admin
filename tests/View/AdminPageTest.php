@@ -34,8 +34,10 @@ final class AdminPageTest extends TestCase
         self::assertStringStartsWith('<!doctype html>', $html);
         self::assertStringContainsString('<html lang="es"', $html);
         self::assertStringContainsString('<title>Rutas · Casa</title>', $html);
-        self::assertStringContainsString('href="/panel/assets/tokens.css"', $html);
+        self::assertStringContainsString('href="/panel/assets/' . DesignTokens::TOKENS . '"', $html);
+        self::assertStringContainsString('href="/panel/assets/' . DesignTokens::FONTS . '"', $html, 'the faces come from here, not from Google');
         self::assertStringContainsString('href="/panel/assets/bundle.css"', $html);
+        self::assertStringNotContainsString('/assets/tokens.css', $html, 'the copy is gone');
         self::assertStringContainsString('<div id="shell"></div>', $html);
         // greenhouse decisions/0211: the page hand-writes no runtime tag. Without a boot there is no live
         // component on the document, so it carries no runtime at all — see the LiveBoot tests below.
@@ -99,7 +101,7 @@ final class AdminPageTest extends TestCase
         $html = (new AdminPage(AdminSettings::fromConfig(null), new Catalog()))->render('<div id="shell"></div>');
         $style = strpos($html, '<style>');
         $styleEnd = strpos($html, '</style>');
-        $tokens = strpos($html, 'href="/milpa/admin/assets/tokens.css"');
+        $tokens = strpos($html, 'href="/milpa/admin/assets/' . DesignTokens::TOKENS . '"');
         $bundle = strpos($html, 'href="/milpa/admin/assets/bundle.css"');
         self::assertNotFalse($style);
         self::assertNotFalse($styleEnd);
