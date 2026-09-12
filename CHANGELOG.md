@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.33.0](https://github.com/getmilpa/admin/compare/v0.32.2...v0.33.0) (2026-09-12)
+
+
+### Features
+
+* show the current request identity in the panel ([aed25c7](https://github.com/getmilpa/admin/commit/aed25c78a695aa4b285aff543608193b2dd3a7a3))
+
 ## [0.32.2](https://github.com/getmilpa/admin/compare/v0.32.1...v0.32.2) (2026-09-11)
 
 
