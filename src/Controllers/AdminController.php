@@ -188,6 +188,7 @@ final class AdminController
 
     private function html(int $status, string $body): ResponseInterface
     {
-        return new Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $body);
+        // Pages carry request-specific identity and signed state; caches must not reuse a visitor's page.
+        return new Response($status, ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store'], $body);
     }
 }

@@ -62,6 +62,7 @@ final class IdentitySectionTest extends TestCase
         $plugin->boot();
         $controller = $container->get(AdminController::class);
         self::assertInstanceOf(AdminController::class, $controller);
+        self::assertSame('no-store', $controller->section(self::request())->getHeaderLine('Cache-Control'));
         $first = (string) $controller->section(self::request()->withAttribute(RequestPrincipal::ATTRIBUTE, self::actor('passkey:one', ['plugins.Owned:write'])))->getBody();
         self::assertStringContainsString('Your identity in this house', $first);
         self::assertStringContainsString('<code>plugins.Owned:write</code>', $first);
