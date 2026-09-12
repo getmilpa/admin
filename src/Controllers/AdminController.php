@@ -77,7 +77,9 @@ final class AdminController
     /** `GET {route}` — the first section in sidebar order. */
     public function index(ServerRequestInterface $request): ResponseInterface
     {
-        return $this->show(null, $this->catalogFor($request), self::queryParams($request), RequestPrincipal::of($request));
+        $identity = RequestPrincipal::identity($request);
+
+        return $this->show(null, $this->catalogFor($request), self::queryParams($request), $identity['principal'], $identity['scopes']);
     }
 
     /** `GET {route}/s/{id}` — one section, 404 when no plugin declared it. */
@@ -86,7 +88,9 @@ final class AdminController
         $result = $request->getAttribute(RouteResult::ATTRIBUTE);
         $id = $result instanceof RouteResult ? (string) ($result->parameters['id'] ?? '') : '';
 
-        return $this->show($id, $this->catalogFor($request), self::queryParams($request), RequestPrincipal::of($request));
+        $identity = RequestPrincipal::identity($request);
+
+        return $this->show($id, $this->catalogFor($request), self::queryParams($request), $identity['principal'], $identity['scopes']);
     }
 
     /**
@@ -106,8 +110,9 @@ final class AdminController
     /**
      * @param array<string, mixed> $query     the request's query params, handed to the active section
      * @param string|null          $principal the actor the gate authenticated, or null when nobody is signed in
+     * @param list<string>|null    $scopes    the actor's declared scopes, or null when unavailable
      */
-    private function show(?string $id, Catalog $catalog, array $query, ?string $principal): ResponseInterface
+    private function show(?string $id, Catalog $catalog, array $query, ?string $principal, ?array $scopes): ResponseInterface
     {
         $shell = $this->shell->withCatalog($catalog);
         $page = $this->page->withCatalog($catalog);
@@ -137,7 +142,7 @@ final class AdminController
         }
 
         try {
-            $composed = $shell->compose($catalogue, $active, $query, $principal);
+            $composed = $shell->compose($catalogue, $active, $query, $principal, $scopes);
         } catch (UnknownComponentException|ReservedComponentException|ComponentNameConflictException|RendererConflictException|SeedConflictException $refused) {
             // A DECLARATION the panel cannot honour — a name nothing registered, a name two sections bind
             // to different definitions or different renderers, a signal seeded twice with different values.

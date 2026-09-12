@@ -55,7 +55,7 @@ final class ThePanelHasATerminalTest extends TestCase
         // table of class names (greenhouse decisions/0264). One fact, two surfaces.
         self::assertSame('house', $screen->currentSectionId(), 'the terminal opens where the panel opens');
 
-        $screen->press('7');   // house, plugins, routes, settings, stack, devtools, agent
+        $screen->press('8');   // house, plugins, routes, identity, settings, stack, devtools, agent
         self::assertSame('agent', $screen->currentSectionId());
 
         $painted = $screen->render();
@@ -74,7 +74,7 @@ final class ThePanelHasATerminalTest extends TestCase
 
         self::assertContains('agent', $withGuest);
         self::assertNotContains('agent', $alone);
-        self::assertSame(['house', 'plugins', 'routes', 'settings', 'stack', 'devtools'], $alone, 'the panel keeps its own');
+        self::assertSame(['house', 'plugins', 'routes', 'identity', 'settings', 'stack', 'devtools'], $alone, 'the panel keeps its own');
     }
 
     /** A section that only NAMES a component the panel registers is mounted from the panel's own registry. */

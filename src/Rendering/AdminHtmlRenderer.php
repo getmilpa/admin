@@ -17,6 +17,7 @@ namespace Milpa\Admin\Rendering;
 use Milpa\Admin\AdminSettings;
 use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\HouseComponent;
+use Milpa\Admin\Components\IdentityComponent;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
 use Milpa\Admin\Components\SettingsComponent;
@@ -76,6 +77,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     public function render(ComponentDefinitionInterface $component, RenderRequest $request): RenderResult
     {
         $state = match (true) {
+            $component instanceof IdentityComponent => $component->mount($request->props, $request->context),
             $request->state === null => $component->mount($request->props, $request->context),
             $component instanceof DevToolsComponent && DevToolsComponent::travels($request->state) => $component->mount(DevToolsComponent::propsOf($request->state), $request->context),
             default => $request->state,
@@ -85,15 +87,17 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
 
         $body = match ($name) {
             HouseComponent::NAME => $painter->house($state),
+            IdentityComponent::NAME => $painter->identity($state),
             PluginsComponent::NAME => $painter->plugins($state),
             RoutesComponent::NAME => $painter->routes($state),
             SettingsComponent::NAME => $painter->settings($state),
             StackComponent::NAME => $painter->stack($state),
             DevToolsComponent::NAME => $painter->devtools($state),
             default => throw new \InvalidArgumentException(\sprintf(
-                '%s renders %s, %s, %s, %s, %s and %s, not «%s».',
+                '%s renders %s, %s, %s, %s, %s, %s and %s, not «%s».',
                 self::class,
                 HouseComponent::NAME,
+                IdentityComponent::NAME,
                 PluginsComponent::NAME,
                 RoutesComponent::NAME,
                 SettingsComponent::NAME,
@@ -475,6 +479,47 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         // AND NOTHING TO RUN. The equipped case carries no command on purpose: a screen that always
         // has one is a screen whose commands are noise.
         return [$this->catalog->tr('house.next.equipped'), ''];
+    }
+
+    /** The current request's identity and declared scopes; every operation still has its own judge. */
+    private function identity(StateSnapshot $state): string
+    {
+        $principal = $state->data['principal'] ?? null;
+        $scopes = $state->data['scopes'] ?? null;
+        $out = '<h2 class="mui-h2">' . Html::escape($this->catalog->tr('identity.heading')) . '</h2>';
+        $out .= '<p>' . Html::escape($this->catalog->tr('identity.hint')) . '</p>';
+        if (\is_string($principal) && $principal !== '') {
+            $out .= '<p><span class="mui-badge">' . Html::escape($this->catalog->tr('identity.authenticated')) . '</span></p>';
+            $out .= '<pre class="admin-snippet"><code>' . Html::escape($principal) . '</code></pre>';
+            $out .= '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('identity.scopes')) . '</h3>';
+            if ($scopes === null || $scopes === []) {
+                $out .= $this->notice($this->catalog->tr($scopes === null ? 'identity.scopes.unknown' : 'identity.scopes.empty'));
+            } else {
+                $rows = [];
+                foreach ($scopes as $scope) {
+                    $rows[] = '<tr><td><code>' . Html::escape((string) $scope) . '</code></td></tr>';
+                }
+                $out .= $this->table(['identity.scope'], $rows);
+            }
+            $out .= '<p>' . Html::escape($this->catalog->tr('identity.authorization')) . '</p>';
+        } else {
+            $out .= $this->notice($this->catalog->tr('identity.anonymous'));
+        }
+
+        $out .= '<p>' . Html::escape($this->catalog->tr('house.who.gate', (string) ($state->data['gate'] ?? ''))) . '</p>';
+        $links = $state->data['ceremonies'] ?? [];
+        $out .= '<h3 class="mui-h3">' . Html::escape($this->catalog->tr('identity.passkeys')) . '</h3>';
+        if ($links === []) {
+            $out .= $this->notice($this->catalog->tr('identity.passkeys.unavailable'));
+        } else {
+            $out .= '<p>' . Html::escape($this->catalog->tr('identity.registration')) . '</p>';
+            foreach ($links as $kind => $url) {
+                $out .= '<p><a class="mui-btn mui-btn--ghost" href="' . Html::escape((string) $url) . '">'
+                    . Html::escape($this->catalog->tr('identity.' . $kind)) . '</a></p>';
+            }
+        }
+
+        return $out;
     }
 
     /**

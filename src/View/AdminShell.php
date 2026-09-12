@@ -109,6 +109,9 @@ final class AdminShell
     /** `ComponentContext::$meta`: the request's query params — how a declared view reads what `props['query']` gives the narrow shape. */
     public const META_QUERY = 'query';
 
+    /** The authenticated actor's declared scopes for this request; null means unavailable. */
+    public const META_SCOPES = 'identity.scopes';
+
     /** The signal the panel seeds with the active section's id — the host's own contribution to the page seeds. */
     public const SIGNAL_SECTION = 'admin.section';
 
@@ -229,12 +232,13 @@ final class AdminShell
      *
      * @param array<string, mixed> $query     the request's query params, handed to the active section as `props['query']` and to every node as `meta['query']`
      * @param string|null          $principal who the gate let in — the authenticated actor's id, never a session id — or null when nobody is signed in
+     * @param list<string>|null    $scopes    the authenticated actor's declared scopes, without permission expansion
      */
-    public function compose(SectionCatalogue $catalogue, AdminSection $active, array $query = [], ?string $principal = null): ShellOutput
+    public function compose(SectionCatalogue $catalogue, AdminSection $active, array $query = [], ?string $principal = null, ?array $scopes = null): ShellOutput
     {
         $book = ComponentBook::forSections($catalogue, $this->codec, $this->events);
 
-        $context = $this->context($principal, $active->id, $query);
+        $context = $this->context($principal, $active->id, $query, $scopes);
         $assets = ClientAssets::empty();
         $sectionHtml = $active->view instanceof DeclaredView
             ? $this->renderView($book, $active, $active->view, $context, $assets)
@@ -334,8 +338,9 @@ final class AdminShell
      * decisions/0211) — the gate in effect, the active section's id, the request's query.
      *
      * @param array<string, mixed> $query
+     * @param list<string>|null    $scopes
      */
-    private function context(?string $principal, string $section, array $query): ComponentContext
+    private function context(?string $principal, string $section, array $query, ?array $scopes = null): ComponentContext
     {
         return new ComponentContext(
             componentId: self::COMPONENT_ID,
@@ -346,6 +351,7 @@ final class AdminShell
                 self::META_GATE => $this->settings->gateLabel(),
                 self::META_SECTION => $section,
                 self::META_QUERY => $query,
+                self::META_SCOPES => $principal === null ? null : $scopes,
             ],
         );
     }

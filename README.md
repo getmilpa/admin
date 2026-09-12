@@ -31,12 +31,24 @@ return [
 ];
 ```
 
-The panel opens with five sections of its own — **Plugins** (what the app boots, and the capabilities it can grow),
-**Routes** (every route the booted plugins declared, with handler and per-route middleware), **Settings** (what the
+The panel opens on **The house**, followed by **Plugins** (what the app boots, and the capabilities it can grow),
+**Routes** (every route the booted plugins declared, with handler and per-route middleware),
+**Identity** (the current request's authenticated identity and declared scopes), **Settings** (what the
 app declared about the panel itself, key by key, with its source), **Stack** (every backing service the booted
 plugins declared they need — image, ports, environment with secrets masked, the declaring plugin — and whether its
 port answers on loopback) and **Dev tools** (the ledgers the agent writes, read-only) — and one more per plugin
 that declares one.
+
+## Identity
+
+`/milpa/admin/s/identity` shows the actor authenticated for the current request and its declared
+scopes. Missing scopes are reported as unavailable; an empty list is shown as empty. Each operation
+still makes its own authorization decision. The section reads no private keys or enrollment files
+and offers no permission-changing actions.
+
+Passkey registration and sign-in links appear only when the house serves those routes, with a
+return to Identity. The ceremonies remain outside the panel's gate so a visitor can sign in.
+The terminal reports no authenticated HTTP identity. English is the default; `?lang=es` selects Spanish.
 
 ## The same panel, in a terminal
 

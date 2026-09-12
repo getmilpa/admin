@@ -23,6 +23,7 @@ use Milpa\Console\FileConfirmTokenStore;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Milpa\Admin\Components\DevToolsComponent;
 use Milpa\Admin\Components\HouseComponent;
+use Milpa\Admin\Components\IdentityComponent;
 use Milpa\Admin\Data\HouseSource;
 use Milpa\Admin\Components\PluginsComponent;
 use Milpa\Admin\Components\RoutesComponent;
@@ -172,6 +173,16 @@ final class AdminPlugin implements PluginInterface, RouteProviderInterface, Admi
                 definition: new RoutesComponent($routesSource),
                 renderer: $renderer,
                 icon: '⇢',
+            ),
+            new AdminSection(
+                id: IdentityComponent::SECTION,
+                title: 'nav.identity',
+                component: IdentityComponent::NAME,
+                order: 22,
+                group: AdminSection::GROUP_ADMIN,
+                definition: new IdentityComponent($routesSource, $settings),
+                renderer: $renderer,
+                icon: '⚿',
             ),
             new AdminSection(
                 id: 'settings',
