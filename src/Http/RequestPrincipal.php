@@ -40,17 +40,46 @@ final class RequestPrincipal
     /** The authenticated actor's id, or null when the request carries no authenticated context. */
     public static function of(ServerRequestInterface $request): ?string
     {
+        return self::identity($request)['principal'];
+    }
+
+    /**
+     * The identity authenticated for this request, with its declared scopes when readable.
+     * Null scopes mean unavailable; an empty list means the actor declared none. Neither grants
+     * authority, and no roles, claims, cookies or query parameters are used to invent scopes.
+     *
+     * @return array{principal: ?string, scopes: list<string>|null}
+     */
+    public static function identity(ServerRequestInterface $request): array
+    {
+        $anonymous = ['principal' => null, 'scopes' => null];
         $context = $request->getAttribute(self::ATTRIBUTE);
         if (!\is_object($context) || self::call($context, 'isAuthenticated') !== true) {
-            return null;
+            return $anonymous;
         }
         $actor = self::member($context, 'actor');
         if (!\is_object($actor)) {
-            return null;
+            return $anonymous;
         }
         $id = self::member($actor, 'id');
 
-        return \is_string($id) && $id !== '' ? $id : null;
+        if (!\is_string($id) || $id === '') {
+            return $anonymous;
+        }
+        $scopes = self::member($actor, 'scopes');
+        if (!\is_array($scopes) || !array_is_list($scopes)) {
+            $scopes = null;
+        } else {
+            foreach ($scopes as $scope) {
+                if (!\is_string($scope) || $scope === '') {
+                    $scopes = null;
+
+                    break;
+                }
+            }
+        }
+
+        return ['principal' => $id, 'scopes' => $scopes];
     }
 
     /** One member of a foreign object: its public property of that name, else its method of that name {@see self::call()}ed, else null. */

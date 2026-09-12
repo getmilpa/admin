@@ -121,10 +121,10 @@ final class AdminPluginTest extends TestCase
         // The PSR-11 registry, not DIContainer::has() — which is true for any auto-wirable class and so
         // proved nothing here while the gate was never registered (greenhouse evidence/0522).
         self::assertTrue($container->getContainer()->has(LoopbackOnlyMiddleware::class), 'the gate is REGISTERED, not merely auto-wirable');
-        self::assertSame(['house', 'plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
-        self::assertSame([5, 10, 20, 25, 30, 40], array_map(static fn ($s): int => $s->order, $plugin->adminSections()));
-        self::assertSame('nav.devtools', $plugin->adminSections()[5]->title);
-        self::assertSame('admin', $plugin->adminSections()[5]->group);
+        self::assertSame(['house', 'plugins', 'routes', 'identity', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $plugin->adminSections()));
+        self::assertSame([5, 10, 20, 22, 25, 30, 40], array_map(static fn ($s): int => $s->order, $plugin->adminSections()));
+        self::assertSame('nav.devtools', $plugin->adminSections()[6]->title);
+        self::assertSame('admin', $plugin->adminSections()[6]->group);
         self::assertSame('/milpa/admin', $plugin->settings()->route);
 
         $plugin->install();
@@ -211,7 +211,7 @@ final class AdminPluginTest extends TestCase
         self::assertStringContainsString('id="milpa-admin-section-hola"', $html, 'order 5 puts the foreign section first');
         $nav = self::sidebar($html);
         self::assertSame(['ADMIN', 'APP'], self::headings($nav), 'the panel\'s own under ADMIN, the foreign plugin\'s under APP');
-        self::assertSame(['/milpa/admin/s/house', '/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
+        self::assertSame(['/milpa/admin/s/house', '/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/identity', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
         self::assertSame(['/milpa/admin/s/hola', '/milpa/admin/s/echo'], self::itemsUnder($nav, 'app'));
         self::assertStringContainsString('href="/milpa/admin/s/hola" aria-current="page"><span class="mui-sidebar__item-icon" aria-hidden="true">✦</span>', $nav, 'the glyph the plugin declared is painted');
         self::assertStringContainsString('<h1 class="mui-page-header__title">Hola</h1><span class="admin-section__declared" data-declared-by="Milpa\\Admin\\Tests\\Fixtures\\HolaPlugin">declared by HolaPlugin</span>', $html, 'the host attributes the section');
@@ -256,7 +256,7 @@ final class AdminPluginTest extends TestCase
             self::assertSame([LoopbackOnlyMiddleware::class], $route->middleware, $route->path . ' carries the strict gate, and only it');
         }
         self::assertSame('fallback', $admin->settings()->gateKind());
-        self::assertSame(['house', 'plugins', 'routes', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $admin->adminSections()));
+        self::assertSame(['house', 'plugins', 'routes', 'identity', 'settings', 'stack', 'devtools'], array_map(static fn ($s): string => $s->id, $admin->adminSections()));
 
         $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
         self::assertStringContainsString('href="/milpa/admin/s/settings"', $index, 'the Settings section is in the sidebar');
@@ -428,7 +428,7 @@ final class AdminPluginTest extends TestCase
         $index = (string) $controller->index(new ServerRequest('GET', '/milpa/admin'))->getBody();
         $nav = self::sidebar($index);
         self::assertSame(['ADMIN', 'APP', 'AGENT', 'LAB'], self::headings($nav), 'admin, app, agent, then a group the catalog does not know — named anyway');
-        self::assertSame(['/milpa/admin/s/house', '/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
+        self::assertSame(['/milpa/admin/s/house', '/milpa/admin/s/plugins', '/milpa/admin/s/routes', '/milpa/admin/s/identity', '/milpa/admin/s/settings', '/milpa/admin/s/stack', '/milpa/admin/s/devtools'], self::itemsUnder($nav, 'admin'));
         self::assertSame(['/milpa/admin/s/hola', '/milpa/admin/s/echo'], self::itemsUnder($nav, 'app'));
         self::assertSame(['/milpa/admin/s/agent'], self::itemsUnder($nav, 'agent'));
         self::assertSame(['/milpa/admin/s/lab'], self::itemsUnder($nav, 'lab'));
