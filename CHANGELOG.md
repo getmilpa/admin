@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.34.0](https://github.com/getmilpa/admin/compare/v0.33.0...v0.34.0) (2026-09-15)
+
+
+### Features
+
+* resolve view signals with authenticated render context ([#110](https://github.com/getmilpa/admin/issues/110)) ([7e24781](https://github.com/getmilpa/admin/commit/7e24781c8f1d8beacb1f6e22cfd91b49b4dfd616))
+
 ## [0.33.0](https://github.com/getmilpa/admin/compare/v0.32.2...v0.33.0) (2026-09-12)
 
 
