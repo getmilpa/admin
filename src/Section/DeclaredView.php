@@ -17,6 +17,8 @@ namespace Milpa\Admin\Section;
 use Milpa\Live\ValueObjects\ClientAssets;
 use Milpa\Live\Contracts\Component\ComponentDefinitionInterface;
 use Milpa\Live\Contracts\Rendering\ComponentRendererInterface;
+use Milpa\Live\ValueObjects\ComponentContext;
+use Milpa\Admin\View\LiveSeeds;
 
 /**
  * A VIEW a section declares: a tree of Milpa components, the definitions and renderers it needs, and the
@@ -66,13 +68,14 @@ use Milpa\Live\Contracts\Rendering\ComponentRendererInterface;
 final readonly class DeclaredView
 {
     /**
-     * @param string                                      $markup      the component tree to compile — one or more `<milpa:…>` roots
-     * @param array<string, ComponentDefinitionInterface> $definitions component name → the definition the plugin brings
-     * @param array<string, ComponentRendererInterface>   $renderers   component name → the renderer that paints it; the same keys as `$definitions`
-     * @param array<string, array<string, mixed>>         $props       component name → props merged UNDER the markup's own attributes
-     * @param array<string, mixed>                        $signals     signal name → seed value for `#milpa-live-signals`
-     * @param list<string>                                $persist     signal names the runtime must persist (`#milpa-live-persist`)
-     * @param array<string, mixed>                        $computed    signal name → derivation for `#milpa-live-computed`
+     * @param string                                                  $markup             the component tree to compile — one or more `<milpa:…>` roots
+     * @param array<string, ComponentDefinitionInterface>             $definitions        component name → the definition the plugin brings
+     * @param array<string, ComponentRendererInterface>               $renderers          component name → the renderer that paints it; the same keys as `$definitions`
+     * @param array<string, array<string, mixed>>                     $props              component name → props merged UNDER the markup's own attributes
+     * @param array<string, mixed>                                    $signals            signal name → seed value for `#milpa-live-signals`
+     * @param list<string>                                            $persist            signal names the runtime must persist (`#milpa-live-persist`)
+     * @param array<string, mixed>                                    $computed           signal name → derivation for `#milpa-live-computed`
+     * @param (\Closure(ComponentContext): array<string, mixed>)|null $signalsFromContext additional seeds resolved with the active view's authenticated render context
      *
      * @throws \InvalidArgumentException when the markup is empty, or the definitions and renderers do not
      *                                   name the same components, or a name or a persisted signal is blank
@@ -99,6 +102,7 @@ final readonly class DeclaredView
          * that names a module two of its components also imply costs nothing.
          */
         public ?ClientAssets $assets = null,
+        public ?\Closure $signalsFromContext = null,
     ) {
         if (trim($markup) === '') {
             throw new \InvalidArgumentException('A declared view carries markup: a view with nothing to compile is not a view.');
@@ -144,7 +148,28 @@ final readonly class DeclaredView
     /** True when the view seeds nothing — the page's three tags carry only the host's own. */
     public function seedsNothing(): bool
     {
-        return $this->signals === [] && $this->persist === [] && $this->computed === [];
+        return $this->signals === [] && $this->persist === [] && $this->computed === [] && $this->signalsFromContext === null;
+    }
+
+    /**
+     * Resolve identity-dependent values at render time, never while discovering the catalogue.
+     * Static declarations and contextual values keep the same name/conflict rules as the host.
+     * The host calls this only for the active view (greenhouse 0396/0714).
+     *
+     * @return array<string, mixed>
+     *
+     * @throws \InvalidArgumentException for an invalid signal name
+     * @throws SeedConflictException     for conflicting static and contextual declarations
+     */
+    public function resolveSignals(ComponentContext $context): array
+    {
+        $contextual = $this->signalsFromContext === null ? [] : ($this->signalsFromContext)($context);
+        foreach (array_keys($contextual) as $name) {
+            self::assertName($name, 'signal');
+        }
+
+        return LiveSeeds::of('the view declaration', $this->signals)
+            ->merge(LiveSeeds::of('the view context', $contextual))->signals;
     }
 
     private static function assertName(int|string $name, string $what): void
