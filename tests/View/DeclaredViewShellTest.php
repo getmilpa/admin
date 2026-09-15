@@ -47,6 +47,68 @@ use PHPUnit\Framework\TestCase;
  */
 final class DeclaredViewShellTest extends TestCase
 {
+    /** A view's identity-dependent seeds receive the same authenticated context as its components. */
+    public function testContextualSignalsAreResolvedPerRenderAndOnlyForTheActiveView(): void
+    {
+        $calls = [];
+        $view = new DeclaredView(
+            markup: '<milpa:echo-panel id="a"/>',
+            definitions: [EchoComponent::NAME => new EchoComponent()],
+            renderers: [EchoComponent::NAME => new EchoRenderer()],
+            signals: ['guest.static' => 7],
+            signalsFromContext: static function (\Milpa\Live\ValueObjects\ComponentContext $context) use (&$calls): array {
+                $calls[] = $context;
+
+                return ['guest.actor' => $context->principal, 'guest.locale' => $context->locale];
+            },
+        );
+        $catalogue = SectionCatalogue::discover([self::provider([AdminSection::ofView('scoped', 'Scoped', $view)]), new HolaPlugin(new DIContainer())]);
+        $active = $catalogue->find('scoped');
+        self::assertNotNull($active);
+        $shell = self::shell();
+        $a = $shell->compose($catalogue, $active, ['principal' => 'forged'], 'actor:a');
+        $b = $shell->compose($catalogue, $active, [], 'actor:b');
+        self::assertSame('actor:a', $a->seeds->signals['guest.actor']);
+        self::assertSame('actor:b', $b->seeds->signals['guest.actor']);
+        self::assertSame(7, $a->seeds->signals['guest.static']);
+        self::assertSame('en', $a->seeds->signals['guest.locale']);
+        self::assertCount(2, $calls);
+        self::assertSame('scoped', $calls[0]->meta[AdminShell::META_SECTION]);
+        self::assertSame('/milpa/admin', $calls[0]->route);
+        $other = $catalogue->find('hola');
+        self::assertNotNull($other);
+        $shell->compose($catalogue, $other);
+        self::assertCount(2, $calls, 'inactive views receive no context and perform no reads');
+    }
+
+    /** Dynamic values cannot silently replace static declarations or the host's own signals. */
+    public function testContextualSignalsRetainConflictAndNameValidation(): void
+    {
+        $context = new \Milpa\Live\ValueObjects\ComponentContext(componentId: 'scope');
+        $same = new DeclaredView('<milpa:echo-panel/>', signals: ['x' => 1], signalsFromContext: static fn (): array => ['x' => 1]);
+        self::assertSame(['x' => 1], $same->resolveSignals($context));
+        self::assertFalse((new DeclaredView('<milpa:echo-panel/>', signalsFromContext: static fn (): array => []))->seedsNothing());
+        foreach ([[' ' => 1], ['x' => 2]] as $values) {
+            $view = new DeclaredView('<milpa:echo-panel/>', signals: ['x' => 1], signalsFromContext: static fn (): array => $values);
+            try {
+                $view->resolveSignals($context);
+                self::fail('An invalid contextual declaration was accepted');
+            } catch (\InvalidArgumentException|SeedConflictException) {
+                self::assertTrue(true);
+            }
+        }
+        $catalogue = SectionCatalogue::discover([self::provider([AdminSection::ofView('scoped', 'Scoped', new DeclaredView(
+            markup: '<milpa:echo-panel id="a"/>',
+            definitions: [EchoComponent::NAME => new EchoComponent()],
+            renderers: [EchoComponent::NAME => new EchoRenderer()],
+            signalsFromContext: static fn (): array => [AdminShell::SIGNAL_GATE => 'forged'],
+        ))])]);
+        $active = $catalogue->find('scoped');
+        self::assertNotNull($active);
+        $this->expectException(SeedConflictException::class);
+        self::shell()->compose($catalogue, $active);
+    }
+
     public function testTheWholeTreeIsComposedInlineAndItsAssetsCollectedOnce(): void
     {
         $catalogue = SectionCatalogue::discover([new ViewPlugin(new DIContainer())]);

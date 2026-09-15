@@ -237,6 +237,11 @@ view **or** a component, never both, and a view carries no section `props` (its 
   and carry the panel's own seeds (`admin.section`, `admin.gate`, `admin.locale`) merged with the active view's. A
   key two declarers give **different** values is a `SeedConflictException` naming both and what each said; the same
   value twice is agreement, not a clash.
+  A view can also declare `signalsFromContext: static fn (ComponentContext $context): array => [...]`.
+  The host resolves it for the active view on each render, with the same authenticated principal, locale,
+  route and metadata its components receive. Use this for identity-dependent initial state; discovery
+  happens before the request context is available. These values merge with `signals` and then the host's
+  seeds under the same conflict rules. Inactive views do not invoke their resolver.
 - **It contains failures.** Each root of the view is compiled on its own: a component that throws while mounting or
   rendering paints a small region inside its own node —
   `<div class="mui-alert mui-alert--warning admin-section__failure" data-failed-component="…">` — and the rest of

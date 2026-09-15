@@ -263,7 +263,7 @@ final class AdminShell
         $shell->html = $compiled->output;
         $this->events?->dispatch(self::AFTER_RENDER, [self::SUBJECT_SHELL => $shell]);
 
-        return new ShellOutput($shell->html, $assets, $this->seeds($active));
+        return new ShellOutput($shell->html, $assets, $this->seeds($active, $context));
     }
 
     /**
@@ -457,7 +457,7 @@ final class AdminShell
      * mounts. A key both declare with different values is a {@see \Milpa\Admin\Section\SeedConflictException}
      * naming both, never a silent last-one-wins.
      */
-    private function seeds(AdminSection $active): LiveSeeds
+    private function seeds(AdminSection $active, ComponentContext $context): LiveSeeds
     {
         $seeds = $this->hostSeeds($active->id);
         if ($active->view === null || $active->view->seedsNothing()) {
@@ -466,7 +466,7 @@ final class AdminShell
 
         return $seeds->merge(LiveSeeds::of(
             'section «' . $active->id . '»',
-            $active->view->signals,
+            $active->view->resolveSignals($context),
             $active->view->persist,
             $active->view->computed,
         ));
