@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.34.1](https://github.com/getmilpa/admin/compare/v0.34.0...v0.34.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **manifest:** the briefing names commands that run ([#112](https://github.com/getmilpa/admin/issues/112)) ([ebaaed3](https://github.com/getmilpa/admin/commit/ebaaed379512f57da2acbb34a75c1059d49417f0))
+
 ## [0.34.0](https://github.com/getmilpa/admin/compare/v0.33.0...v0.34.0) (2026-09-15)
 
 
