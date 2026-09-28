@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.36.0](https://github.com/getmilpa/admin/compare/v0.35.0...v0.36.0) (2026-09-28)
+
+
+### Features
+
+* **stack:** the Stack section says when a port is taken by something else ([#116](https://github.com/getmilpa/admin/issues/116)) ([d5607b5](https://github.com/getmilpa/admin/commit/d5607b5dd1bcd0cbd6f2b07f461037ee6cbbdf20))
+
 ## [0.35.0](https://github.com/getmilpa/admin/compare/v0.34.1...v0.35.0) (2026-09-28)
 
 
