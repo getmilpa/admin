@@ -1177,10 +1177,10 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         $badge = match ($state) {
             'up' => 'mui-badge mui-badge--success',
             'down' => 'mui-badge mui-badge--warning',
-            StackReader::CONFLICT => 'mui-badge mui-badge--danger',
+            StackReader::CONFLICT, StackReader::OCCUPIED => 'mui-badge mui-badge--danger',
             default => 'mui-badge',
         };
-        $stateKey = \in_array($state, ['up', 'down', StackReader::CONFLICT], true) ? 'stack.state.' . $state : 'stack.state.unknown';
+        $stateKey = \in_array($state, ['up', 'down', StackReader::CONFLICT, StackReader::OCCUPIED], true) ? 'stack.state.' . $state : 'stack.state.unknown';
         $probePort = $row['probePort'] ?? null;
         $probe = \is_int($probePort)
             ? $this->catalog->tr('stack.probe', (string) ($row['probeHost'] ?? ''), (string) $probePort)
@@ -1196,6 +1196,13 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         if ($state === StackReader::CONFLICT) {
             $others = \is_array($row['conflictsWith'] ?? null) ? array_values(array_filter($row['conflictsWith'], 'is_string')) : [];
             $out[] = $this->notice($this->catalog->tr('stack.conflict', $name, $this->join($others)), 'danger');
+        }
+        // OCCUPIED IS NOT UP: the port answers, but not as the service declared it must — an unrelated app
+        // took it, and a green badge there sent the operator to a hub that was not running (greenhouse
+        // decisions/0504). What it answered is said, because «something else» is what to go and find.
+        if ($state === StackReader::OCCUPIED) {
+            $answered = \is_int($row['answered'] ?? null) ? 'HTTP ' . $row['answered'] : $this->catalog->tr('stack.no_http');
+            $out[] = $this->notice($this->catalog->tr('stack.occupied', (string) ($row['probePort'] ?? ''), $name, $answered), 'danger');
         }
         if ($summary !== '') {
             $out[] = '<p class="admin-stack__summary">' . Html::escape($summary) . '</p>';

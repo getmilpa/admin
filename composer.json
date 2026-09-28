@@ -30,7 +30,7 @@
         "milpa/live": ">=0.18 <1.0",
         "milpa/live-web": ">=0.24 <1.0",
         "milpa/plugin": ">=0.13 <1.0",
-        "milpa/runtime": ">=0.15 <1.0",
+        "milpa/runtime": ">=0.17 <1.0",
         "nyholm/psr7": "^1.8",
         "psr/http-message": "^1.1 || ^2.0",
         "psr/http-server-handler": "^1.0",
