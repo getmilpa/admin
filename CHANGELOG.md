@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.35.0](https://github.com/getmilpa/admin/compare/v0.34.1...v0.35.0) (2026-09-28)
+
+
+### Features
+
+* **panel:** the panel brings its door and declares what its operator needs (greenhouse 0498) ([#114](https://github.com/getmilpa/admin/issues/114)) ([ef1bf2e](https://github.com/getmilpa/admin/commit/ef1bf2e30902e3e7acb1d11ff4c4dfedb329d7f3))
+
 ## [0.34.1](https://github.com/getmilpa/admin/compare/v0.34.0...v0.34.1) (2026-09-23)
 
 
