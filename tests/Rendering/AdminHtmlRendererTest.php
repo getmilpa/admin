@@ -918,8 +918,37 @@ final class AdminHtmlRendererTest extends TestCase
         self::assertStringNotContainsString('docker compose up -d', $up);
     }
 
-    /** @return \Milpa\Live\ValueObjects\StateSnapshot */
-    private static function stackState(string $state): \Milpa\Live\ValueObjects\StateSnapshot
+    /**
+     * A port something else took is not the service (greenhouse decisions/0504): a danger badge, and a
+     * notice naming the port and what answered — never the green «up» a TCP connect alone would give.
+     */
+    public function testAPortSomethingElseTookSaysSoAndIsNotUp(): void
+    {
+        $render = static fn (array $extra): string => self::renderer()->render(
+            new StackComponent(new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection())),
+            self::request(self::stackState(StackReader::OCCUPIED, $extra)),
+        )->output;
+
+        $html = $render(['answered' => 404]);
+        self::assertStringContainsString('port taken', $html);
+        self::assertStringContainsString('mui-badge--danger', $html);
+        self::assertStringContainsString('Port 3000 answers, but not as «mercure»', $html);
+        self::assertStringContainsString('HTTP 404', $html);
+        self::assertStringNotContainsString('docker compose up -d', $html, 'bringing a second one up would not bind: the port is taken');
+        self::assertStringContainsString('no HTTP', $render(['answered' => null]));
+
+        // POSITIVE CONTROL: the same row, up — no notice, no danger.
+        $up = self::renderer()->render(new StackComponent(new StackReader(new DIContainer(), new FakeProbe(), new ComposeProjection())), self::request(self::stackState('up')))->output;
+        self::assertStringNotContainsString('another program holds it', $up);
+        self::assertStringNotContainsString('mui-badge--danger', $up);
+    }
+
+    /**
+     * @param array<string, mixed> $extra
+     *
+     * @return \Milpa\Live\ValueObjects\StateSnapshot
+     */
+    private static function stackState(string $state, array $extra = []): \Milpa\Live\ValueObjects\StateSnapshot
     {
         return new \Milpa\Live\ValueObjects\StateSnapshot('s9', StackComponent::NAME, '1', [
             'kernel' => true,
@@ -936,7 +965,7 @@ final class AdminHtmlRendererTest extends TestCase
                 'compose' => "services:\n  mercure:\n",
                 'probeHost' => '127.0.0.1',
                 'probePort' => 3000,
-            ]],
+            ] + $extra],
         ], []);
     }
 }
