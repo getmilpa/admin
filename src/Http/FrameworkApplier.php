@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Http;
 
+use Milpa\Admin\HouseCli;
 use Milpa\Console\Http\HttpProjector;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Http\Message\ResponseFactoryInterface;
@@ -62,6 +63,6 @@ final class FrameworkApplier
     /** Runs the apply through the operation's own HTTP ceremony: policy, confirm token, execute. */
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        return GovernedAct::run($this->projector, self::OPERATION, $request, $this->responses, self::NO_JUDGE);
+        return GovernedAct::run($this->projector, self::OPERATION, $request, $this->responses, HouseCli::reached(self::NO_JUDGE));
     }
 }

@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Milpa\Admin\Http;
 
+use Milpa\Admin\HouseCli;
 use Milpa\Console\Http\HttpProjector;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Http\Message\ResponseFactoryInterface;
@@ -85,6 +86,6 @@ final class CapabilityInstaller
         // The shape is shared with the framework applier: same door, same ceremony, different
         // operation name. Written twice, the half that would drift is the refusal — the part a person
         // reads (greenhouse decisions/0297).
-        return GovernedAct::run($this->projector, self::OPERATION, $request, $this->responses, self::NO_JUDGE);
+        return GovernedAct::run($this->projector, self::OPERATION, $request, $this->responses, HouseCli::reached(self::NO_JUDGE));
     }
 }
