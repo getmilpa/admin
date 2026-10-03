@@ -24,6 +24,7 @@ use Milpa\Admin\Components\SettingsComponent;
 use Milpa\Admin\Components\StackComponent;
 use Milpa\Admin\Controllers\AdminController;
 use Milpa\Admin\Data\DevToolsSource;
+use Milpa\Admin\HouseCli;
 use Milpa\Runtime\Stack\StackReader;
 use Milpa\Admin\I18n\Catalog;
 use Milpa\Runtime\Stack\ResolvedEnv;
@@ -466,14 +467,14 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
     private function houseNextMove(array $foundation, array $installed, string $source): array
     {
         if (($foundation['declared'] ?? false) !== true || !\is_string($foundation['domain'] ?? null)) {
-            return [$this->catalog->tr('house.next.found'), $this->catalog->tr('house.next.found.command')];
+            return [$this->catalog->tr('house.next.found'), HouseCli::reached($this->catalog->tr('house.next.found.command'))];
         }
         if (str_contains($source, 'offline floor')) {
-            return [$this->catalog->tr('house.next.refresh'), 'php bin/coa capabilities:refresh'];
+            return [$this->catalog->tr('house.next.refresh'), HouseCli::cli() . 'capabilities:refresh'];
         }
         $ids = array_map(static fn (array $row): string => \is_string($row['id'] ?? null) ? $row['id'] : '', $installed);
         if (!\in_array('agent', $ids, true)) {
-            return [$this->catalog->tr('house.next.agent'), 'php bin/coa capabilities:enable milpa/agent --sign'];
+            return [$this->catalog->tr('house.next.agent'), HouseCli::cli() . 'capabilities:enable milpa/agent --sign'];
         }
 
         // AND NOTHING TO RUN. The equipped case carries no command on purpose: a screen that always
@@ -512,7 +513,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
         if ($links === []) {
             $out .= $this->notice($this->catalog->tr('identity.passkeys.unavailable'));
         } else {
-            $out .= '<p>' . Html::escape($this->catalog->tr('identity.registration')) . '</p>';
+            $out .= '<p>' . Html::escape(HouseCli::reached($this->catalog->tr('identity.registration'))) . '</p>';
             foreach ($links as $kind => $url) {
                 $out .= '<p><a class="mui-btn mui-btn--ghost" href="' . Html::escape((string) $url) . '">'
                     . Html::escape($this->catalog->tr('identity.' . $kind)) . '</a></p>';
@@ -777,7 +778,7 @@ final class AdminHtmlRenderer implements ComponentRendererInterface
             $out[] = $this->notice($this->catalog->tr('capabilities.consequence'));
             // THE COMMAND, ONCE, AS A FORM. Seven rows repeating 45 near-identical characters is
             // redundancy the table already carries — the package IS the first column.
-            $out[] = '<p class="admin-capabilities__form"><kbd class="mui-kbd">' . Html::escape($this->catalog->tr('capabilities.command_form')) . '</kbd></p>';
+            $out[] = '<p class="admin-capabilities__form"><kbd class="mui-kbd">' . Html::escape(HouseCli::reached($this->catalog->tr('capabilities.command_form'))) . '</kbd></p>';
             // NO BUTTON WHERE THE ACT CANNOT BE JUDGED, and the reason said instead of hidden. The
             // operation declares a scope; with no `OperationHttpPolicy` in the app nothing here can hold
             // it, and the button answered `internal_error` (greenhouse decisions/0289). The command form
