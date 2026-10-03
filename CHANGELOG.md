@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.37.0](https://github.com/getmilpa/admin/compare/v0.36.0...v0.37.0) (2026-10-03)
+
+
+### Features
+
+* a command the panel prints carries the way to reach the house (greenhouse decisions/0560) ([#118](https://github.com/getmilpa/admin/issues/118)) ([b756fc0](https://github.com/getmilpa/admin/commit/b756fc052526ebc68f9ff084b48750793be5a955))
+
 ## [0.36.0](https://github.com/getmilpa/admin/compare/v0.35.0...v0.36.0) (2026-09-28)
 
 
