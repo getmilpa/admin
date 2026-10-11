@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [0.37.1](https://github.com/getmilpa/admin/compare/v0.37.0...v0.37.1) (2026-10-11)
+
+
+### Miscellaneous Chores
+
+* release 0.37.1 ([#123](https://github.com/getmilpa/admin/issues/123)) ([1d56168](https://github.com/getmilpa/admin/commit/1d561687ed29525805e6a462ef4ffbfc919a5f3e))
+
 ## [0.37.0](https://github.com/getmilpa/admin/compare/v0.36.0...v0.37.0) (2026-10-03)
 
 
