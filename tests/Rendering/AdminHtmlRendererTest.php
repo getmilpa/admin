@@ -695,7 +695,7 @@ final class AdminHtmlRendererTest extends TestCase
                 ['seq' => 5, 'when' => null, 'kind' => 'waiting', 'detail' => 'waiting on a human', 'flags' => []],
                 ['seq' => 6, 'when' => '2026-09-04T14:02:11Z', 'kind' => 'closure', 'detail' => 'todo t1 done without evidence; t2 open', 'flags' => ['unverified']],
                 ['seq' => 7, 'when' => '2026-09-04T14:02:12Z', 'kind' => 'mystery', 'detail' => '', 'flags' => ['verified']],
-                ['seq' => 8, 'when' => '2026-09-04T14:02:13Z', 'kind' => 'operation', 'detail' => 'make:crud · rod@cli/rod@passkey · sha256:args', 'flags' => ['verified']],
+                ['seq' => 8, 'when' => '2026-09-04T14:02:13Z', 'kind' => 'operation', 'detail' => 'make:crud · operator@cli/operator@passkey · sha256:args', 'flags' => ['verified']],
                 ['seq' => 9, 'when' => '2026-09-04T14:02:14Z', 'kind' => 'sequence-paused', 'detail' => 'seq-1 · 1/3', 'flags' => []],
                 ['seq' => 10, 'when' => '2026-09-04T14:02:15Z', 'kind' => 'sequence-resumed', 'detail' => 'seq-1', 'flags' => []],
                 'garbage',
@@ -717,7 +717,7 @@ final class AdminHtmlRendererTest extends TestCase
         self::assertStringContainsString('<tr><td>—</td><td>decision pending</td><td>waiting on a human</td></tr>', $html);
         self::assertStringContainsString('<td>closure verdict <span class="mui-badge mui-badge--danger">unverified</span></td><td>todo t1 done without evidence; t2 open</td>', $html);
         self::assertStringContainsString('<td>mystery <span class="mui-badge mui-badge--success">verified</span></td><td></td>', $html, 'a kind the catalog lacks is painted as it came');
-        self::assertStringContainsString('<td>operation executed <span class="mui-badge mui-badge--success">verified</span></td><td>make:crud · rod@cli/rod@passkey · sha256:args</td>', $html);
+        self::assertStringContainsString('<td>operation executed <span class="mui-badge mui-badge--success">verified</span></td><td>make:crud · operator@cli/operator@passkey · sha256:args</td>', $html);
         self::assertStringContainsString('<td>sequence paused</td><td>seq-1 · 1/3</td>', $html);
         self::assertStringContainsString('<td>sequence resumed</td><td>seq-1</td>', $html);
         self::assertSame(10, substr_count($html, '<tr><td>'), 'garbage rows are skipped');

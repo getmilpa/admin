@@ -308,7 +308,7 @@ final class DevToolsSourceTest extends TestCase
             ['debt', 'admitted_intent_skip — operation=hola:greet', []],
             ['evidence', 'operation_ok hola:greet', []],
             ['trial', 'make:crud · exit 0 · ws-1', []],
-            ['operation', 'make:crud · rod@cli/rod@passkey · sha256:args', ['verified']],
+            ['operation', 'make:crud · operator@cli/operator@passkey · sha256:args', ['verified']],
         ], $painted, 'model_returned is not painted (the projector says so); the audit facts are');
         foreach ($run['events'] as $event) {
             self::assertIsInt($event['seq']);
@@ -626,7 +626,7 @@ final class DevToolsSourceTest extends TestCase
         self::signal($events, 's-run', 'admitted_intent_skip', ['operation' => 'hola:greet']);
         $store->recordEvidence('s-run', Evidence::operationOk('e1', 'hola:greet', null, 'exit 0'));
         $store->recordTrialRun('s-run', ['workspace' => 'ws-1', 'operation' => 'make:crud', 'arguments_digest' => 'abc', 'bounds' => [], 'exit' => 0, 'report' => [], 'output_digest' => 'x']);
-        $store->recordExecution('s-run', 'make:crud', new Principal('rod', true), 'cli', ['principal' => 'rod', 'provenance' => 'passkey', 'session' => null], 'sha256:args');
+        $store->recordExecution('s-run', 'make:crud', new Principal('operator', true), 'cli', ['principal' => 'operator', 'provenance' => 'passkey', 'session' => null], 'sha256:args');
 
         $store->start('s-wait', 'a second goal');
         $store->ask('s-wait', new PendingQuestion('q1', 'Which target?', ['a', 'b'], null, null, 'target_not_named'));

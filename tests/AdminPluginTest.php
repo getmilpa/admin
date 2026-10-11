@@ -68,7 +68,7 @@ final class AdminPluginTest extends TestCase
         $gate = $container->get(LoopbackOnlyMiddleware::class);
         self::assertInstanceOf(LoopbackOnlyMiddleware::class, $gate);
 
-        $lan = (new \Nyholm\Psr7\ServerRequest('GET', '/milpa/admin', [], null, '1.1', ['REMOTE_ADDR' => '192.168.1.47']))
+        $lan = (new \Nyholm\Psr7\ServerRequest('GET', '/milpa/admin', [], null, '1.1', ['REMOTE_ADDR' => '192.0.2.47']))
             ->withHeader('Accept', 'text/html');
         $refused = $gate->process($lan, new class () implements \Psr\Http\Server\RequestHandlerInterface {
             public function handle(\Psr\Http\Message\ServerRequestInterface $request): \Psr\Http\Message\ResponseInterface
